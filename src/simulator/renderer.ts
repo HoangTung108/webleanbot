@@ -70,7 +70,7 @@ export class SimulatorRenderer {
     if (board.backgroundImage) {
       this.boardImage = new Image();
       this.boardImage.onload = () => this.render();
-      this.boardImage.src = `${import.meta.env.BASE_URL}${board.backgroundImage.replace(/^\//, '')}?v=sites-4`;
+      this.boardImage.src = `${import.meta.env.BASE_URL}${board.backgroundImage.replace(/^\//, '')}?v=crl-square-5`;
     }
   }
 
@@ -245,7 +245,7 @@ export class SimulatorRenderer {
     this.context.strokeStyle = color;
     this.context.lineWidth = width * this.scale;
     this.context.lineCap = 'round';
-    this.context.lineJoin = 'round';
+    this.context.lineJoin = 'miter';
 
     this.context.beginPath();
     const start = this.boardToCanvas(points[0].x, points[0].y);

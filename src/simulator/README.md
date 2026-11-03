@@ -26,6 +26,7 @@ nội dung editor hay dữ liệu trình duyệt.
 - Mỗi thành phố A–H có 4 vị trí: 1 trên trái, 2 trên phải, 3 dưới trái, 4 dưới phải.
   Ô 1/4 xoay +45°, ô 2/3 xoay −45° để đối xứng.
 - S1/S3/S5 nằm ở mép dưới; S2/S4/S6 ở mép phải.
+- Góc đường bao tại CRL (dưới phải) là góc vuông; ba góc còn lại giữ bo tròn.
 - CRL là khu xuất phát/kết thúc. Vị trí đánh dấu không phải vật cản.
 - Mô hình khối theo sơ đồ: 15 × 25 × 75 mm. Chưa đặt khối ngẫu nhiên/tính điểm.
 
