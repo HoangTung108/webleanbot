@@ -356,8 +356,10 @@ class LeanbotSimulator2D {
     ctx.strokeStyle = '#efab39';
     ctx.lineWidth = 6;
     ctx.beginPath();
-    ctx.moveTo(55, -35); ctx.lineTo(94, -35); ctx.lineTo(94, -18);
-    ctx.moveTo(55, 35); ctx.lineTo(94, 35); ctx.lineTo(94, 18);
+    const leftGrip = Math.max(0, Math.min(90, this.gripperLeft || 0)) / 90;
+    const rightGrip = Math.max(0, Math.min(90, this.gripperRight || 0)) / 90;
+    ctx.moveTo(55, -35); ctx.lineTo(94, -35 + leftGrip * 17); ctx.lineTo(94, -18 + leftGrip * 14);
+    ctx.moveTo(55, 35); ctx.lineTo(94, 35 - rightGrip * 17); ctx.lineTo(94, 18 - rightGrip * 14);
     ctx.stroke();
     ctx.fillStyle = '#ffffff';
     ctx.beginPath(); ctx.moveTo(48, -9); ctx.lineTo(61, 0); ctx.lineTo(48, 9); ctx.fill();
@@ -467,6 +469,7 @@ class LeanbotSimulator2D {
   }
 
   resetRobot() {
+    this.gripperLeft = this.gripperRight = 0;
     this.robotX = this.currentBoard === BOARD_CONFIGS.synapse ? this.currentBoard.initialPose.x : this.currentBoard.width / 2;
     this.robotY = this.currentBoard === BOARD_CONFIGS.synapse ? this.currentBoard.initialPose.y : this.currentBoard.height / 2;
     this.robotHeading = 0;

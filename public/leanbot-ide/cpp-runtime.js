@@ -540,7 +540,12 @@ var LeanbotCpp = (() => {
       yield {};
       switch (n.k) {
         case "block":
-          for (const s of n.body) yield* this.statement(s);
+          this.scopes.push(/* @__PURE__ */ new Map());
+          try {
+            for (const s of n.body) yield* this.statement(s);
+          } finally {
+            this.scopes.pop();
+          }
           return;
         case "function":
           return;

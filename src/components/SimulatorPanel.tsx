@@ -80,7 +80,7 @@ export const SimulatorPanel: React.FC<SimulatorPanelProps> = ({
         if (!bridgeRef.current?.isExecuting()) { simulator.stop(); setIsRunning(false); }
       } catch (error) {
         bridgeRef.current?.stopExecution();
-      simulator.stop(); setIsRunning(false);
+        simulator.stop(); setIsRunning(false);
         onStatusChange?.(error instanceof Error ? error.message : String(error));
       }
       renderer.render();

@@ -285,8 +285,9 @@ export class SimulatorRenderer {
     ctx.strokeStyle = '#efab39';
     ctx.lineWidth = 6;
     ctx.beginPath();
-    ctx.moveTo(55, -35); ctx.lineTo(94, -35); ctx.lineTo(94, -18);
-    ctx.moveTo(55, 35); ctx.lineTo(94, 35); ctx.lineTo(94, 18);
+    const grip = this.simulator.getGripper();
+    ctx.moveTo(55, -35); ctx.lineTo(94, -35 + grip.left / 90 * 17); ctx.lineTo(94, -18 + grip.left / 90 * 14);
+    ctx.moveTo(55, 35); ctx.lineTo(94, 35 - grip.right / 90 * 17); ctx.lineTo(94, 18 - grip.right / 90 * 14);
     ctx.stroke();
     ctx.fillStyle = '#ffffff';
     ctx.beginPath(); ctx.moveTo(48, -9); ctx.lineTo(61, 0); ctx.lineTo(48, 9); ctx.fill();

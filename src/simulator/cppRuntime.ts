@@ -221,7 +221,10 @@ export class CppRuntime {
   private *statement(n: Node): Generator<Yield, void, unknown> {
     yield {}; // Every statement yields, so runaway loops remain interruptible.
     switch (n.k) {
-      case 'block': for (const s of n.body) yield* this.statement(s); return;
+      case 'block':
+        this.scopes.push(new Map());
+        try { for (const s of n.body) yield* this.statement(s); } finally { this.scopes.pop(); }
+        return;
       case 'function': return;
       case 'enum': n.names.forEach((name: string, i: number) => this.scopes[0].set(name, i)); return;
       case 'declare': { let v = yield* this.expr(n.value); if (/\b(int|long|short)\b/.test(n.type) && !Array.isArray(v)) v = Math.trunc(Number(v)); this.scopes.at(-1)!.set(n.name, v); return; }

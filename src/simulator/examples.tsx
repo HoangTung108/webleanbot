@@ -192,8 +192,7 @@ Serial.println("Task completed!");
     // Animation loop
     const animate = () => {
       const time = simulatorRef.current!.getSimulationState().currentTime;
-      bridgeRef.current!.executeStep(time);
-      simulatorRef.current!.update();
+      bridgeRef.current!.executeStep(performance.now());
 
       setLogs((prev) => [
         ...prev.slice(-50), // Keep last 50 logs

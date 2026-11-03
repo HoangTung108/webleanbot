@@ -32,6 +32,7 @@ const DEFAULT_ROBOT_CONFIG: RobotConfig = {
 const MM_TO_PIXELS = 0.5; // conversion for rendering
 
 export class RobotSimulator {
+  private gripper = { left: 0, right: 0 };
   private state: SimulationState;
   private robotConfig: RobotConfig;
   private board: BoardConfig;
@@ -159,6 +160,8 @@ export class RobotSimulator {
     this.state.robotState.accelerationLeft = 0;
     this.state.robotState.accelerationRight = 0;
     this.state.history = [];
+    this.state.currentTime = 0;
+    this.setGripper(0, 0);
     this.simulationTime = 0;
   }
 
@@ -187,6 +190,12 @@ export class RobotSimulator {
     this.state.robotState.pose.heading = ((heading % 360) + 360) % 360;
     this.state.sensorReadings = this.readSensors();
   }
+
+  setGripper(left: number, right: number): void {
+    this.gripper = { left: Math.max(0, Math.min(90, left)), right: Math.max(0, Math.min(90, right)) };
+  }
+
+  getGripper(): { left: number; right: number } { return { ...this.gripper }; }
 
   getRobotPose(): Pose {
     return { ...this.state.robotState.pose };
