@@ -198,7 +198,7 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
     setIsRunning(true);
     setIsPaused(false);
 
-    addLog(`▶ Started simulation with "${selectedCode}" code example`);
+    addLog(selectedCode === 'custom' ? '▶ Chạy code C++ đang viết' : `▶ Chạy ví dụ ${selectedCode}`);
   };
 
   const handleStop = () => {
@@ -388,6 +388,7 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
               fontSize: '12px',
             }}
           >
+            <option value="custom">Code C++ đang viết</option>
             <option value="simple">Simple Movement</option>
             <option value="maze">Maze Navigation</option>
             <option value="turn">Turn and Go</option>

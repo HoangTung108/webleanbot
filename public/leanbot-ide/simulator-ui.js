@@ -404,25 +404,37 @@ class LeanbotSimulator2D {
   start() {
     if (this.isRunning) return;
     
+    try {
+      const code = window.getLeanbotSimulatorCode?.();
+      if (!code?.trim()) throw new Error('Chưa có code C++ trong tệp đang mở hoặc trình soạn thảo chưa sẵn sàng.');
+      this.runtime = new LeanbotCpp.CppRuntime(code, {
+        motors: (left, right) => { this.speedL = left; this.speedR = right; },
+        advance: seconds => this.advanceRobot(seconds),
+        sensors: () => ({ distance: 300 }),
+        log: message => this.addLog(message),
+        gripper: (left, right) => { this.gripperLeft = left; this.gripperRight = right; },
+      });
+      this.runtime.start();
+    } catch (error) {
+      this.addLog(`❌ ${error.message}`);
+      return;
+    }
     this.isRunning = true;
     this.isPaused = false;
     this.time = 0;
     this.frameCount = 0;
-    this.speedL = 200;
-    this.speedR = 200;
-    
-    // Update button states
+    this.lastFrameTime = performance.now();
     this.updateButtons();
-    this.addLog('▶ Started simulation');
-    
-    // Start animation loop
+    this.addLog('▶ Chạy code C++ trong tệp đang mở');
     this.animate();
   }
 
   togglePause() {
     if (!this.isRunning) return;
     
+    if (this.animationId) cancelAnimationFrame(this.animationId);
     this.isPaused = !this.isPaused;
+    this.lastFrameTime = performance.now();
     this.updateButtons();
     this.addLog(this.isPaused ? '⏸ Simulation paused' : '⏵ Simulation resumed');
     
@@ -432,6 +444,8 @@ class LeanbotSimulator2D {
   }
 
   stop() {
+    if (this.animationId) cancelAnimationFrame(this.animationId);
+    this.runtime?.stop();
     this.isRunning = false;
     this.isPaused = false;
     this.speedL = 0;
@@ -442,6 +456,8 @@ class LeanbotSimulator2D {
   }
 
   reset() {
+    if (this.animationId) cancelAnimationFrame(this.animationId);
+    this.runtime?.stop();
     this.isRunning = false;
     this.isPaused = false;
     this.resetRobot();
@@ -462,44 +478,33 @@ class LeanbotSimulator2D {
     this.updateStats();
   }
 
+  advanceRobot(dt) {
+    const speed = (this.speedL + this.speedR) / 2;
+    const omega = (this.speedR - this.speedL) / 75;
+    this.robotHeading += omega * dt * 180 / Math.PI;
+    const heading = this.robotHeading * Math.PI / 180;
+    this.robotX += speed * Math.cos(heading) * dt;
+    this.robotY += speed * Math.sin(heading) * dt;
+    this.robotX = Math.max(this.robotRadius, Math.min(this.robotX, this.currentBoard.width - this.robotRadius));
+    this.robotY = Math.max(this.robotRadius, Math.min(this.robotY, this.currentBoard.height - this.robotRadius));
+  }
+
   animate() {
     if (!this.isRunning || this.isPaused) return;
-    
-    // Update time (60fps = 16.67ms per frame)
-    const dt = 0.016;
-    this.time += dt;
-    this.frameCount++;
-    
-    // Simple movement simulation
-    if (this.speedL > 0 || this.speedR > 0) {
-      const avgSpeed = (this.speedL + this.speedR) / 2;
-      const wheelBase = 75; // mm
-      const omega = ((this.speedR - this.speedL) / wheelBase) * dt;
-      
-      const headingRad = (this.robotHeading * Math.PI) / 180;
-      this.robotX += avgSpeed * Math.cos(headingRad) * dt;
-      this.robotY += avgSpeed * Math.sin(headingRad) * dt;
-      this.robotHeading += omega * (180 / Math.PI);
-      
-      // Clamp to board
-      this.robotX = Math.max(this.robotRadius, 
-                            Math.min(this.robotX, this.currentBoard.width - this.robotRadius));
-      this.robotY = Math.max(this.robotRadius, 
-                            Math.min(this.robotY, this.currentBoard.height - this.robotRadius));
+    const now = performance.now();
+    const dt = Math.min(100, Math.max(0, now - this.lastFrameTime));
+    this.lastFrameTime = now;
+    try {
+      this.runtime.tick(dt);
+      this.time = this.runtime.time / 1000;
+      this.frameCount++;
+      if (!this.runtime.running) { this.stop(); this.addLog('✓ Chương trình kết thúc'); }
+    } catch (error) {
+      this.stop(); this.addLog(`❌ ${error.message}`);
     }
-    
-    // Stop after 3 seconds
-    if (this.time >= 3.0) {
-      this.stop();
-      return;
-    }
-    
-    // Update display
     this.render();
     this.updateStats();
-    
-    // Continue animation
-    this.animationId = requestAnimationFrame(() => this.animate());
+    if (this.isRunning) this.animationId = requestAnimationFrame(() => this.animate());
   }
 
   updateStats() {
