@@ -67,6 +67,7 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
   const bridgeRef = useRef<CppSimulatorBridge | null>(null);
   const animationRef = useRef<number | null>(null);
 
+  const [robotHeading, setRobotHeading] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [selectedBoard, setSelectedBoard] = useState<string>('synapse_city');
@@ -109,9 +110,15 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
     rendererRef.current = renderer;
     bridgeRef.current = bridge;
 
+    setRobotHeading(simulator.getRobotPose().heading);
     renderer.render();
     addLog(`Board loaded: ${board.name}`);
-  }, [selectedBoard, showGrid, showTrajectory, showSensorDebug]);
+  }, [selectedBoard]);
+
+  useEffect(() => {
+    rendererRef.current?.setOptions({ showGrid, showTrajectory, showSensorDebug });
+    rendererRef.current?.render();
+  }, [showGrid, showTrajectory, showSensorDebug]);
 
   // Animation loop
   useEffect(() => {
@@ -122,9 +129,6 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
         !isRunning ||
         isPaused
       ) {
-        if (animationRef.current) {
-          requestAnimationFrame(animate);
-        }
         return;
       }
 
@@ -226,6 +230,7 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
   const handleReset = () => {
     if (!simulatorRef.current || !rendererRef.current) return;
     simulatorRef.current.reset();
+    setRobotHeading(simulatorRef.current.getRobotPose().heading);
     if (bridgeRef.current) {
       bridgeRef.current.reset();
     }
@@ -352,6 +357,13 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
             🔄 Reset
           </button>
 
+          <label>Góc robot: <input aria-label="Góc robot" type="number" min="0" max="359" value={robotHeading} disabled={isRunning}
+            style={{ width: '64px' }} onChange={e => {
+              if (e.target.value === '') return;
+              simulatorRef.current?.setHeading(Number(e.target.value));
+              setRobotHeading(simulatorRef.current?.getRobotPose().heading ?? 0);
+              rendererRef.current?.render();
+            }} />°</label>
           <div style={{ flex: 1 }} />
 
           {/* Selectors */}

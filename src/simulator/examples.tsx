@@ -175,11 +175,7 @@ Serial.println("Task completed!");
     bridgeRef.current = bridge;
 
     // Update logs with parsed commands
-    const queue = bridge.getCommandQueue();
-    setLogs([
-      `Loaded ${queue.commands.length} commands from C++ code`,
-      `Command timeline: ${queue.commands.map((c) => c.timestamp).join(', ')} ms`,
-    ]);
+    setLogs(['Loaded C++ program for simulation']);
   };
 
   const handleRunCode = () => {
@@ -196,12 +192,11 @@ Serial.println("Task completed!");
 
       setLogs((prev) => [
         ...prev.slice(-50), // Keep last 50 logs
-        `Time: ${time}ms - Commands executed: ${bridgeRef.current!.getCommandQueue().currentIndex}`,
+        `Time: ${time}ms`,
       ]);
 
       if (
-        bridgeRef.current!.getCommandQueue().currentIndex <
-        bridgeRef.current!.getCommandQueue().commands.length
+        bridgeRef.current!.isExecuting()
       ) {
         requestAnimationFrame(animate);
       } else {

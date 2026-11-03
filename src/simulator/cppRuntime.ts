@@ -11,7 +11,7 @@ class Parser {
     // Numeric suffixes are part of C++ literals, not variable names.
     this.tokens = tokenizeCpp(source).filter(t => !['comment', 'preprocessor'].includes(t.kind));
     this.tokens = this.tokens.filter((t, i, all) => !(t.kind === 'identifier' && /^(f|u|l|ul|ull)$/i.test(t.value) && all[i - 1]?.kind === 'number' && all[i - 1].end === t.start));
-    for (const t of this.tokens) if (t.kind === 'number') t.value = t.value.replace(/[fF]$/, '');
+    for (const t of this.tokens) if (t.kind === 'number' && !/^0x/i.test(t.value)) t.value = t.value.replace(/[fF]$/, '');
   }
   peek(v?: string): any { return v === undefined ? this.tokens[this.i]?.value : this.tokens[this.i]?.value === v; }
   take(v?: string): string {
@@ -252,7 +252,7 @@ export class CppRuntime {
     if (this.functions.has('setup')) yield* this.call('setup', []);
     if (this.functions.has('loop')) while (true) { yield* this.call('loop', []); yield { ms: 1 }; }
   }
-  start() { this.iterator = this.program(); this.running = true; this.time = this.distance = this.rotation = this.pending = 0; this.motors(0, 0); }
+  start() { this.scopes = [new Map()]; this.iterator = this.program(); this.running = true; this.time = this.distance = this.rotation = this.pending = 0; this.motors(0, 0); }
   stop() { this.running = false; this.motors(0, 0); }
   tick(milliseconds: number) {
     if (!this.running || !this.iterator) return;

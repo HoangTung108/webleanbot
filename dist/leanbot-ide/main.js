@@ -245,7 +245,8 @@ class GlobalEditor {
 const inoEditor = new InoEditor();
 const blocklyEditor = new BlocklyEditor();
 
-const globalEditor = new GlobalEditor();  // wrapper for all editor types
+const globalEditor = new GlobalEditor();
+window.getLeanbotSimulatorCode = () => globalEditor.getCppCode();  // wrapper for all editor types
 
 // =================== Tooltip for button =================== //
 

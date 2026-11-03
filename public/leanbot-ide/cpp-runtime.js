@@ -107,7 +107,7 @@ var LeanbotCpp = (() => {
     constructor(source) {
       this.tokens = tokenizeCpp(source).filter((t) => !["comment", "preprocessor"].includes(t.kind));
       this.tokens = this.tokens.filter((t, i, all) => !(t.kind === "identifier" && /^(f|u|l|ul|ull)$/i.test(t.value) && all[i - 1]?.kind === "number" && all[i - 1].end === t.start));
-      for (const t of this.tokens) if (t.kind === "number") t.value = t.value.replace(/[fF]$/, "");
+      for (const t of this.tokens) if (t.kind === "number" && !/^0x/i.test(t.value)) t.value = t.value.replace(/[fF]$/, "");
     }
     peek(v) {
       return v === void 0 ? this.tokens[this.i]?.value : this.tokens[this.i]?.value === v;
@@ -611,6 +611,7 @@ var LeanbotCpp = (() => {
       }
     }
     start() {
+      this.scopes = [/* @__PURE__ */ new Map()];
       this.iterator = this.program();
       this.running = true;
       this.time = this.distance = this.rotation = this.pending = 0;

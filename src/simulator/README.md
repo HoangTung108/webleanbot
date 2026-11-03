@@ -379,3 +379,22 @@ City road centerlines are calibrated to 350 mm between adjacent intersections
 from each edge to the outer road centerline. Illustration and IR polylines use
 the same piecewise mapping. Straight driving uses mm/s × seconds without an
 extra display-distance multiplier; robot artwork size does not scale travel.
+
+### Running the current C++ editor source
+
+The IDE sends its current source directly to the simulator. In React, select
+“Code C++ đang viết”; the editor stays mounted when opening the simulator. The
+static IDE reads the active file through `getLeanbotSimulatorCode()` on each Start.
+Both use `cppRuntime.ts`, a cooperative interpreter (not a full C++ compiler).
+It supports the custom mission fixture: functions/parameters, numeric casts,
+variables, enums, numeric arrays, if/else, for/while, switch, break/return, common
+math/string helpers, millis, motion encoder reads, waits, and gripper commands.
+`LbMission.end()` finishes a simulated mission; touch-start is acknowledged by
+Start. Unsupported calls stop with an error instead of running sample motion.
+
+Motion calibration: runLR ±2000 maps to ±500 mm/s, wheelbase 75 mm. Encoder
+distance is signed wheel-average travel; rotation accumulates without wrapping.
+These speed values are a simulation approximation, not measured hardware PWM.
+Pause freezes simulation time; Stop cancels the program; Start reloads edited code.
+Run `npm run build:simulator` after editing the interpreter when using the static
+IDE; production builds regenerate `public/leanbot-ide/cpp-runtime.js` automatically.
