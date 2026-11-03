@@ -238,7 +238,7 @@ export class RobotSimulator {
 
     // Differential drive kinematics
     const v = (vL + vR) / 2; // linear velocity
-    const w = (vR - vL) / wheelBase; // angular velocity (rad/s)
+    const w = (vL - vR) / wheelBase; // angular velocity (rad/s)
 
     // Update heading
     const headingRad = (pose.heading * Math.PI) / 180;

@@ -61,3 +61,5 @@ Sau khi sửa `cppRuntime.ts`, `npm run build:simulator` tạo lại runtime dù
 cho IDE HTML. `npm run build` thực hiện bước này tự động.
 
 `robotAppearance.ts` dùng chung hình robot cho React và IDE HTML; góc càng được cập nhật trực tiếp từ lệnh C++.
+
+Chiều quay: `runLR(v, -v)` với v dương quay phải (góc tăng trong hệ trục màn hình); `runLR(-v, v)` quay trái. Encoder góc dùng cùng dấu với hình robot.

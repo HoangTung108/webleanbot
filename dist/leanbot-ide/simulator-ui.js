@@ -393,7 +393,7 @@ class LeanbotSimulator2D {
 
   advanceRobot(dt) {
     const speed = (this.speedL + this.speedR) / 2;
-    const omega = (this.speedR - this.speedL) / 75;
+    const omega = (this.speedL - this.speedR) / 75;
     this.robotHeading += omega * dt * 180 / Math.PI;
     const heading = this.robotHeading * Math.PI / 180;
     this.robotX += speed * Math.cos(heading) * dt;

@@ -29,4 +29,17 @@ describe('editor code bridge', () => {
     expect(robot.getRobotPose().x).toBeCloseTo(398.6);
     expect(bridge.loadCode('void loop(){ unknown(); }')).toMatchObject({ success: false });
   });
+  it.each([[2000, -2000, 90], [-2000, 2000, -90]])('turns and reports matching encoder direction for runLR(%s, %s)', (left, right, angle) => {
+    const robot = new RobotSimulator(), bridge = new CppSimulatorBridge(robot);
+    robot.reset({ x: 500, y: 500, heading: 0 });
+    expect(bridge.loadCode(`void loop(){ LbMotion.runLR(${left},${right}); LbMotion.waitRotationDeg(90); LbMotion.stopAndWait(); Serial.println(LbMotion.getRotationDeg()); LbMission.end(); }`).success).toBe(true);
+    robot.start(); bridge.startExecution();
+    for (let time = 0; time <= 2000; time += 10) bridge.executeStep(time);
+    expect(bridge.isExecuting()).toBe(false);
+    expect(robot.getRobotPose().heading).toBeCloseTo(angle, 6);
+    expect(Number(bridge.getLogs()[0])).toBeCloseTo(angle, 6);
+    expect(robot.getRobotPose().x).toBeCloseTo(500);
+    expect(robot.getRobotPose().y).toBeCloseTo(500);
+  });
+
 });

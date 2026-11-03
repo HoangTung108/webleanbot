@@ -8,7 +8,7 @@ function run(code: string, frame = 16) {
   let path = 0, angle = 0;
   const runtime = new CppRuntime(code, {
     motors: (l, r) => motors.push([l, r]),
-    advance: dt => { path += (runtime.left + runtime.right) / 2 * dt; angle += (runtime.right - runtime.left) / 75 * 180 / Math.PI * dt; },
+    advance: dt => { path += (runtime.left + runtime.right) / 2 * dt; angle += (runtime.left - runtime.right) / 75 * 180 / Math.PI * dt; },
     gripper: (l, r) => hands.push([l, r]),
   });
   runtime.start();
@@ -21,7 +21,7 @@ describe('custom C++ execution', () => {
   it('executes the supplied mission, ramps, encoder waits, switches, reverse and gripper loops', () => {
     const { runtime, motors, hands, path, angle } = run(custom);
     expect(path).toBeCloseTo(200 + 580 - 120 + 300, 0);
-    expect(angle).toBeCloseTo(-(22 + 133 - 32) * 1.05, 0);
+    expect(angle).toBeCloseTo((22 + 133 - 32) * 1.05, 0);
     expect(runtime.time).toBeGreaterThan(3000);
     expect(hands).toHaveLength(30);
     expect(hands.slice(0, 10)).toEqual(Array(10).fill([90, 90]));

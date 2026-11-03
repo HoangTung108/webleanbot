@@ -625,7 +625,7 @@ var LeanbotCpp = (() => {
           return null;
         }
         case "LbMotion.waitRotationDeg": {
-          const speed = Math.abs((this.right - this.left) / 75 * 180 / Math.PI);
+          const speed = Math.abs((this.left - this.right) / 75 * 180 / Math.PI);
           if (!speed && a) throw new Error("Kh\xF4ng th\u1EC3 ch\u1EDD g\xF3c quay khi hai b\xE1nh ch\u1EA1y c\xF9ng t\u1ED1c \u0111\u1ED9");
           yield { ms: speed ? Math.abs(a) / speed * 1e3 : 0 };
           return null;
@@ -782,7 +782,7 @@ var LeanbotCpp = (() => {
             this.host.advance(dt / 1e3);
             this.time += dt;
             this.distance += (this.left + this.right) / 2 * dt / 1e3;
-            this.rotation += (this.right - this.left) / 75 * 180 / Math.PI * dt / 1e3;
+            this.rotation += (this.left - this.right) / 75 * 180 / Math.PI * dt / 1e3;
             this.pending -= dt;
             remaining -= dt;
           } else {
