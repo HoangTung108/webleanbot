@@ -6,12 +6,9 @@
     <meta name="theme-color" content="#f7f8fa" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <title>Leanbot Studio</title>
-    <script>
-      const basePath = import.meta.env.BASE_URL || '/';
-      window.location.replace(basePath + 'leanbot-ide/index.html');
-    </script>
   </head>
   <body>
-    <p>Redirecting to <a href="/leanbot-ide/index.html">Leanbot IDE</a>...</p>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
