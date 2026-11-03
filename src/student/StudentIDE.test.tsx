@@ -20,7 +20,7 @@ describe('student file workflows', () => {
   it('keeps separate documents, renames, downloads fresh C++ and restores a closed file', async () => {
     render(<StudentIDE />)
     expect(screen.getByLabelText('Khối cũ')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'C++ mới' }))
+    fireEvent.click(screen.getByRole('button', { name: 'C++' }))
     fireEvent.change(screen.getByLabelText('Tên tệp'), { target: { value: 'mission.ino' } })
     const code = 'void loop(){ move_tank(2000,2000,35); }'
     fireEvent.change(screen.getByLabelText('Code C++'), { target: { value: code } })

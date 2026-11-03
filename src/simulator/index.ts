@@ -31,3 +31,6 @@ export type {
 
 export type { RendererOptions } from './renderer';
 export type { SimulatorCommand, CommandQueue } from './cppBridge';
+
+export { MissionWorld, BLOCK_SIZE, BLOCK_COLORS, NEUTRALIZER_COLORS } from './missionWorld';
+export type { MissionBlock, BlockColor, BlockKind } from './missionWorld';

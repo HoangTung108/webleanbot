@@ -1,3 +1,4 @@
+import { mountMissionEditor } from './missionEditor';
 /**
  * Complete Simulator Demo Component
  * Standalone demo showing all simulator features
@@ -12,6 +13,7 @@ import {
 } from '../simulator';
 
 export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
+  const missionHostRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const simulatorRef = useRef<RobotSimulator | null>(null);
   const rendererRef = useRef<SimulatorRenderer | null>(null);
@@ -60,6 +62,12 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
     bridgeRef.current = bridge;
 
     setRobotHeading(simulator.getRobotPose().heading);
+    const detachMission = missionHostRef.current ? mountMissionEditor(missionHostRef.current, simulator.mission, {
+      canvas: canvasRef.current,
+      toBoard: (x,y) => renderer.clientToBoard(x,y),
+      locked: () => simulator.getSimulationState().isRunning,
+      pose: () => simulator.getRobotPose(), render: () => renderer.render(),
+    }) : () => {};
     const detachPlacement = renderer.enablePlacement(pose => setRobotHeading(pose.heading));
     const resize = () => {
       const rect = canvasRef.current?.getBoundingClientRect();
@@ -71,7 +79,7 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
     resize();
     renderer.render();
     addLog(`Board loaded: ${board.name}`);
-    return () => { detachPlacement(); observer?.disconnect(); window.removeEventListener('resize', resize); bridge.stopExecution(); simulator.stop(); };
+    return () => { detachMission(); detachPlacement(); observer?.disconnect(); window.removeEventListener('resize', resize); bridge.stopExecution(); simulator.stop(); };
   }, []);
 
   useEffect(() => {
@@ -362,6 +370,7 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
               fontSize: '12px',
             }}
           >
+            <div ref={missionHostRef} />
             {/* Options */}
             <div
               style={{

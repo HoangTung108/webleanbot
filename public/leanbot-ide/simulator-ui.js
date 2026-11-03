@@ -20,6 +20,7 @@ class LeanbotSimulator2D {
     
     // Board state
     this.currentBoard = BOARD_CONFIGS.synapse;
+    this.mission = new LeanbotCpp.MissionWorld(this.currentBoard);
     this.pixelsPerMM = 0.3;
     this.offsetX = 50;
     this.offsetY = 50;
@@ -48,6 +49,20 @@ class LeanbotSimulator2D {
     this.setupEventListeners();
     document.getElementById('simRobotHeading').value = this.robotHeading;
     this.drawInitial();
+    const missionHost = document.getElementById('simMissionEditor');
+    if (missionHost && typeof missionHost.querySelector === 'function') {
+      this.disposeMissionEditor = LeanbotCpp.mountMissionEditor(missionHost, this.mission, {
+        canvas: this.canvas,
+        toBoard: (x,y) => {
+          const rect = this.canvas.getBoundingClientRect();
+          return { x: ((x-rect.left)*this.canvas.width/rect.width-this.offsetX)/this.pixelsPerMM,
+                   y: ((y-rect.top)*this.canvas.height/rect.height-this.offsetY)/this.pixelsPerMM };
+        },
+        locked: () => this.isRunning || this.modal.classList.contains('is-hidden'),
+        pose: () => ({ x:this.robotX,y:this.robotY,heading:this.robotHeading }),
+        render: () => this.render(),
+      });
+    }
   }
 
   setupCanvas() {
@@ -115,6 +130,7 @@ class LeanbotSimulator2D {
     if (this.isRunning || !Number.isFinite(heading)) return;
     this.robotHeading = ((heading % 360) + 360) % 360;
     document.getElementById('simRobotHeading').value = this.robotHeading;
+    this.mission.syncPose({x:this.robotX,y:this.robotY,heading:this.robotHeading});
     this.updateStats();
     this.render();
   }
@@ -157,6 +173,7 @@ class LeanbotSimulator2D {
     this.robotX = Math.max(this.robotRadius, Math.min(this.robotX, this.currentBoard.width - this.robotRadius));
     this.robotY = Math.max(this.robotRadius, Math.min(this.robotY, this.currentBoard.height - this.robotRadius));
     
+    this.mission.syncPose({x:this.robotX,y:this.robotY,heading:this.robotHeading});
     this.updateStats();
     this.render();
   }
@@ -288,7 +305,8 @@ class LeanbotSimulator2D {
     
     // Draw board
     this.drawBoard();
-    
+    this.ctx.save(); this.ctx.translate(this.offsetX,this.offsetY); this.ctx.scale(this.pixelsPerMM,this.pixelsPerMM);
+    LeanbotCpp.drawMissionBlocks(this.ctx,this.mission); this.ctx.restore();
     // Draw robot
     this.drawRobot();
     
@@ -320,9 +338,12 @@ class LeanbotSimulator2D {
       this.runtime = new LeanbotCpp.CppRuntime(code, {
         motors: (left, right) => { this.speedL = left; this.speedR = right; },
         advance: seconds => this.advanceRobot(seconds),
-        sensors: () => ({ distance: 300 }),
+        sensors: () => ({ distance: this.mission.distance({x:this.robotX,y:this.robotY,heading:this.robotHeading}) }),
         log: message => this.addLog(message),
-        gripper: (left, right) => { this.gripperLeft = left; this.gripperRight = right; },
+        gripper: (left, right) => {
+          this.gripperLeft = left; this.gripperRight = right;
+          this.mission.setGripper(left,right,{ x:this.robotX,y:this.robotY,heading:this.robotHeading },this.speedL,this.speedR);
+        },
       });
       this.runtime.start();
       this.trajectory = [{ x: this.robotX, y: this.robotY }];
@@ -378,6 +399,7 @@ class LeanbotSimulator2D {
   }
 
   resetRobot() {
+    this.mission.reset();
     this.gripperLeft = this.gripperRight = 0;
     this.robotX = this.currentBoard === BOARD_CONFIGS.synapse ? this.currentBoard.initialPose.x : this.currentBoard.width / 2;
     this.robotY = this.currentBoard === BOARD_CONFIGS.synapse ? this.currentBoard.initialPose.y : this.currentBoard.height / 2;
@@ -400,6 +422,7 @@ class LeanbotSimulator2D {
     this.robotY += speed * Math.sin(heading) * dt;
     this.robotX = Math.max(this.robotRadius, Math.min(this.robotX, this.currentBoard.width - this.robotRadius));
     this.robotY = Math.max(this.robotRadius, Math.min(this.robotY, this.currentBoard.height - this.robotRadius));
+    this.mission.step(dt,{ x:this.robotX,y:this.robotY,heading:this.robotHeading },this.speedL,this.speedR);
   }
 
   animate() {
@@ -440,7 +463,7 @@ class LeanbotSimulator2D {
       return Math.hypot(sensorX - a.x - t * dx, sensorY - a.y - t * dy) <= line.width / 2;
     }));
     document.getElementById('simIR').textContent = onTrack ? '4095' : '0';
-    document.getElementById('simDist').textContent = '300.0';
+    document.getElementById('simDist').textContent = this.mission.distance({x:this.robotX,y:this.robotY,heading:this.robotHeading}).toFixed(1);
   }
 
   updateButtons() {

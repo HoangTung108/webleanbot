@@ -1,3 +1,4 @@
+import { drawMissionBlocks } from './missionWorld';
 /**
  * 2D Canvas Renderer for Robot Simulator
  * Renders robot, board, and sensor visualizations
@@ -154,6 +155,11 @@ export class SimulatorRenderer {
   render(): void {
     this.clearCanvas();
     this.drawBoard();
+    this.context.save();
+    this.context.translate(this.offsetX, this.offsetY);
+    this.context.scale(this.scale, this.scale);
+    drawMissionBlocks(this.context, this.simulator.mission);
+    this.context.restore();
     this.drawRobot();
 
     if (this.options.showTrajectory) {

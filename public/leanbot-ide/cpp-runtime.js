@@ -22,8 +22,640 @@ var LeanbotCpp = (() => {
   __export(cppRuntime_exports, {
     CppRuntime: () => CppRuntime,
     LEANBOT_APPEARANCE: () => LEANBOT_APPEARANCE,
-    drawLeanbot: () => drawLeanbot
+    MissionWorld: () => MissionWorld,
+    drawLeanbot: () => drawLeanbot,
+    drawMissionBlocks: () => drawMissionBlocks,
+    mountMissionEditor: () => mountMissionEditor
   });
+
+  // src/simulator/missionWorld.ts
+  var BLOCK_COLORS = { green: "#83a73e", blue: "#278fa9", purple: "#795272", red: "#bd3d2f", yellow: "#d8b721" };
+  var BLOCK_SIZE = { length: 15, width: 25, height: 75 };
+  var NEUTRALIZER_COLORS = ["green", "blue", "purple"];
+  var RAD = Math.PI / 180;
+  var GRAVITY = 9810;
+  var copy = (blocks) => blocks.map((b) => ({ ...b }));
+  var clamp = (n, min, max) => Math.max(min, Math.min(max, n));
+  function seededRandom(seed) {
+    let state = seed >>> 0;
+    return () => {
+      state += 1831565813;
+      let x = state;
+      x = Math.imul(x ^ x >>> 15, x | 1);
+      x ^= x + Math.imul(x ^ x >>> 7, x | 61);
+      return ((x ^ x >>> 14) >>> 0) / 4294967296;
+    };
+  }
+  function blockFootprint(block) {
+    return { length: BLOCK_SIZE.length * Math.cos(block.tilt) + BLOCK_SIZE.height * Math.sin(block.tilt), width: BLOCK_SIZE.width };
+  }
+  function contact(a, b) {
+    const aa = a.rotation * RAD, ba = b.rotation * RAD;
+    const axes = [[Math.cos(aa), Math.sin(aa)], [-Math.sin(aa), Math.cos(aa)], [Math.cos(ba), Math.sin(ba)], [-Math.sin(ba), Math.cos(ba)]];
+    let depth = Infinity, nx = 0, ny = 0;
+    for (const [x, y] of axes) {
+      const radius = (box, angle) => Math.abs(x * Math.cos(angle) + y * Math.sin(angle)) * box.length / 2 + Math.abs(-x * Math.sin(angle) + y * Math.cos(angle)) * box.width / 2;
+      const distance = (b.x - a.x) * x + (b.y - a.y) * y;
+      const overlap = radius(a, aa) + radius(b, ba) - Math.abs(distance);
+      if (overlap <= 0) return null;
+      if (overlap < depth) {
+        depth = overlap;
+        nx = x * (distance >= 0 ? 1 : -1);
+        ny = y * (distance >= 0 ? 1 : -1);
+      }
+    }
+    return { depth, nx, ny };
+  }
+  var MissionWorld = class {
+    constructor(board) {
+      this.board = board;
+    }
+    blocks = [];
+    friction = 0.35;
+    restitution = 0.1;
+    initial = [];
+    listeners = /* @__PURE__ */ new Set();
+    serial = 0;
+    heldOffset = 0;
+    gripper = { left: 0, right: 0 };
+    velocity = { x: 0, y: 0, omega: 0 };
+    lastPose;
+    subscribe(fn) {
+      this.listeners.add(fn);
+      return () => {
+        this.listeners.delete(fn);
+      };
+    }
+    changed() {
+      this.listeners.forEach((fn) => fn());
+    }
+    get heldBlock() {
+      return this.blocks.find((b) => b.held);
+    }
+    get hasMotion() {
+      return this.blocks.some((b) => !b.held && (Math.hypot(b.vx, b.vy) > 0.01 || Math.abs(b.spin) > 0.01 || b.state === "falling"));
+    }
+    slots(kind) {
+      return kind === "pollution" ? (this.board.cityZones ?? []).flatMap((z) => z.sites) : this.board.storageSites ?? [];
+    }
+    make(kind, color, slot) {
+      if (!Object.hasOwn(BLOCK_COLORS, color) || kind === "neutralizer" && !NEUTRALIZER_COLORS.includes(color)) throw new Error("Invalid color for this block type.");
+      return { id: `block-${++this.serial}`, kind, color, x: slot.x, y: slot.y, rotation: slot.rotation, slotId: slot.id, vx: 0, vy: 0, spin: 0, tilt: 0, tipSpeed: 0, state: "standing", held: false, mass: 0.025 };
+    }
+    available(kind, except) {
+      return this.slots(kind).filter((s) => ![...this.blocks, ...this.initial].some((b) => b.id !== except && b.slotId === s.id));
+    }
+    place(kind, color, x, y, id) {
+      const slots = this.available(kind, id).sort((a, b) => Math.hypot(a.x - x, a.y - y) - Math.hypot(b.x - x, b.y - y));
+      const slot = slots[0];
+      if (!slot || Math.hypot(slot.x - x, slot.y - y) > 65) throw new Error(kind === "neutralizer" ? "Drop on an empty Storage slot S1\u2013S6." : "Drop on an empty numbered city site.");
+      const old = id ? this.blocks.find((b) => b.id === id) : void 0;
+      if (id && !old) throw new Error("Block no longer exists.");
+      const next = this.make(kind, color, slot);
+      if (old) Object.assign(old, next, { id });
+      else this.blocks.push(next);
+      const placed = old ?? next;
+      const index = this.initial.findIndex((b) => b.id === placed.id);
+      if (index < 0) this.initial.push({ ...placed });
+      else this.initial[index] = { ...placed };
+      this.changed();
+      return placed;
+    }
+    remove(id) {
+      this.blocks = this.blocks.filter((b) => b.id !== id);
+      this.initial = this.initial.filter((b) => b.id !== id);
+      this.changed();
+    }
+    clear() {
+      this.blocks = [];
+      this.commitLayout();
+    }
+    randomize(pollution, neutralizers, seed = Date.now()) {
+      if (!Number.isInteger(pollution) || !Number.isInteger(neutralizers) || pollution < 0 || pollution > this.slots("pollution").length || neutralizers < 0 || neutralizers > this.slots("neutralizer").length) throw new Error("Choose 0\u201332 pollution blocks and 0\u20136 neutralizers.");
+      if (!Number.isFinite(seed)) throw new Error("Seed must be a finite number.");
+      const random = seededRandom(seed);
+      const shuffle = (slots) => {
+        const result = [...slots];
+        for (let i = result.length - 1; i > 0; i--) {
+          const j = Math.floor(random() * (i + 1));
+          [result[i], result[j]] = [result[j], result[i]];
+        }
+        return result;
+      };
+      const blocks = [];
+      for (const [kind, count] of [["pollution", pollution], ["neutralizer", neutralizers]]) {
+        const colors = kind === "pollution" ? Object.keys(BLOCK_COLORS) : NEUTRALIZER_COLORS;
+        for (const slot of shuffle(this.slots(kind)).slice(0, count)) blocks.push(this.make(kind, colors[Math.floor(random() * colors.length)], slot));
+      }
+      this.blocks = blocks;
+      this.commitLayout();
+    }
+    commitLayout() {
+      this.initial = copy(this.blocks);
+      this.changed();
+    }
+    reset() {
+      this.blocks = copy(this.initial);
+      this.gripper = { left: 0, right: 0 };
+      this.lastPose = void 0;
+      this.velocity = { x: 0, y: 0, omega: 0 };
+      this.changed();
+    }
+    hit(x, y) {
+      return [...this.blocks].reverse().find((b) => {
+        const a = -b.rotation * RAD, dx = x - b.x, dy = y - b.y, shape = blockFootprint(b);
+        return Math.abs(dx * Math.cos(a) - dy * Math.sin(a)) <= Math.max(12, shape.length / 2) && Math.abs(dx * Math.sin(a) + dy * Math.cos(a)) <= Math.max(12, shape.width / 2);
+      });
+    }
+    syncPose(pose) {
+      const block = this.heldBlock;
+      if (block) {
+        const point = this.graspPoint(pose);
+        block.x = point.x;
+        block.y = point.y;
+        block.rotation = pose.heading + this.heldOffset;
+      }
+    }
+    distance(pose, maxDistance = 300) {
+      const angle = pose.heading * RAD, sx = pose.x + 40 * Math.cos(angle), sy = pose.y + 40 * Math.sin(angle);
+      let nearest = maxDistance;
+      for (const block of this.blocks) {
+        if (block.held || BLOCK_SIZE.height * Math.cos(block.tilt) + BLOCK_SIZE.length * Math.sin(block.tilt) < 35) continue;
+        const a = -block.rotation * RAD, dx = sx - block.x, dy = sy - block.y, shape = blockFootprint(block);
+        const origin = [dx * Math.cos(a) - dy * Math.sin(a), dx * Math.sin(a) + dy * Math.cos(a)];
+        const direction = [Math.cos(angle + a), Math.sin(angle + a)];
+        let near = 0, far = maxDistance;
+        for (let i = 0; i < 2; i++) {
+          const half = (i === 0 ? shape.length : shape.width) / 2;
+          if (Math.abs(direction[i]) < 1e-8) {
+            if (Math.abs(origin[i]) > half) {
+              far = -1;
+              break;
+            }
+          } else {
+            const t1 = (-half - origin[i]) / direction[i], t2 = (half - origin[i]) / direction[i];
+            near = Math.max(near, Math.min(t1, t2));
+            far = Math.min(far, Math.max(t1, t2));
+          }
+        }
+        if (far >= near) nearest = Math.min(nearest, near);
+      }
+      return nearest;
+    }
+    graspPoint(pose) {
+      const a = pose.heading * RAD;
+      return { x: pose.x + 51 * Math.cos(a), y: pose.y + 51 * Math.sin(a) };
+    }
+    setGripper(left, right, pose, motorLeft = 0, motorRight = 0) {
+      const angle = pose.heading * RAD, speed = (motorLeft + motorRight) / 2;
+      this.velocity = { x: speed * Math.cos(angle), y: speed * Math.sin(angle), omega: (motorLeft - motorRight) / 75 };
+      const wasClosed = this.gripper.left >= 55 && this.gripper.right >= 55;
+      this.gripper = { left, right };
+      const closed = left >= 55 && right >= 55;
+      if (this.heldBlock && !closed) {
+        const block = this.heldBlock, point = this.graspPoint(pose);
+        block.held = false;
+        block.vx = this.velocity.x - this.velocity.omega * (point.y - pose.y);
+        block.vy = this.velocity.y + this.velocity.omega * (point.x - pose.x);
+        if (Math.hypot(block.vx, block.vy) > 20) this.tip(block, Math.atan2(block.vy, block.vx) / RAD);
+        this.changed();
+      } else if (closed && !wasClosed && !this.heldBlock) {
+        const point = this.graspPoint(pose), a = pose.heading * RAD;
+        const candidates = this.blocks.filter((b) => {
+          const dx = b.x - pose.x, dy = b.y - pose.y;
+          return !b.held && b.state !== "falling" && dx * Math.cos(a) + dy * Math.sin(a) >= 35 && Math.abs(-dx * Math.sin(a) + dy * Math.cos(a)) <= 17 && Math.hypot(b.x - point.x, b.y - point.y) <= 23;
+        }).sort((a2, b) => Math.hypot(a2.x - point.x, a2.y - point.y) - Math.hypot(b.x - point.x, b.y - point.y));
+        if (candidates[0]) {
+          const block = candidates[0];
+          block.held = true;
+          block.slotId = void 0;
+          block.vx = block.vy = block.spin = 0;
+          this.heldOffset = block.rotation - pose.heading;
+          block.x = point.x;
+          block.y = point.y;
+          this.changed();
+        }
+      }
+    }
+    tip(block, rotation) {
+      if (block.state !== "standing" || block.held) return;
+      block.state = "falling";
+      block.rotation = rotation;
+      block.tipSpeed = 1.8;
+      block.slotId = void 0;
+      this.changed();
+    }
+    step(seconds, pose, left = 0, right = 0) {
+      if (!Number.isFinite(seconds) || seconds <= 0) return;
+      let remaining = seconds;
+      while (remaining > 1e-9) {
+        const dt = Math.min(5e-3, remaining);
+        this.substep(dt, pose, left, right);
+        remaining -= dt;
+      }
+      this.lastPose = { ...pose };
+    }
+    substep(dt, pose, left, right) {
+      const angle = pose.heading * RAD, speed = (left + right) / 2, omega = (left - right) / 75;
+      this.velocity = { x: speed * Math.cos(angle), y: speed * Math.sin(angle), omega };
+      const held = this.heldBlock;
+      if (held) {
+        const p = this.graspPoint(pose);
+        held.x = p.x;
+        held.y = p.y;
+        held.rotation = pose.heading + this.heldOffset;
+      }
+      for (const b of this.blocks) {
+        if (b.held) continue;
+        const speed2 = Math.hypot(b.vx, b.vy), next = Math.max(0, speed2 - this.friction * GRAVITY * dt);
+        if (speed2 > 0) {
+          b.vx *= next / speed2;
+          b.vy *= next / speed2;
+        }
+        b.spin *= Math.max(0, 1 - this.friction * 30 * dt);
+        b.x += b.vx * dt;
+        b.y += b.vy * dt;
+        b.rotation += b.spin * dt;
+        if (b.state === "falling") {
+          const before = Math.sin(b.tilt);
+          b.tipSpeed += GRAVITY / (BLOCK_SIZE.height * 0.65) * Math.sin(Math.max(0.08, b.tilt)) * dt;
+          b.tilt = Math.min(Math.PI / 2, b.tilt + b.tipSpeed * dt);
+          const shift = BLOCK_SIZE.height / 2 * (Math.sin(b.tilt) - before);
+          b.x += Math.cos(b.rotation * RAD) * shift;
+          b.y += Math.sin(b.rotation * RAD) * shift;
+          if (b.tilt === Math.PI / 2) {
+            b.state = "fallen";
+            b.tipSpeed = 0;
+            this.changed();
+          }
+        }
+        const robotShapes = [{ x: -17, y: 0, length: 98, width: 49 }, { x: 0, y: -37.5, length: 20, width: 11 }, { x: 0, y: 37.5, length: 20, width: 11 }];
+        for (const shape of robotShapes) {
+          const box = { ...shape, x: pose.x + shape.x * Math.cos(angle) - shape.y * Math.sin(angle), y: pose.y + shape.x * Math.sin(angle) + shape.y * Math.cos(angle), rotation: pose.heading };
+          const hit = contact(box, { ...b, ...blockFootprint(b) });
+          if (!hit) continue;
+          b.x += hit.nx * (hit.depth + 0.01);
+          b.y += hit.ny * (hit.depth + 0.01);
+          b.slotId = void 0;
+          const rvx = this.velocity.x - omega * (b.y - pose.y), rvy = this.velocity.y + omega * (b.x - pose.x);
+          const closing = Math.max(0, (rvx - b.vx) * hit.nx + (rvy - b.vy) * hit.ny);
+          b.vx += hit.nx * closing * (1 + this.restitution);
+          b.vy += hit.ny * closing * (1 + this.restitution);
+          const localX = (b.x - box.x) * Math.cos(angle) + (b.y - box.y) * Math.sin(angle);
+          const localY = -(b.x - box.x) * Math.sin(angle) + (b.y - box.y) * Math.cos(angle);
+          const cx = clamp(localX, -box.length / 2, box.length / 2), cy = clamp(localY, -box.width / 2, box.width / 2);
+          const rx = box.x + cx * Math.cos(angle) - cy * Math.sin(angle) - b.x;
+          const ry = box.y + cx * Math.sin(angle) + cy * Math.cos(angle) - b.y;
+          const footprint = blockFootprint(b), inertia = b.mass * (footprint.length ** 2 + footprint.width ** 2) / 12;
+          b.spin = clamp(b.spin + (rx * hit.ny - ry * hit.nx) * b.mass * closing * (1 + this.restitution) / inertia / RAD, -720, 720);
+          if (closing / dt > GRAVITY * (BLOCK_SIZE.length / 2) / (BLOCK_SIZE.height * 0.65)) this.tip(b, Math.atan2(hit.ny, hit.nx) / RAD);
+        }
+      }
+      for (let i = 0; i < this.blocks.length; i++) for (let j = i + 1; j < this.blocks.length; j++) {
+        const a = this.blocks[i], b = this.blocks[j], hit = contact({ ...a, ...blockFootprint(a) }, { ...b, ...blockFootprint(b) });
+        if (!hit) continue;
+        const ia = a.held ? 0 : 1 / a.mass, ib = b.held ? 0 : 1 / b.mass, total = ia + ib;
+        if (!total) continue;
+        a.x -= hit.nx * hit.depth * ia / total;
+        a.y -= hit.ny * hit.depth * ia / total;
+        b.x += hit.nx * hit.depth * ib / total;
+        b.y += hit.ny * hit.depth * ib / total;
+        const avx = a.held ? this.velocity.x : a.vx, avy = a.held ? this.velocity.y : a.vy;
+        const bvx = b.held ? this.velocity.x : b.vx, bvy = b.held ? this.velocity.y : b.vy;
+        const closing = (bvx - avx) * hit.nx + (bvy - avy) * hit.ny;
+        if (closing < 0) {
+          const impulse = -(1 + this.restitution) * closing / total;
+          a.vx -= impulse * ia * hit.nx;
+          a.vy -= impulse * ia * hit.ny;
+          b.vx += impulse * ib * hit.nx;
+          b.vy += impulse * ib * hit.ny;
+          if (Math.abs(closing) / dt > GRAVITY * 7.5 / 48.75) {
+            this.tip(a, Math.atan2(-hit.ny, -hit.nx) / RAD);
+            this.tip(b, Math.atan2(hit.ny, hit.nx) / RAD);
+          }
+        }
+      }
+      for (const b of this.blocks) {
+        if (b.held) continue;
+        const shape = blockFootprint(b), a = b.rotation * RAD;
+        const rx = Math.abs(Math.cos(a)) * shape.length / 2 + Math.abs(Math.sin(a)) * shape.width / 2;
+        const ry = Math.abs(Math.sin(a)) * shape.length / 2 + Math.abs(Math.cos(a)) * shape.width / 2;
+        if (b.x < rx || b.x > this.board.width - rx) b.vx *= -this.restitution;
+        if (b.y < ry || b.y > this.board.height - ry) b.vy *= -this.restitution;
+        b.x = clamp(b.x, rx, this.board.width - rx);
+        b.y = clamp(b.y, ry, this.board.height - ry);
+        if (Math.hypot(b.vx, b.vy) > 0.1) b.slotId = void 0;
+      }
+    }
+    serialize() {
+      return JSON.stringify({ version: 1, friction: this.friction, blocks: this.initial });
+    }
+    load(text) {
+      const value = JSON.parse(text);
+      if (value.version !== 1 || !Array.isArray(value.blocks) || value.blocks.length > 38 || !Number.isFinite(value.friction) || value.friction < 0 || value.friction > 1) throw new Error("Invalid mission layout.");
+      const seen = /* @__PURE__ */ new Set();
+      const next = value.blocks.map((input) => {
+        if (!["pollution", "neutralizer"].includes(input.kind)) throw new Error("Invalid block type.");
+        const slot = this.slots(input.kind).find((s) => s.id === input.slotId);
+        if (!slot || seen.has(slot.id)) throw new Error("Invalid or occupied mission site.");
+        seen.add(slot.id);
+        return this.make(input.kind, input.color, slot);
+      });
+      this.blocks = next;
+      this.friction = value.friction;
+      this.commitLayout();
+    }
+  };
+  function drawMissionBlocks(ctx, world) {
+    for (const b of world.blocks) {
+      const shape = blockFootprint(b), h = BLOCK_SIZE.height * Math.cos(b.tilt) * 0.18;
+      ctx.save();
+      ctx.translate(b.x, b.y);
+      ctx.rotate(b.rotation * RAD);
+      ctx.fillStyle = "rgba(0,0,0,.22)";
+      ctx.fillRect(-shape.length / 2 + 3, -shape.width / 2 + 4, shape.length, shape.width);
+      ctx.fillStyle = BLOCK_COLORS[b.color];
+      ctx.strokeStyle = b.held ? "#fff" : "#26333a";
+      ctx.lineWidth = b.held ? 2 : 0.8;
+      ctx.fillRect(-shape.length / 2, -shape.width / 2 - h, shape.length, shape.width + h);
+      ctx.strokeRect(-shape.length / 2, -shape.width / 2 - h, shape.length, shape.width + h);
+      ctx.fillStyle = "rgba(255,255,255,.2)";
+      ctx.fillRect(-shape.length / 2, -shape.width / 2 - h, shape.length, Math.min(5, shape.width));
+      if (b.kind === "neutralizer") {
+        ctx.fillStyle = "#f3efe0";
+        if (b.tilt > Math.PI / 4) ctx.fillRect(-7.5, -shape.width / 2, 15, shape.width);
+        else ctx.fillRect(-shape.length / 2, -4 - h / 2, shape.length, 8);
+      }
+      ctx.restore();
+    }
+  }
+
+  // src/simulator/missionEditor.ts
+  var MIME = "application/x-leanbot-mission-block";
+  function mountMissionEditor(host, world, options) {
+    host.classList.add("mission-editor");
+    host.innerHTML = `<h3>Mission blocks</h3>
+    <div class="mission-tools"><button type="button" data-tool="robot" aria-pressed="true">Robot</button><button type="button" data-tool="erase" aria-pressed="false">Erase block</button></div>
+    <p>Drag a color to a site, or select it and click the mat. Drag placed blocks to move them.</p>
+    <strong>Pollution \u2014 solid color</strong><div class="mission-palette" data-palette="pollution"></div>
+    <strong>Neutralizer \u2014 white stripe</strong><div class="mission-palette" data-palette="neutralizer"></div>
+    <small>15 \xD7 25 \xD7 75 mm. Pollution: city sites 1\u20134. Neutralizers: Storage S1\u2013S6.</small>
+    <div class="mission-counts"><label>Pollution <input data-count="pollution" aria-label="Pollution count" type="number" min="0" max="32" value="8"></label><label>Neutralizers <input data-count="neutralizer" aria-label="Neutralizer count" type="number" min="0" max="6" value="3"></label><label>Seed <input data-seed aria-label="Mission seed" type="number" step="1" placeholder="random"></label></div>
+    <div class="mission-tools"><button type="button" data-action="random">Randomize layout</button><button type="button" data-action="clear">Clear blocks</button></div>
+    <label>Friction <input data-friction aria-label="Block friction" type="range" min="0" max="1" step="0.05" value="${world.friction}"><output data-friction-value>${world.friction.toFixed(2)}</output></label>
+    <div class="mission-tools"><button type="button" data-action="save">Download mission</button><button type="button" data-action="open">Open mission</button></div>
+    <input data-file type="file" accept=".json" hidden>
+    <small>2.5D physics approximation. Block mass: 25 g (estimated). Reset restores this layout.</small>
+    <div data-summary></div><div data-message role="status" aria-live="polite"></div>`;
+    let tool = "robot";
+    let drag;
+    let frame = 0, lastTime = performance.now(), disposed = false;
+    const canvas = options.canvas;
+    const query = (selector) => host.querySelector(selector);
+    const message = (text) => {
+      query("[data-message]").textContent = text;
+    };
+    const guarded = (fn) => {
+      if (options.locked()) return;
+      try {
+        fn();
+        message("");
+        options.render();
+      } catch (e) {
+        message(e instanceof Error ? e.message : String(e));
+      }
+    };
+    const controls = () => {
+      host.querySelectorAll("button,input").forEach((el) => {
+        el.disabled = options.locked();
+      });
+      query("[data-summary]").textContent = `${world.blocks.filter((b) => b.kind === "pollution").length} pollution \xB7 ${world.blocks.filter((b) => b.kind === "neutralizer").length} neutralizers${world.heldBlock ? ` \xB7 Carrying ${world.heldBlock.color} ${world.heldBlock.kind}` : ""}`;
+      host.querySelectorAll("[data-tool],[data-block-kind]").forEach((button) => {
+        const selected = typeof tool === "string" ? button.dataset.tool === tool : button.dataset.blockKind === tool.kind && button.dataset.color === tool.color;
+        button.setAttribute("aria-pressed", String(selected));
+      });
+    };
+    for (const kind of ["pollution", "neutralizer"]) {
+      const colors = kind === "pollution" ? Object.keys(BLOCK_COLORS) : NEUTRALIZER_COLORS;
+      for (const color of colors) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.draggable = true;
+        button.dataset.blockKind = kind;
+        button.dataset.color = color;
+        button.setAttribute("aria-label", `${color} ${kind}`);
+        const swatch = document.createElement("span");
+        swatch.className = `mission-swatch ${kind}`;
+        swatch.style.backgroundColor = BLOCK_COLORS[color];
+        swatch.setAttribute("aria-hidden", "true");
+        button.append(swatch, document.createTextNode(color));
+        query(`[data-palette="${kind}"]`).append(button);
+      }
+    }
+    const click = (event) => {
+      const button = event.target.closest("button");
+      if (!button || options.locked()) return;
+      if (button.dataset.tool) tool = button.dataset.tool;
+      if (button.dataset.blockKind) tool = { kind: button.dataset.blockKind, color: button.dataset.color };
+      switch (button.dataset.action) {
+        case "random":
+          guarded(() => world.randomize(Number(query('[data-count="pollution"]').value), Number(query('[data-count="neutralizer"]').value), query("[data-seed]").value.trim() ? Number(query("[data-seed]").value) : Math.floor(Math.random() * 4294967296)));
+          break;
+        case "clear":
+          guarded(() => world.clear());
+          break;
+        case "open":
+          query("[data-file]").click();
+          break;
+        case "save": {
+          const url = URL.createObjectURL(new Blob([world.serialize()], { type: "application/json" }));
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = "synapse-mission.json";
+          document.body.append(a);
+          a.click();
+          a.remove();
+          window.setTimeout(() => URL.revokeObjectURL(url), 1e3);
+          break;
+        }
+      }
+      controls();
+    };
+    const input = (event) => {
+      if (options.locked()) return;
+      const target = event.target;
+      if (target.hasAttribute("data-friction")) {
+        world.friction = Number(target.value);
+        query("[data-friction-value]").textContent = world.friction.toFixed(2);
+        world.changed();
+      }
+    };
+    const fileChange = async (event) => {
+      const target = event.target;
+      if (!target.hasAttribute("data-file")) return;
+      const file = target.files?.[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        guarded(() => world.load(text));
+        query("[data-friction]").value = String(world.friction);
+        query("[data-friction-value]").textContent = world.friction.toFixed(2);
+      } catch (e) {
+        message(e instanceof Error ? e.message : String(e));
+      }
+      target.value = "";
+    };
+    const dragStart = (event) => {
+      const button = event.target.closest("[data-block-kind]");
+      if (!button || options.locked()) {
+        event.preventDefault();
+        return;
+      }
+      event.dataTransfer?.setData(MIME, JSON.stringify({ kind: button.dataset.blockKind, color: button.dataset.color }));
+      if (event.dataTransfer) event.dataTransfer.effectAllowed = "copy";
+    };
+    const over = (event) => {
+      if (!options.locked() && event.dataTransfer?.types.includes(MIME)) event.preventDefault();
+    };
+    const drop = (event) => {
+      if (options.locked()) return;
+      const data = event.dataTransfer?.getData(MIME);
+      if (!data) return;
+      event.preventDefault();
+      const point = options.toBoard(event.clientX, event.clientY);
+      guarded(() => {
+        const block = JSON.parse(data);
+        if (!["pollution", "neutralizer"].includes(block.kind)) throw new Error("Invalid block type.");
+        world.place(block.kind, block.color, point.x, point.y);
+      });
+    };
+    const down = (event) => {
+      if (options.locked() || event.button !== 0) return;
+      const point = options.toBoard(event.clientX, event.clientY), block = world.hit(point.x, point.y);
+      if (typeof tool === "string" && tool === "robot" && !block) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (tool === "erase") {
+        if (block) guarded(() => world.remove(block.id));
+        return;
+      }
+      if (block) {
+        drag = { id: block.id, x: block.x, y: block.y };
+        canvas.setPointerCapture?.(event.pointerId);
+      } else if (typeof tool !== "string") {
+        const selected = tool;
+        guarded(() => world.place(selected.kind, selected.color, point.x, point.y));
+      }
+    };
+    const move = (event) => {
+      if (!drag || options.locked()) return;
+      event.stopImmediatePropagation();
+      const point = options.toBoard(event.clientX, event.clientY), block = world.blocks.find((b) => b.id === drag.id);
+      if (block) {
+        block.x = point.x;
+        block.y = point.y;
+        options.render();
+      }
+    };
+    const up = (event) => {
+      if (!drag) return;
+      event.stopImmediatePropagation();
+      const original = drag;
+      drag = void 0;
+      const block = world.blocks.find((b) => b.id === original.id);
+      if (!block) return;
+      const point = options.toBoard(event.clientX, event.clientY);
+      try {
+        if (options.locked()) throw new Error("Placement is locked while running.");
+        world.place(block.kind, block.color, point.x, point.y, block.id);
+        message("");
+      } catch (e) {
+        block.x = original.x;
+        block.y = original.y;
+        message(e instanceof Error ? e.message : String(e));
+      }
+      options.render();
+    };
+    const cancel = () => {
+      if (drag) {
+        const b = world.blocks.find((b2) => b2.id === drag.id);
+        if (b) {
+          b.x = drag.x;
+          b.y = drag.y;
+        }
+        drag = void 0;
+        options.render();
+      }
+    };
+    host.addEventListener("click", click);
+    host.addEventListener("input", input);
+    host.addEventListener("change", fileChange);
+    host.addEventListener("dragstart", dragStart);
+    canvas.addEventListener("dragover", over);
+    canvas.addEventListener("drop", drop);
+    canvas.addEventListener("pointerdown", down, true);
+    canvas.addEventListener("pointermove", move, true);
+    canvas.addEventListener("pointerup", up, true);
+    canvas.addEventListener("pointercancel", cancel, true);
+    const storageKey = "leanbot.synapse.mission.v1";
+    let saved = "";
+    const persist = () => {
+      const text = world.serialize();
+      if (text === saved) return;
+      try {
+        localStorage.setItem(storageKey, text);
+        saved = text;
+      } catch {
+        message("Mission autosave unavailable. Use Download mission.");
+      }
+    };
+    const unsubscribe = world.subscribe(() => {
+      controls();
+      options.render();
+      persist();
+    });
+    try {
+      const stored = localStorage.getItem(storageKey);
+      if (stored && !world.blocks.length) {
+        world.load(stored);
+        saved = world.serialize();
+      }
+      query("[data-friction]").value = String(world.friction);
+      query("[data-friction-value]").textContent = world.friction.toFixed(2);
+    } catch {
+      message("Saved mission could not be loaded. Use Open mission or create a new layout.");
+    }
+    const animate = (now) => {
+      if (disposed) return;
+      const dt = Math.min(0.1, Math.max(0, (now - lastTime) / 1e3));
+      lastTime = now;
+      controls();
+      if (!options.locked() && world.hasMotion) {
+        world.step(dt, options.pose());
+        options.render();
+      }
+      frame = requestAnimationFrame(animate);
+    };
+    controls();
+    frame = requestAnimationFrame(animate);
+    return () => {
+      disposed = true;
+      cancelAnimationFrame(frame);
+      cancel();
+      unsubscribe();
+      host.removeEventListener("click", click);
+      host.removeEventListener("input", input);
+      host.removeEventListener("change", fileChange);
+      host.removeEventListener("dragstart", dragStart);
+      canvas.removeEventListener("dragover", over);
+      canvas.removeEventListener("drop", drop);
+      canvas.removeEventListener("pointerdown", down, true);
+      canvas.removeEventListener("pointermove", move, true);
+      canvas.removeEventListener("pointerup", up, true);
+      canvas.removeEventListener("pointercancel", cancel, true);
+      host.replaceChildren();
+    };
+  }
 
   // src/simulator/robotAppearance.ts
   var LEANBOT_APPEARANCE = {

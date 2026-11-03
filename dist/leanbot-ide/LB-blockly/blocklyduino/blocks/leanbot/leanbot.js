@@ -138,7 +138,7 @@ var LeanbotBlocks_begin = function() {
     // console.log(id, block);
     // Generate block for this id (only add suffix for non-English blocks)
     Blockly.Blocks[id]         = block(id, Code.LANG);
-    Blockly.Blocks[id + "_vi"] = block(id, "vi");
+    Blockly.Blocks[id + "_vi"] = block(id, "en"); // Preserve old XML IDs with English labels.
   }
 };
 

@@ -28,7 +28,7 @@ nội dung editor hay dữ liệu trình duyệt.
 - S1/S3/S5 nằm ở mép dưới; S2/S4/S6 ở mép phải.
 - Góc đường bao tại CRL (dưới phải) là góc vuông; ba góc còn lại giữ bo tròn.
 - CRL là khu xuất phát/kết thúc. Vị trí đánh dấu không phải vật cản.
-- Mô hình khối theo sơ đồ: 15 × 25 × 75 mm. Chưa đặt khối ngẫu nhiên/tính điểm.
+- Khối nhiệm vụ 15 × 25 × 75 mm: kéo thả vào ô, random theo số lượng/seed, gắp–mang–thả, va chạm, ma sát và đổ nằm ngang. Chưa có luật tính điểm.
 
 `public/simulator/synapse-city.svg` là bản dựng lại theo ảnh được cung cấp,
 không phải artwork in gốc. Tọa độ đường dò và hình dùng cùng đơn vị mm.
@@ -63,3 +63,15 @@ cho IDE HTML. `npm run build` thực hiện bước này tự động.
 `robotAppearance.ts` dùng chung hình robot cho React và IDE HTML; góc càng được cập nhật trực tiếp từ lệnh C++.
 
 Chiều quay: `runLR(v, -v)` với v dương quay phải (góc tăng trong hệ trục màn hình); `runLR(-v, v)` quay trái. Encoder góc dùng cùng dấu với hình robot.
+
+## Custom mission layout
+
+Mission blocks cung cấp palette Pollution (5 màu) và Neutralizer (3 màu, sọc trắng).
+Kéo màu vào ô số/Storage, hoặc chọn màu rồi bấm; kéo khối đã đặt để di chuyển.
+Robot bật lại thao tác đặt robot; Erase block xóa khối. Các ô bị chiếm không nhận
+thêm khối. Chọn số lượng và seed để random, Download/Open mission để lưu/mở JSON.
+Reset phục hồi bố trí xuất phát; vị trí sau khi chạy không tự ghi đè bố trí gốc.
+
+Vật lý khối là mô hình 2.5D định tính với khối lượng 25 g ước lượng, ma sát 0.35
+(có thể chỉnh), trọng lực và va chạm oriented rectangles. Robot vẫn dùng chuyển
+động kinematic đã hiệu chỉnh. Xem [mô tả cơ chế](../../docs/MISSION_BLOCKS.md).

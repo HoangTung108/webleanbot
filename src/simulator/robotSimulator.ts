@@ -1,3 +1,4 @@
+import { MissionWorld } from './missionWorld';
 import { LEANBOT_APPEARANCE } from './robotAppearance';
 /**
  * 2D Robot Physics Simulator Engine
@@ -35,6 +36,7 @@ const DEFAULT_ROBOT_CONFIG: RobotConfig = {
 const MM_TO_PIXELS = 0.5; // conversion for rendering
 
 export class RobotSimulator {
+  mission: MissionWorld;
   private gripper = { left: 0, right: 0 };
   private state: SimulationState;
   private robotConfig: RobotConfig;
@@ -46,6 +48,7 @@ export class RobotSimulator {
   constructor(robotConfig?: RobotConfig) {
     this.robotConfig = robotConfig || DEFAULT_ROBOT_CONFIG;
     this.board = SYNAPSE_CITY;
+    this.mission = new MissionWorld(this.board);
 
     this.state = {
       isRunning: false,
@@ -70,6 +73,7 @@ export class RobotSimulator {
    */
   setBoard(board: BoardConfig): void {
     this.board = board;
+    this.mission = new MissionWorld(board);
     this.reset();
   }
 
@@ -126,7 +130,8 @@ export class RobotSimulator {
     this.state.robotState.accelerationRight = 0;
     this.state.history = [];
     this.state.currentTime = 0;
-    this.setGripper(0, 0);
+    this.gripper = { left: 0, right: 0 };
+    this.mission.reset();
     this.simulationTime = 0;
   }
 
@@ -158,17 +163,20 @@ export class RobotSimulator {
       heading: ((pose.heading % 360) + 360) % 360,
     };
     this.state.history = [];
+    this.mission.syncPose(this.getRobotPose());
     this.state.sensorReadings = this.readSensors();
   }
 
   setHeading(heading: number): void {
     if (this.state.isRunning || !Number.isFinite(heading)) return;
     this.state.robotState.pose.heading = ((heading % 360) + 360) % 360;
+    this.mission.syncPose(this.getRobotPose());
     this.state.sensorReadings = this.readSensors();
   }
 
   setGripper(left: number, right: number): void {
     this.gripper = { left: Math.max(0, Math.min(90, left)), right: Math.max(0, Math.min(90, right)) };
+    this.mission.setGripper(this.gripper.left, this.gripper.right, this.getRobotPose(), this.state.robotState.velocityLeft, this.state.robotState.velocityRight);
   }
 
   getGripper(): { left: number; right: number } { return { ...this.gripper }; }
@@ -181,6 +189,7 @@ export class RobotSimulator {
    * Get current sensor readings
    */
   getSensorReadings(): SensorReading {
+    this.state.sensorReadings = this.readSensors();
     return { ...this.state.sensorReadings };
   }
 
@@ -209,6 +218,8 @@ export class RobotSimulator {
 
     // Check collisions
     this.checkCollisions();
+
+    this.mission.step(deltaTime, this.getRobotPose(), this.state.robotState.velocityLeft, this.state.robotState.velocityRight);
 
     // Read sensors
     this.state.sensorReadings = this.readSensors();
@@ -438,7 +449,7 @@ export class RobotSimulator {
     const rayEndX = pose.x + rayLength * Math.cos(headingRad);
     const rayEndY = pose.y + rayLength * Math.sin(headingRad);
 
-    let minDistance = rayLength;
+    let minDistance = this.mission.distance(pose, rayLength);
 
     // Check distance to walls
     for (const wall of this.board.walls) {

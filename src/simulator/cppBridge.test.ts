@@ -42,4 +42,17 @@ describe('editor code bridge', () => {
     expect(robot.getRobotPose().y).toBeCloseTo(500);
   });
 
+  it('picks up, carries and releases an actual mission block from C++ commands', () => {
+    const robot=new RobotSimulator(),bridge=new CppSimulatorBridge(robot),site=robot.mission.slots('pollution')[0];
+    const block=robot.mission.place('pollution','red',site.x,site.y);
+    robot.reset({x:site.x-51,y:site.y,heading:0});
+    expect(bridge.loadCode('void loop(){ LbGripper.close(); LbMotion.runLR(2000,2000); LbMotion.waitDistanceMm(35); LbMotion.stopAndWait(); LbGripper.open(); LbDelay(500); LbMission.end(); }').success).toBe(true);
+    robot.start();bridge.startExecution();
+    for(let time=0;time<=1500;time+=10)bridge.executeStep(time);
+    const carried=robot.mission.blocks.find(b=>b.id===block.id)!;
+    expect(carried.x).toBeCloseTo(site.x+35,3);expect(carried.y).toBeCloseTo(site.y,3);
+    expect(carried.held).toBe(false);expect(carried.state).toBe('standing');expect(bridge.isExecuting()).toBe(false);
+    robot.reset();expect(robot.mission.blocks[0].x).toBe(site.x);
+  });
+
 });

@@ -90,6 +90,6 @@ export const LegacyBlocklyEditor = forwardRef<BlocklyCommands, { xml: string; on
   }, [])
   return <div className="legacy-blockly-host">
     {status && <div className="editor-loading" role="status">{status}</div>}
-    <iframe ref={frame} title="Blockly Leanbot" src={`${import.meta.env.BASE_URL}leanbot-ide/LB-blockly/index.html?lang=vi&studio=1`} />
+    <iframe ref={frame} title="Blockly Leanbot" src={`${import.meta.env.BASE_URL}leanbot-ide/LB-blockly/index.html?lang=en&studio=1`} />
   </div>
 })

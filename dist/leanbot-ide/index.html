@@ -4,6 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <link rel="stylesheet" href="../simulator/mission.css" />
   <title>Leanbot Studio</title>
   <link rel="icon" type="image/png" href="./img/logo-lb-title.png">
   <link rel="stylesheet" href="./styles.css?v=20260930-2">
@@ -163,7 +164,7 @@
 
         <!-- Embed Blockly on bottom -->
         <div id="blocklyEditor">
-          <iframe id="blocklyInlineFrame" src="LB-blockly/index.html?v=20260930-2"></iframe>
+          <iframe id="blocklyInlineFrame" src="LB-blockly/index.html?v=20260930-2&lang=en"></iframe>
         </div>
 
       </div>
@@ -436,6 +437,8 @@
           <div style="padding: 12px; border-bottom: 1px solid #3e3e42; font-size: 12px;">
             Bấm vào sa bàn hoặc kéo robot để đặt vị trí trước khi Start. Chạy code C++ trong tệp đang mở. Tốc độ 2000: 35 cm / 5 giây.
           </div>
+
+          <div id="simMissionEditor"></div>
 
           <!-- Options -->
           <div style="padding: 12px; border-bottom: 1px solid #3e3e42;">

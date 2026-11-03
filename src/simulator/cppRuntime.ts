@@ -1,3 +1,5 @@
+export { MissionWorld, drawMissionBlocks } from './missionWorld';
+export { mountMissionEditor } from './missionEditor';
 export { drawLeanbot, LEANBOT_APPEARANCE } from './robotAppearance';
 import { tokenizeCpp, type Token } from '../transpiler/cppParser/tokenizer';
 
