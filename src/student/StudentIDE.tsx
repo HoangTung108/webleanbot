@@ -20,7 +20,7 @@ function initialProject() {
   return loadProject() ?? createProject(cppToIr(defaultCode).program)
 }
 
-export function StudentIDE() {
+export function StudentIDE({ onSourceChange }: { onSourceChange?: (source: string) => void }) {
   const [project, setProject] = useState<LeanbotProject>(initialProject)
   const [candidate, setCandidate] = useState<ConversionCandidate | null>(null)
   const [conflictOpen, setConflictOpen] = useState(false)
@@ -40,6 +40,10 @@ export function StudentIDE() {
     serial.onDisconnect = () => setConnected(false)
     return () => { persistenceRef.current?.flush(); persistenceRef.current?.dispose(); void serial.disconnect() }
   }, [serial])
+
+  useEffect(() => {
+    onSourceChange?.((project.sourceMode === 'blocks' ? synchronizeToCpp(project) : project).cppSource);
+  }, [project, onSourceChange]);
 
   function changeMode(mode: SourceMode) {
     if (mode === project.sourceMode) return
