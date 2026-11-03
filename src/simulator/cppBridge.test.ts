@@ -11,11 +11,11 @@ describe('editor code bridge', () => {
     expect(bridge.loadCode(code).success).toBe(true);
     robot.start(); bridge.startExecution(); bridge.executeStep(0);
     for (let t = 10; t <= 300; t += 10) bridge.executeStep(t);
-    expect(robot.getRobotPose().y).toBeCloseTo(650);
+    expect(robot.getRobotPose().y).toBeCloseTo(521);
     robot.pause(); bridge.executeStep(10000);
-    expect(robot.getRobotPose().y).toBeCloseTo(650);
+    expect(robot.getRobotPose().y).toBeCloseTo(521);
     robot.resume();
-    for (let t = 10010; t <= 10400; t += 10) bridge.executeStep(t);
+    for (let t = 10010; t <= 14700; t += 10) bridge.executeStep(t);
     expect(robot.getRobotPose().y).toBeCloseTo(850);
     expect(robot.getRobotPose().x).toBeCloseTo(400);
     expect(bridge.isExecuting()).toBe(false);
@@ -26,7 +26,7 @@ describe('editor code bridge', () => {
     expect(bridge.loadCode('void loop(){ LbMotion.runLR(-400,-400); LbDelay(100); LbMission.end(); }').success).toBe(true);
     robot.reset({ x: 400, y: 500, heading: 0 }); robot.start(); bridge.startExecution();
     bridge.executeStep(0); bridge.executeStep(100);
-    expect(robot.getRobotPose().x).toBeCloseTo(390);
+    expect(robot.getRobotPose().x).toBeCloseTo(398.6);
     expect(bridge.loadCode('void loop(){ unknown(); }')).toMatchObject({ success: false });
   });
 });

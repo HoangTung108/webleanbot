@@ -69,7 +69,7 @@ export class SimulatorRenderer {
     if (board.backgroundImage) {
       this.boardImage = new Image();
       this.boardImage.onload = () => this.render();
-      this.boardImage.src = board.backgroundImage;
+      this.boardImage.src = `${import.meta.env.BASE_URL}${board.backgroundImage.replace(/^\//, '')}?v=flat-2`;
     }
   }
 
@@ -101,6 +101,52 @@ export class SimulatorRenderer {
     };
   }
 
+  /** Convert CSS pointer coordinates through the actual backing-store viewport. */
+  clientToBoard(clientX: number, clientY: number): { x: number; y: number } {
+    const rect = this.canvas.getBoundingClientRect();
+    return {
+      x: ((clientX - rect.left) * this.canvas.width / rect.width - this.offsetX) / this.scale,
+      y: ((clientY - rect.top) * this.canvas.height / rect.height - this.offsetY) / this.scale,
+    };
+  }
+
+  enablePlacement(onChange?: (pose: Pose) => void): () => void {
+    let dragging = false;
+    let dx = 0, dy = 0;
+    const place = (event: PointerEvent) => {
+      if (this.simulator.getSimulationState().isRunning) return;
+      const point = this.clientToBoard(event.clientX, event.clientY);
+      this.simulator.setPose({ ...this.simulator.getRobotPose(), x: point.x - dx, y: point.y - dy });
+      onChange?.(this.simulator.getRobotPose());
+      this.render();
+    };
+    const down = (event: PointerEvent) => {
+      if (event.button !== 0 || this.simulator.getSimulationState().isRunning) return;
+      const point = this.clientToBoard(event.clientX, event.clientY);
+      if (point.x < 0 || point.y < 0 || point.x > this.board.width || point.y > this.board.height) return;
+      const pose = this.simulator.getRobotPose();
+      const onRobot = Math.hypot(point.x - pose.x, point.y - pose.y) < 60;
+      dx = onRobot ? point.x - pose.x : 0; dy = onRobot ? point.y - pose.y : 0;
+      dragging = true;
+      this.canvas.setPointerCapture?.(event.pointerId);
+      place(event);
+    };
+    const move = (event: PointerEvent) => { if (dragging) place(event); };
+    const up = () => { dragging = false; };
+    this.canvas.style.touchAction = 'none';
+    this.canvas.style.cursor = 'crosshair';
+    this.canvas.addEventListener('pointerdown', down);
+    this.canvas.addEventListener('pointermove', move);
+    this.canvas.addEventListener('pointerup', up);
+    this.canvas.addEventListener('pointercancel', up);
+    return () => {
+      this.canvas.removeEventListener('pointerdown', down);
+      this.canvas.removeEventListener('pointermove', move);
+      this.canvas.removeEventListener('pointerup', up);
+      this.canvas.removeEventListener('pointercancel', up);
+    };
+  }
+
   /**
    * Render a single frame
    */
@@ -117,7 +163,7 @@ export class SimulatorRenderer {
       this.drawSensorDebug();
     }
 
-    this.drawStats();
+    if (!this.board.backgroundImage) this.drawStats();
   }
 
   /**

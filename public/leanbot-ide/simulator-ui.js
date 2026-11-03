@@ -93,10 +93,11 @@ class LeanbotSimulator2D {
     this.robotRadius = 60; // conservative footprint radius, mm
     this.boardImage = new Image();
     this.boardImage.onload = () => this.render();
-    this.boardImage.src = this.currentBoard.backgroundImage;
+    this.boardImage.src = new URL('../simulator/synapse-city.svg?v=flat-2', document.baseURI || 'http://localhost/leanbot-ide/').href;
     this.speedL = 0;
     this.speedR = 0;
     this.time = 0;
+    this.trajectory = [];
     this.frameCount = 0;
     
     // Mouse drag state
@@ -156,7 +157,7 @@ class LeanbotSimulator2D {
       const selectedKey = e.target.value;
       this.currentBoard = BOARD_CONFIGS[selectedKey];
       this.stop();
-      if (this.currentBoard.backgroundImage) this.boardImage.src = this.currentBoard.backgroundImage;
+      if (this.currentBoard.backgroundImage) this.boardImage.src = new URL('../simulator/synapse-city.svg?v=flat-2', document.baseURI || 'http://localhost/leanbot-ide/').href;
       this.setupCanvas();
       this.resetRobot();
       this.addLog(`📍 Board changed to: ${e.target.options[e.target.selectedIndex].text}`);
@@ -169,10 +170,11 @@ class LeanbotSimulator2D {
     document.getElementById('simSensorDebug').addEventListener('change', () => this.render());
 
     // Canvas mouse events for dragging robot
-    this.canvas.addEventListener('mousedown', (e) => this.onMouseDown(e));
-    this.canvas.addEventListener('mousemove', (e) => this.onMouseMove(e));
-    this.canvas.addEventListener('mouseup', () => this.onMouseUp());
-    this.canvas.addEventListener('mouseleave', () => this.onMouseUp());
+    this.canvas.addEventListener('pointerdown', (e) => this.onMouseDown(e));
+    this.canvas.addEventListener('pointermove', (e) => this.onMouseMove(e));
+    this.canvas.addEventListener('pointerup', () => this.onMouseUp());
+    this.canvas.addEventListener('pointercancel', () => this.onMouseUp());
+    this.canvas.style.touchAction = 'none';
 
     // Close on escape
     document.addEventListener('keydown', (e) => {
@@ -194,28 +196,31 @@ class LeanbotSimulator2D {
     if (this.isRunning) return;
     
     const rect = this.canvas.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
+    const mouseX = (e.clientX - rect.left) * this.canvas.width / rect.width;
+    const mouseY = (e.clientY - rect.top) * this.canvas.height / rect.height;
     
     // Check if clicking on robot
     const robotPixelX = this.offsetX + this.robotX * this.pixelsPerMM;
     const robotPixelY = this.offsetY + this.robotY * this.pixelsPerMM;
     const dist = Math.sqrt((mouseX - robotPixelX) ** 2 + (mouseY - robotPixelY) ** 2);
     
-    if (dist < this.robotRadius * this.pixelsPerMM + 10) {
-      this.isDragging = true;
-      this.dragOffsetX = mouseX - robotPixelX;
-      this.dragOffsetY = mouseY - robotPixelY;
-      this.canvas.style.cursor = 'grabbing';
-    }
+    const worldX = (mouseX - this.offsetX) / this.pixelsPerMM;
+    const worldY = (mouseY - this.offsetY) / this.pixelsPerMM;
+    if (worldX < 0 || worldY < 0 || worldX > this.currentBoard.width || worldY > this.currentBoard.height) return;
+    this.isDragging = true;
+    this.dragOffsetX = dist < this.robotRadius * this.pixelsPerMM ? mouseX - robotPixelX : 0;
+    this.dragOffsetY = dist < this.robotRadius * this.pixelsPerMM ? mouseY - robotPixelY : 0;
+    this.canvas.setPointerCapture?.(e.pointerId);
+    this.canvas.style.cursor = 'grabbing';
+    this.onMouseMove(e);
   }
 
   onMouseMove(e) {
     if (!this.isDragging || this.isRunning) return;
     
     const rect = this.canvas.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
+    const mouseX = (e.clientX - rect.left) * this.canvas.width / rect.width;
+    const mouseY = (e.clientY - rect.top) * this.canvas.height / rect.height;
     
     // Update robot position
     this.robotX = (mouseX - this.dragOffsetX - this.offsetX) / this.pixelsPerMM;
@@ -261,8 +266,16 @@ class LeanbotSimulator2D {
       return;
     }
 
+    for (const track of this.currentBoard.tracks || []) {
+      this.ctx.strokeStyle = '#000';
+      this.ctx.lineWidth = track.width * this.pixelsPerMM;
+      this.ctx.lineJoin = 'round'; this.ctx.lineCap = 'round';
+      this.ctx.beginPath();
+      track.points.forEach((p, i) => this.ctx[i ? 'lineTo' : 'moveTo'](this.offsetX + p.x * this.pixelsPerMM, this.offsetY + p.y * this.pixelsPerMM));
+      this.ctx.stroke();
+    }
     // Draw grid if enabled
-    if (document.getElementById('simGrid').checked) {
+    if (!this.currentBoard.backgroundImage && document.getElementById('simGrid').checked) {
       this.drawGrid();
     }
     
@@ -392,14 +405,9 @@ class LeanbotSimulator2D {
     this.ctx.lineWidth = 2;
     this.ctx.beginPath();
     
-    // Simple trajectory line from start to current
-    const startPixelX = this.offsetX + 750 * this.pixelsPerMM;
-    const startPixelY = this.offsetY + 500 * this.pixelsPerMM;
-    this.ctx.moveTo(startPixelX, startPixelY);
-    
-    const currentPixelX = this.offsetX + this.robotX * this.pixelsPerMM;
-    const currentPixelY = this.offsetY + this.robotY * this.pixelsPerMM;
-    this.ctx.lineTo(currentPixelX, currentPixelY);
+    for (const [i, point] of (this.trajectory || []).entries()) {
+      this.ctx[i ? 'lineTo' : 'moveTo'](this.offsetX + point.x * this.pixelsPerMM, this.offsetY + point.y * this.pixelsPerMM);
+    }
     this.ctx.stroke();
   }
 
@@ -417,6 +425,7 @@ class LeanbotSimulator2D {
         gripper: (left, right) => { this.gripperLeft = left; this.gripperRight = right; },
       });
       this.runtime.start();
+      this.trajectory = [{ x: this.robotX, y: this.robotY }];
     } catch (error) {
       this.addLog(`❌ ${error.message}`);
       return;
@@ -477,6 +486,7 @@ class LeanbotSimulator2D {
     this.speedL = 0;
     this.speedR = 0;
     this.time = 0;
+    this.trajectory = [];
     this.frameCount = 0;
     this.updateStats();
   }
@@ -495,12 +505,13 @@ class LeanbotSimulator2D {
   animate() {
     if (!this.isRunning || this.isPaused) return;
     const now = performance.now();
-    const dt = Math.min(100, Math.max(0, now - this.lastFrameTime));
+    const dt = Math.max(0, now - this.lastFrameTime);
     this.lastFrameTime = now;
     try {
       this.runtime.tick(dt);
       this.time = this.runtime.time / 1000;
       this.frameCount++;
+      this.trajectory.push({ x: this.robotX, y: this.robotY });
       if (!this.runtime.running) { this.stop(); this.addLog('✓ Chương trình kết thúc'); }
     } catch (error) {
       this.stop(); this.addLog(`❌ ${error.message}`);

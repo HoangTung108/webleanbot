@@ -111,8 +111,18 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
     bridgeRef.current = bridge;
 
     setRobotHeading(simulator.getRobotPose().heading);
+    const detachPlacement = renderer.enablePlacement(pose => setRobotHeading(pose.heading));
+    const resize = () => {
+      const rect = canvasRef.current?.getBoundingClientRect();
+      if (rect && rect.width > 0 && rect.height > 0) { renderer.resizeCanvas(rect.width, rect.height); renderer.render(); }
+    };
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(resize);
+    if (canvasRef.current.parentElement) observer?.observe(canvasRef.current.parentElement);
+    window.addEventListener('resize', resize);
+    resize();
     renderer.render();
     addLog(`Board loaded: ${board.name}`);
+    return () => { detachPlacement(); observer?.disconnect(); window.removeEventListener('resize', resize); bridge.stopExecution(); simulator.stop(); };
   }, [selectedBoard]);
 
   useEffect(() => {
@@ -217,6 +227,7 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
   const handlePause = () => {
     if (!simulatorRef.current) return;
     if (isPaused) {
+      bridgeRef.current?.resetClock();
       simulatorRef.current.resume();
       setIsPaused(false);
       addLog('⏵ Simulation resumed');
@@ -419,14 +430,19 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
               borderRight: '1px solid #3e3e42',
             }}
           >
+            <div style={{ fontSize: 12, padding: 8 }}>Bấm vào sa bàn hoặc kéo robot để đặt vị trí trước khi chạy. Tốc độ 2000: 35 cm / 5 giây.</div>
+            <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
             <canvas
               ref={canvasRef}
               style={{
-                flex: 1,
+                width: '100%',
+                height: '100%',
+                display: 'block',
                 backgroundColor: '#ffffff',
                 minHeight: 0,
               }}
             />
+            </div>
           </div>
 
           {/* Right Sidebar */}
@@ -511,7 +527,7 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
                 <div>Frames: {stats.frames}</div>
                 <div>Pos: ({stats.posX.toFixed(0)}, {stats.posY.toFixed(0)})</div>
                 <div>Heading: {stats.heading.toFixed(1)}°</div>
-                <div>Speed L/R: {stats.speedL.toFixed(0)} / {stats.speedR.toFixed(0)}</div>
+                <div>Speed L/R: {stats.speedL.toFixed(0)} / {stats.speedR.toFixed(0)} mm/s</div>
                 <div>IR Center: {stats.irC}</div>
                 <div>Distance: {stats.distance.toFixed(1)}mm</div>
               </div>

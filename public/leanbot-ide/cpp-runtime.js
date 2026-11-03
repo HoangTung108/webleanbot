@@ -459,7 +459,7 @@ var LeanbotCpp = (() => {
           yield { end: true };
           return null;
         case "LbMotion.runLR":
-          this.motors(a / 4, b / 4);
+          this.motors(a * 70 / 2e3, b * 70 / 2e3);
           return null;
         case "LbMotion.runLRrpm":
           this.motors(a * 2 * Math.PI * 16.25 / 60, b * 2 * Math.PI * 16.25 / 60);
@@ -622,6 +622,19 @@ var LeanbotCpp = (() => {
       this.motors(0, 0);
     }
     tick(milliseconds) {
+      if (!Number.isFinite(milliseconds) || milliseconds < 0) return;
+      if (milliseconds === 0) {
+        this.tickSlice(0);
+        return;
+      }
+      let remaining = milliseconds;
+      while (remaining > 0 && this.running) {
+        const slice = Math.min(100, remaining);
+        this.tickSlice(slice);
+        remaining -= slice;
+      }
+    }
+    tickSlice(milliseconds) {
       if (!this.running || !this.iterator) return;
       let remaining = Math.max(0, Math.min(100, milliseconds));
       let budget = 2e4;

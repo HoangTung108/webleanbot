@@ -29,6 +29,17 @@ describe('custom C++ execution', () => {
     expect(motors.some(([l, r]) => l < 0 && r < 0)).toBe(true);
     expect(motors.at(-1)).toEqual([0, 0]);
   });
+  it('matches measured 35 cm in 5 seconds at command 2000', () => {
+    const runtime = new CppRuntime('void loop(){ LbMotion.runLR(2000,2000); LbMotion.waitDistanceMm(350); LbMission.end(); }', { motors() {}, advance() {} });
+    runtime.start(); runtime.tick(0); runtime.tick(4900);
+    expect(runtime.running).toBe(true);
+    expect(runtime.distance).toBeCloseTo(343, 6);
+    runtime.tick(100);
+    expect(runtime.distance).toBeCloseTo(350, 6);
+    expect(runtime.time).toBeCloseTo(5000, 6);
+    expect(runtime.running).toBe(false);
+  });
+
   it('travels exactly 350 mm with waitDistanceMm and respects same-line command order', () => {
     const result = run('void setup() {} void loop() { LbMotion.runLR(2000,2000); LbMotion.waitDistanceMm(350); LbMotion.stopAndWait(); LbMission.end(); }');
     expect(result.path).toBeCloseTo(350, 6);
@@ -48,7 +59,7 @@ describe('custom C++ execution', () => {
     expect(runtime.running).toBe(false);
   });
   it('keeps simulation distances independent of display frame rate', () => {
-    const a = run(custom, 8), b = run(custom, 33);
+    const a = run(custom, 8), b = run(custom, 500);
     expect(a.path).toBeCloseTo(b.path, 6);
     expect(a.angle).toBeCloseTo(b.angle, 6);
   });

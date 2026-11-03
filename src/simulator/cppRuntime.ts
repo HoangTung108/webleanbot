@@ -170,7 +170,7 @@ export class CppRuntime {
     throw new Error(`Biểu thức chưa hỗ trợ: ${n.k}`);
   }
   private motors(left: number, right: number) {
-    // Leanbot runLR accepts ±2000 units; use 500 mm/s at full command.
+    // Measured calibration: runLR(2000, 2000) travels 350 mm in 5 s.
     this.left = Math.max(-500, Math.min(500, left)); this.right = Math.max(-500, Math.min(500, right));
     this.host.motors(this.left, this.right);
   }
@@ -186,7 +186,7 @@ export class CppRuntime {
     switch (name) {
       case 'Leanbot.begin': case 'LbMission.begin': case 'Serial.begin': case 'LbRGB.show': return null;
       case 'LbMission.end': this.motors(0, 0); yield { end: true }; return null;
-      case 'LbMotion.runLR': this.motors(a / 4, b / 4); return null;
+      case 'LbMotion.runLR': this.motors(a * 70 / 2000, b * 70 / 2000); return null;
       case 'LbMotion.runLRrpm': this.motors(a * 2 * Math.PI * 16.25 / 60, b * 2 * Math.PI * 16.25 / 60); return null;
       case 'LbMotion.stopAndWait': this.motors(0, 0); return null;
       case 'LbMotion.setZeroOrigin': this.distance = 0; this.rotation = 0; return null;
@@ -255,6 +255,17 @@ export class CppRuntime {
   start() { this.scopes = [new Map()]; this.iterator = this.program(); this.running = true; this.time = this.distance = this.rotation = this.pending = 0; this.motors(0, 0); }
   stop() { this.running = false; this.motors(0, 0); }
   tick(milliseconds: number) {
+    if (!Number.isFinite(milliseconds) || milliseconds < 0) return;
+    if (milliseconds === 0) { this.tickSlice(0); return; }
+    let remaining = milliseconds;
+    while (remaining > 0 && this.running) {
+      const slice = Math.min(100, remaining);
+      this.tickSlice(slice);
+      remaining -= slice;
+    }
+  }
+
+  private tickSlice(milliseconds: number) {
     if (!this.running || !this.iterator) return;
     let remaining = Math.max(0, Math.min(100, milliseconds)); let budget = 20000;
     try {

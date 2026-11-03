@@ -185,6 +185,17 @@ export class RobotSimulator {
    * Get current robot pose
    */
   /** Set the starting direction while stopped; preserve position and history. */
+  setPose(pose: Pose): void {
+    if (this.state.isRunning || ![pose.x, pose.y, pose.heading].every(Number.isFinite)) return;
+    this.state.robotState.pose = {
+      x: Math.max(60, Math.min(this.board.width - 60, pose.x)),
+      y: Math.max(60, Math.min(this.board.height - 60, pose.y)),
+      heading: ((pose.heading % 360) + 360) % 360,
+    };
+    this.state.history = [];
+    this.state.sensorReadings = this.readSensors();
+  }
+
   setHeading(heading: number): void {
     if (this.state.isRunning || !Number.isFinite(heading)) return;
     this.state.robotState.pose.heading = ((heading % 360) + 360) % 360;

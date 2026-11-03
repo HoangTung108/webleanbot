@@ -19,7 +19,7 @@ function harness() {
   let ready = () => {}, now = 0, nextId = 0;
   const frames = new Map<number, () => void>();
   const context: any = {
-    console, Date, performance: { now: () => now },
+    console, Date, URL, performance: { now: () => now },
     document: { getElementById: element, createElement: () => element(`log-${nextId++}`), addEventListener: (event: string, cb: () => void) => { if (event === 'DOMContentLoaded') ready = cb; } },
     Image: class { complete = false; naturalWidth = 0; },
     requestAnimationFrame: (cb: () => void) => { frames.set(++nextId, cb); return nextId; },
@@ -34,7 +34,7 @@ function harness() {
 describe('static IDE simulator', () => {
   it('runs current custom C++ beyond 3 seconds, pauses, finishes and reloads edited code', () => {
     const h = harness();
-    let source = 'void setup(){} void loop(){ LbMotion.runLR(400,400); LbDelay(4000); LbMotion.stopAndWait(); LbMission.end(); }';
+    let source = 'void setup(){} void loop(){ LbMotion.runLR(2000,2000); LbDelay(4000); LbMotion.stopAndWait(); LbMission.end(); }';
     let reads = 0;
     h.context.getLeanbotSimulatorCode = () => { reads++; return source; };
     const sim = h.context.leanbotSimulator;
@@ -42,15 +42,15 @@ describe('static IDE simulator', () => {
     sim.start();
     for (let i = 0; i < 200; i++) h.frame();
     expect(sim.isRunning).toBe(true);
-    expect(sim.robotX).toBeCloseTo(720);
+    expect(sim.robotX).toBeCloseTo(624);
     sim.togglePause(); for (let i = 0; i < 50; i++) h.frame();
-    expect(sim.robotX).toBeCloseTo(720);
+    expect(sim.robotX).toBeCloseTo(624);
     sim.togglePause(); for (let i = 0; i < 60; i++) h.frame();
     expect(sim.isRunning).toBe(false);
-    expect(sim.robotX).toBeCloseTo(800);
-    source = 'void loop(){ LbMotion.runLR(-400,-400); LbDelay(1000); LbMission.end(); }';
+    expect(sim.robotX).toBeCloseTo(680);
+    source = 'void loop(){ LbMotion.runLR(-2000,-2000); LbDelay(1000); LbMission.end(); }';
     sim.start(); for (let i = 0; i < 65; i++) h.frame();
-    expect(sim.robotX).toBeCloseTo(700);
+    expect(sim.robotX).toBeCloseTo(610);
     expect(reads).toBe(2);
   });
   it('reports missing editor source instead of starting a demonstration', () => {

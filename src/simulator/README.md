@@ -392,9 +392,17 @@ math/string helpers, millis, motion encoder reads, waits, and gripper commands.
 `LbMission.end()` finishes a simulated mission; touch-start is acknowledged by
 Start. Unsupported calls stop with an error instead of running sample motion.
 
-Motion calibration: runLR ±2000 maps to ±500 mm/s, wheelbase 75 mm. Encoder
+Motion calibration: runLR ±2000 maps to ±70 mm/s (measured: 350 mm in 5 seconds), wheelbase 75 mm. Encoder
 distance is signed wheel-average travel; rotation accumulates without wrapping.
-These speed values are a simulation approximation, not measured hardware PWM.
+The full-speed value uses the supplied measurement; intermediate commands use a linear approximation.
 Pause freezes simulation time; Stop cancels the program; Start reloads edited code.
 Run `npm run build:simulator` after editing the interpreter when using the static
 IDE; production builds regenerate `public/leanbot-ide/cpp-runtime.js` automatically.
+
+The mat SVG now uses one flat millimetre coordinate space (no nested image
+slices). Both interfaces support click/tap to place and pointer-dragging before
+Start, including CSS-scaled canvases. Placement is locked while running or paused.
+Full-speed calibration uses the supplied 35 cm / 5 s measurement, so command
+2000 is 70 mm/s. Intermediate commands are approximated linearly; turn timing
+still depends on the estimated 75 mm wheelbase. Slow display frames no longer
+discard elapsed simulation time.

@@ -66,6 +66,8 @@ export class CppSimulatorBridge {
     this.commandQueue.isExecuting = this.runtime.running;
   }
 
+  resetClock(): void { this.lastTick = undefined; }
+
   isExecuting(): boolean { return this.runtime?.running ?? false; }
 
   /**

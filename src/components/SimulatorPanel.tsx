@@ -31,7 +31,6 @@ export const SimulatorPanel: React.FC<SimulatorPanelProps> = ({
   const [showTrajectory, setShowTrajectory] = useState(true);
   const [showGrid, setShowGrid] = useState(true);
   const [robotHeading, setRobotHeading] = useState(0);
-  const [robotSpeed, setRobotSpeed] = useState(200);
   const [elapsedTime, setElapsedTime] = useState(0);
   const animationFrameRef = useRef<number | null>(null);
 
@@ -57,6 +56,7 @@ export const SimulatorPanel: React.FC<SimulatorPanelProps> = ({
     bridgeRef.current = new CppSimulatorBridge(newSimulator);
     setSimulator(newSimulator);
     setRenderer(newRenderer);
+    const detachPlacement = newRenderer.enablePlacement(pose => setRobotHeading(pose.heading));
 
     // Handle canvas resize
     const handleResize = () => {
@@ -67,7 +67,8 @@ export const SimulatorPanel: React.FC<SimulatorPanelProps> = ({
     };
 
     window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    handleResize();
+    return () => { detachPlacement(); window.removeEventListener('resize', handleResize); }; 
   }, [isVisible, selectedBoard]);
 
   // Animation loop
@@ -133,6 +134,7 @@ export const SimulatorPanel: React.FC<SimulatorPanelProps> = ({
   const handlePause = () => {
     if (simulator) {
       if (isPaused) {
+        bridgeRef.current?.resetClock();
         simulator.resume();
         setIsPaused(false);
         onStatusChange?.('Simulation resumed');
@@ -169,11 +171,6 @@ export const SimulatorPanel: React.FC<SimulatorPanelProps> = ({
     simulator.setHeading(heading);
     setRobotHeading(simulator.getRobotPose().heading);
     renderer?.render();
-  };
-
-  const handleSpeedChange = (speed: number) => {
-    setRobotSpeed(speed);
-
   };
 
   const boardNames = getAllBoardNames();
@@ -331,21 +328,7 @@ export const SimulatorPanel: React.FC<SimulatorPanelProps> = ({
           <button disabled={isRunning} onClick={() => handleHeadingChange(robotHeading + 15)} aria-label="Xoay phải 15 độ">↷ +15°</button>
           <span>0° → · 90° ↓ · 180° ← · 270° ↑</span>
         </div>
-        {/* Speed control */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <label style={{ minWidth: '80px' }}>Motor Speed:</label>
-          <input
-            type="range"
-            min="0"
-            max="500"
-            disabled={true}
-            title="Tốc độ do code C++ điều khiển"
-            value={robotSpeed}
-            onChange={(e) => handleSpeedChange(Number(e.target.value))}
-            style={{ flex: 1 }}
-          />
-          <span style={{ minWidth: '50px' }}>{robotSpeed} mm/s</span>
-        </div>
+        <div>Tốc độ do code C++ điều khiển · lệnh 2000: 70 mm/s (35 cm / 5 giây).</div>
 
         {/* Checkboxes */}
         <div style={{ display: 'flex', gap: '16px' }}>
