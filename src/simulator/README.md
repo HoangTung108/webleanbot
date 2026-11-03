@@ -406,3 +406,15 @@ Full-speed calibration uses the supplied 35 cm / 5 s measurement, so command
 2000 is 70 mm/s. Intermediate commands are approximated linearly; turn timing
 still depends on the estimated 75 mm wheelbase. Slow display frames no longer
 discard elapsed simulation time.
+
+### Competition site markers
+
+The supplied CITY GRID diagram defines four potential pollution sites per city:
+1 upper-left, 2 lower-left, 3 upper-right, 4 lower-right. All eight cities A–H
+have these markers outside their cyan containment diamond (32 sites total).
+S1/S3/S5 are along the bottom border; S2/S4/S6 along the right border.
+CRL is the starting/ending area and the robot now resets there.
+Marker centres are reconstructed from the supplied diagram, not surveyed values.
+Field blocks are 15 × 25 × 75 mm; the empty markers are not physical obstacles.
+No random pollution/neutralizer arrangement or scoring rules are inferred.
+The typed `cityZones` and `storageSites` data matches the SVG marker IDs.

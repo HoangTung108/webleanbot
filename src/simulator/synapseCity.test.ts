@@ -44,6 +44,7 @@ describe('Synapse City mat', () => {
     const simulator = new RobotSimulator();
     simulator.setBoard(SYNAPSE_CITY);
     expect(simulator.getRobotPose()).toEqual(SYNAPSE_CITY.initialPose);
+    simulator.reset({ x: 397.1, y: 609.6, heading: 0 });
     simulator.start();
     simulator.update();
     expect(simulator.getSensorReadings().irLine.center).toBe(4095);

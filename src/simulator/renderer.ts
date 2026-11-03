@@ -69,7 +69,7 @@ export class SimulatorRenderer {
     if (board.backgroundImage) {
       this.boardImage = new Image();
       this.boardImage.onload = () => this.render();
-      this.boardImage.src = `${import.meta.env.BASE_URL}${board.backgroundImage.replace(/^\//, '')}?v=flat-2`;
+      this.boardImage.src = `${import.meta.env.BASE_URL}${board.backgroundImage.replace(/^\//, '')}?v=sites-3`;
     }
   }
 

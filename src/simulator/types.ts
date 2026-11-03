@@ -43,12 +43,40 @@ export interface RobotState2D {
   accelerationRight: number; // mm/s²
 }
 
+export interface CompetitionSite {
+  id: string;
+  number: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation: number;
+}
+
+export interface CityZone {
+  id: string;
+  center: Vector2D;
+  containment: { x: number; y: number; side: number; rotation: number };
+  sites: CompetitionSite[];
+}
+
+export interface StorageSite {
+  rotation: number;
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 export interface BoardConfig {
   name: string;
   width: number; // mm
   height: number; // mm
   backgroundImage?: string;
   initialPose?: Pose;
+  cityZones?: CityZone[];
+  storageSites?: StorageSite[];
   obstacles: Obstacle[];
   walls: Wall[];
   lines: Line[];

@@ -205,9 +205,9 @@ export const SYNAPSE_CITY: BoardConfig = {
   "height": 1219.2,
   "backgroundImage": "/simulator/synapse-city.svg",
   "initialPose": {
-    "x": 264.244087,
-    "y": 84.6,
-    "heading": 0
+    "x": 959.6,
+    "y": 959.6,
+    "heading": 270
   },
   "walls": [],
   "obstacles": [],
@@ -918,8 +918,475 @@ export const SYNAPSE_CITY: BoardConfig = {
   ],
   "metadata": {
     "description": "District layout reconstructed from the supplied reference; full mat dimensions in mm.",
-    "citySideMm": 350
-  }
+    "citySideMm": 350,
+    "fieldModel": {
+      "blockLengthMm": 15,
+      "blockWidthMm": 25,
+      "blockHeightMm": 75,
+      "source": "User supplied CITY GRID & FIELD MODEL diagram",
+      "placement": "Four potential pollution sites per city; no randomized blocks added."
+    }
+  },
+  "cityZones": [
+    {
+      "id": "A",
+      "center": {
+        "x": 259.6,
+        "y": 259.6
+      },
+      "containment": {
+        "x": 259.6,
+        "y": 259.6,
+        "side": 140,
+        "rotation": 45
+      },
+      "sites": [
+        {
+          "id": "A1",
+          "number": 1,
+          "x": 184.60000000000002,
+          "y": 184.60000000000002,
+          "width": 15,
+          "height": 25,
+          "rotation": 45
+        },
+        {
+          "id": "A2",
+          "number": 2,
+          "x": 184.60000000000002,
+          "y": 334.6,
+          "width": 15,
+          "height": 25,
+          "rotation": 45
+        },
+        {
+          "id": "A3",
+          "number": 3,
+          "x": 334.6,
+          "y": 184.60000000000002,
+          "width": 15,
+          "height": 25,
+          "rotation": 45
+        },
+        {
+          "id": "A4",
+          "number": 4,
+          "x": 334.6,
+          "y": 334.6,
+          "width": 15,
+          "height": 25,
+          "rotation": 45
+        }
+      ]
+    },
+    {
+      "id": "C",
+      "center": {
+        "x": 609.6,
+        "y": 259.6
+      },
+      "containment": {
+        "x": 609.6,
+        "y": 259.6,
+        "side": 140,
+        "rotation": 45
+      },
+      "sites": [
+        {
+          "id": "C1",
+          "number": 1,
+          "x": 534.6,
+          "y": 184.60000000000002,
+          "width": 15,
+          "height": 25,
+          "rotation": 45
+        },
+        {
+          "id": "C2",
+          "number": 2,
+          "x": 534.6,
+          "y": 334.6,
+          "width": 15,
+          "height": 25,
+          "rotation": 45
+        },
+        {
+          "id": "C3",
+          "number": 3,
+          "x": 684.6,
+          "y": 184.60000000000002,
+          "width": 15,
+          "height": 25,
+          "rotation": 45
+        },
+        {
+          "id": "C4",
+          "number": 4,
+          "x": 684.6,
+          "y": 334.6,
+          "width": 15,
+          "height": 25,
+          "rotation": 45
+        }
+      ]
+    },
+    {
+      "id": "F",
+      "center": {
+        "x": 959.6,
+        "y": 259.6
+      },
+      "containment": {
+        "x": 959.6,
+        "y": 259.6,
+        "side": 140,
+        "rotation": 45
+      },
+      "sites": [
+        {
+          "id": "F1",
+          "number": 1,
+          "x": 884.6,
+          "y": 184.60000000000002,
+          "width": 15,
+          "height": 25,
+          "rotation": 45
+        },
+        {
+          "id": "F2",
+          "number": 2,
+          "x": 884.6,
+          "y": 334.6,
+          "width": 15,
+          "height": 25,
+          "rotation": 45
+        },
+        {
+          "id": "F3",
+          "number": 3,
+          "x": 1034.6,
+          "y": 184.60000000000002,
+          "width": 15,
+          "height": 25,
+          "rotation": 45
+        },
+        {
+          "id": "F4",
+          "number": 4,
+          "x": 1034.6,
+          "y": 334.6,
+          "width": 15,
+          "height": 25,
+          "rotation": 45
+        }
+      ]
+    },
+    {
+      "id": "B",
+      "center": {
+        "x": 259.6,
+        "y": 609.6
+      },
+      "containment": {
+        "x": 259.6,
+        "y": 609.6,
+        "side": 140,
+        "rotation": 45
+      },
+      "sites": [
+        {
+          "id": "B1",
+          "number": 1,
+          "x": 184.60000000000002,
+          "y": 534.6,
+          "width": 15,
+          "height": 25,
+          "rotation": 45
+        },
+        {
+          "id": "B2",
+          "number": 2,
+          "x": 184.60000000000002,
+          "y": 684.6,
+          "width": 15,
+          "height": 25,
+          "rotation": 45
+        },
+        {
+          "id": "B3",
+          "number": 3,
+          "x": 334.6,
+          "y": 534.6,
+          "width": 15,
+          "height": 25,
+          "rotation": 45
+        },
+        {
+          "id": "B4",
+          "number": 4,
+          "x": 334.6,
+          "y": 684.6,
+          "width": 15,
+          "height": 25,
+          "rotation": 45
+        }
+      ]
+    },
+    {
+      "id": "E",
+      "center": {
+        "x": 609.6,
+        "y": 609.6
+      },
+      "containment": {
+        "x": 609.6,
+        "y": 609.6,
+        "side": 140,
+        "rotation": 45
+      },
+      "sites": [
+        {
+          "id": "E1",
+          "number": 1,
+          "x": 534.6,
+          "y": 534.6,
+          "width": 15,
+          "height": 25,
+          "rotation": 45
+        },
+        {
+          "id": "E2",
+          "number": 2,
+          "x": 534.6,
+          "y": 684.6,
+          "width": 15,
+          "height": 25,
+          "rotation": 45
+        },
+        {
+          "id": "E3",
+          "number": 3,
+          "x": 684.6,
+          "y": 534.6,
+          "width": 15,
+          "height": 25,
+          "rotation": 45
+        },
+        {
+          "id": "E4",
+          "number": 4,
+          "x": 684.6,
+          "y": 684.6,
+          "width": 15,
+          "height": 25,
+          "rotation": 45
+        }
+      ]
+    },
+    {
+      "id": "H",
+      "center": {
+        "x": 959.6,
+        "y": 609.6
+      },
+      "containment": {
+        "x": 959.6,
+        "y": 609.6,
+        "side": 140,
+        "rotation": 45
+      },
+      "sites": [
+        {
+          "id": "H1",
+          "number": 1,
+          "x": 884.6,
+          "y": 534.6,
+          "width": 15,
+          "height": 25,
+          "rotation": 45
+        },
+        {
+          "id": "H2",
+          "number": 2,
+          "x": 884.6,
+          "y": 684.6,
+          "width": 15,
+          "height": 25,
+          "rotation": 45
+        },
+        {
+          "id": "H3",
+          "number": 3,
+          "x": 1034.6,
+          "y": 534.6,
+          "width": 15,
+          "height": 25,
+          "rotation": 45
+        },
+        {
+          "id": "H4",
+          "number": 4,
+          "x": 1034.6,
+          "y": 684.6,
+          "width": 15,
+          "height": 25,
+          "rotation": 45
+        }
+      ]
+    },
+    {
+      "id": "D",
+      "center": {
+        "x": 259.6,
+        "y": 959.6
+      },
+      "containment": {
+        "x": 259.6,
+        "y": 959.6,
+        "side": 140,
+        "rotation": 45
+      },
+      "sites": [
+        {
+          "id": "D1",
+          "number": 1,
+          "x": 184.60000000000002,
+          "y": 884.6,
+          "width": 15,
+          "height": 25,
+          "rotation": 45
+        },
+        {
+          "id": "D2",
+          "number": 2,
+          "x": 184.60000000000002,
+          "y": 1034.6,
+          "width": 15,
+          "height": 25,
+          "rotation": 45
+        },
+        {
+          "id": "D3",
+          "number": 3,
+          "x": 334.6,
+          "y": 884.6,
+          "width": 15,
+          "height": 25,
+          "rotation": 45
+        },
+        {
+          "id": "D4",
+          "number": 4,
+          "x": 334.6,
+          "y": 1034.6,
+          "width": 15,
+          "height": 25,
+          "rotation": 45
+        }
+      ]
+    },
+    {
+      "id": "G",
+      "center": {
+        "x": 609.6,
+        "y": 959.6
+      },
+      "containment": {
+        "x": 609.6,
+        "y": 959.6,
+        "side": 140,
+        "rotation": 45
+      },
+      "sites": [
+        {
+          "id": "G1",
+          "number": 1,
+          "x": 534.6,
+          "y": 884.6,
+          "width": 15,
+          "height": 25,
+          "rotation": 45
+        },
+        {
+          "id": "G2",
+          "number": 2,
+          "x": 534.6,
+          "y": 1034.6,
+          "width": 15,
+          "height": 25,
+          "rotation": 45
+        },
+        {
+          "id": "G3",
+          "number": 3,
+          "x": 684.6,
+          "y": 884.6,
+          "width": 15,
+          "height": 25,
+          "rotation": 45
+        },
+        {
+          "id": "G4",
+          "number": 4,
+          "x": 684.6,
+          "y": 1034.6,
+          "width": 15,
+          "height": 25,
+          "rotation": 45
+        }
+      ]
+    }
+  ],
+  "storageSites": [
+    {
+      "id": "S1",
+      "x": 700,
+      "y": 1180,
+      "width": 15,
+      "height": 25,
+      "rotation": 0
+    },
+    {
+      "id": "S2",
+      "x": 1180,
+      "y": 700,
+      "width": 15,
+      "height": 25,
+      "rotation": 90
+    },
+    {
+      "id": "S3",
+      "x": 785,
+      "y": 1180,
+      "width": 15,
+      "height": 25,
+      "rotation": 0
+    },
+    {
+      "id": "S4",
+      "x": 1180,
+      "y": 785,
+      "width": 15,
+      "height": 25,
+      "rotation": 90
+    },
+    {
+      "id": "S5",
+      "x": 870,
+      "y": 1180,
+      "width": 15,
+      "height": 25,
+      "rotation": 0
+    },
+    {
+      "id": "S6",
+      "x": 1180,
+      "y": 870,
+      "width": 15,
+      "height": 25,
+      "rotation": 90
+    }
+  ]
 };
 
 export const AVAILABLE_BOARDS: Record<string, BoardConfig> = {
