@@ -886,8 +886,14 @@ LeanbotBlocks["LbGripper.moveToLR"] = function(id, lang) {
     onchange: function() {
       if (!this.workspace) return;  // Block has been deleted.
 
-      var value_angleDeg = Blockly.Arduino.valueToCode(this, "angleDeg", Blockly.Arduino.ORDER_NONE);
-      Leanbot_checkOutOfRange_language(this, lang, [value_angleDeg, -30, +120]);
+      var angleL = Blockly.Arduino.valueToCode(this, "angleDegL", Blockly.Arduino.ORDER_NONE);
+      var angleR = Blockly.Arduino.valueToCode(this, "angleDegR", Blockly.Arduino.ORDER_NONE);
+      var duration = Blockly.Arduino.valueToCode(this, "timeMs", Blockly.Arduino.ORDER_NONE);
+      Leanbot_checkOutOfRange_language(this, lang,
+        [angleL, -30, 120],
+        [angleR, -30, 120],
+        [duration, 0, 32767]
+      );
     }
   };
 

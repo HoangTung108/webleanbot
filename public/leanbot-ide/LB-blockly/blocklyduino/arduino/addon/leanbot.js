@@ -391,7 +391,7 @@ LeanbotArduino["LbGripper.close"] = function(block) {
 LeanbotArduino["LbGripper.moveTo"] = function(block) {
   LeanbotArduino_addHeader();
 
-  var value_angleDeg = Blockly.Arduino.valueToCode(block, "angleDeg",  Blockly.Arduino.ORDER_NONE);
+  var value_angleDeg = Blockly.Arduino.valueToCode(block, "angleDeg",  Blockly.Arduino.ORDER_NONE) || "0";
 
   var code = "LbGripper.moveTo(" + value_angleDeg + ");\n";
   return code;
@@ -401,9 +401,9 @@ LeanbotArduino["LbGripper.moveTo"] = function(block) {
 LeanbotArduino["LbGripper.moveToLR"] = function(block) {
   LeanbotArduino_addHeader();
 
-  var value_angleDegL = Blockly.Arduino.valueToCode(block, "angleDegL",  Blockly.Arduino.ORDER_NONE);
-  var value_angleDegR = Blockly.Arduino.valueToCode(block, "angleDegR",  Blockly.Arduino.ORDER_NONE);
-  var value_timeMs    = Blockly.Arduino.valueToCode(block,    "timeMs",  Blockly.Arduino.ORDER_NONE);
+  var value_angleDegL = Blockly.Arduino.valueToCode(block, "angleDegL",  Blockly.Arduino.ORDER_NONE) || "0";
+  var value_angleDegR = Blockly.Arduino.valueToCode(block, "angleDegR",  Blockly.Arduino.ORDER_NONE) || "0";
+  var value_timeMs    = Blockly.Arduino.valueToCode(block,    "timeMs",  Blockly.Arduino.ORDER_NONE) || "1000";
 
   var code = "";
 
