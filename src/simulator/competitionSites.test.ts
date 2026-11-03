@@ -11,9 +11,11 @@ describe('competition markers from the supplied diagram', () => {
       expect(zone.sites.map(s => s.number)).toEqual([1,2,3,4]);
       for (const site of zone.sites) {
         ids.add(site.id);
-        expect(Math.sign(site.x-zone.center.x)).toBe(site.number <= 2 ? -1 : 1);
-        expect(Math.sign(site.y-zone.center.y)).toBe(site.number % 2 ? -1 : 1);
+        expect(Math.sign(site.x-zone.center.x)).toBe([1,3].includes(site.number) ? -1 : 1);
+        expect(Math.sign(site.y-zone.center.y)).toBe(site.number <= 2 ? -1 : 1);
         expect(svg).toContain(`id="site-${site.id}"`);
+        expect(site.rotation).toBe([1,4].includes(site.number) ? 45 : -45);
+        expect(svg).toContain(`rotate(${site.rotation} ${site.x} ${site.y})`);
       }
     }
     expect(ids.size).toBe(32);

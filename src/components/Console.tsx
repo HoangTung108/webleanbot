@@ -1,4 +1,4 @@
-import { Bug, CircleCheck, TerminalSquare } from 'lucide-react'
+import { Bug, CircleCheck, TerminalSquare } from './ui/asciiIcons'
 
 export function Console({ output, serial, compiling }: { output: string; serial: string; compiling: boolean }) {
   return (

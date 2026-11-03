@@ -40,6 +40,7 @@ export class CppSimulatorBridge {
    * Load and compile C++ code for simulation
    */
   loadCode(code: string): { success: boolean; error?: string } {
+    if (!code.trim()) return { success: false, error: 'Chưa có code C++. Hãy mở hoặc viết code trong IDE.' };
     try {
       this.runtime = new CppRuntime(code, {
         motors: (left, right) => this.simulator.setMotorSpeeds(left, right),

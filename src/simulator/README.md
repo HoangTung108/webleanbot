@@ -1,420 +1,62 @@
-# Leanbot 2D Robot Simulator
+# Giả lập Leanbot — Synapse City
 
-A comprehensive 2D robot simulator for Leanbot robotics programming, including support for AIROC 2026 competition boards.
+Giả lập chỉ sử dụng **code C++ hiện tại trong IDE** và map **Synapse City**.
+Không có code ví dụ, map Maze, Delivery, Line Following hay Obstacle Avoidance.
+Nếu chưa có code, Start yêu cầu mở hoặc viết C++ thay vì chạy chương trình mẫu.
 
-## Features
+## Sử dụng
 
-- **2D Physics Simulation**: Realistic differential drive kinematics and collision detection
-- **Sensor Simulation**: IR line sensors, ultrasonic distance sensors, and touch sensors
-- **Multiple Boards**: Pre-configured boards including AIROC 2026 competition arenas
-- **C++ Code Execution**: Direct execution of Leanbot C++ API commands
-- **Real-time Visualization**: Canvas-based rendering with configurable debug views
-- **Trajectory Recording**: Automatic recording of robot movement history
+1. Mở/viết C++ trong IDE, hoặc dùng C++ được sinh từ bài Blockly đang mở.
+2. Mở Simulator. Map cố định là Synapse City, 4 ft × 4 ft (1219.2 mm mỗi cạnh).
+3. Bấm vào sa bàn hoặc kéo robot để đặt vị trí; nhập góc trước khi Start.
+4. Start thực thi code, Pause/Resume giữ thời gian giả lập, Stop kết thúc chương trình.
+5. Reset đưa robot về CRL, hướng 270°.
 
-## Architecture
+Các bài/tệp đã lưu của người dùng được giữ nguyên; việc loại bỏ ví dụ không xóa
+nội dung editor hay dữ liệu trình duyệt.
 
-### Core Components
+## Tỷ lệ và ô thi đấu
 
-1. **RobotSimulator** (`robotSimulator.ts`)
-   - Physics engine
-   - Sensor simulation
-   - State management
-   - Collision detection
+- Một cạnh ô thành phố, đo giữa tâm giao lộ, dài 350 mm.
+- Đã hiệu chỉnh theo số đo: `runLR(2000, 2000)` đi 350 mm trong 5 giây (70 mm/s).
+  Tốc độ trung gian được nội suy tuyến tính; khoảng cách hai bánh vẫn ước lượng 75 mm.
+- Robot vẽ theo ảnh Leanbot: PCB đỏ dài, Nano xanh, hai bánh đen, cảm biến siêu âm đôi và càng màu be.
+  Tổng hình khoảng 128 × 86 mm, vùng chặn biên bán kính 75 mm; đây là tỷ lệ
+  ước lượng từ ảnh, chưa phải số đo robot thực. Hướng +X luôn là phía càng.
+- Mỗi thành phố A–H có 4 vị trí: 1 trên trái, 2 trên phải, 3 dưới trái, 4 dưới phải.
+  Ô 1/4 xoay +45°, ô 2/3 xoay −45° để đối xứng.
+- S1/S3/S5 nằm ở mép dưới; S2/S4/S6 ở mép phải.
+- CRL là khu xuất phát/kết thúc. Vị trí đánh dấu không phải vật cản.
+- Mô hình khối theo sơ đồ: 15 × 25 × 75 mm. Chưa đặt khối ngẫu nhiên/tính điểm.
 
-2. **SimulatorRenderer** (`renderer.ts`)
-   - 2D canvas rendering
-   - Viewport transformation
-   - Debug visualization
-   - Statistics display
+`public/simulator/synapse-city.svg` là bản dựng lại theo ảnh được cung cấp,
+không phải artwork in gốc. Tọa độ đường dò và hình dùng cùng đơn vị mm.
 
-3. **CppSimulatorBridge** (`cppBridge.ts`)
-   - C++ code parsing
-   - Command queue generation
-   - Code execution timeline
+## Cấu trúc
 
-4. **Board Configurations** (`boardConfigs.ts`)
-   - AIROC 2026 boards
-   - Tutorial boards
-   - Custom board support
+- `boardConfigs.ts`: cấu hình Synapse City, đường line, 32 ô số và 6 ô lưu trữ.
+- `robotSimulator.ts`: vị trí, chuyển động, cảm biến và trạng thái càng.
+- `renderer.ts`: vẽ sa bàn/robot, chuyển tọa độ và thao tác đặt robot.
+- `cppRuntime.ts`: bộ thông dịch tập con C++ dùng chung, không dùng eval.
+- `cppBridge.ts`: nối bộ thông dịch với động cơ vật lý và đồng hồ giả lập.
+- `demo.tsx`: giao diện giả lập React; nhận prop `cppCode` từ IDE.
+- `../components/SimulatorPanel.tsx`: panel giả lập, cũng chỉ dùng Synapse City.
+- `public/leanbot-ide/simulator-ui.js`: giao diện giả lập của IDE HTML cũ.
 
-5. **React Component** (`SimulatorPanel.tsx`)
-   - UI controls
-   - Board selection
-   - Real-time visualization
+Bộ thông dịch hỗ trợ đoạn mission tùy chỉnh trong `fixtures/custom-mission.ino`:
+hàm, biến, enum, mảng số, cast, if/else, for/while, switch, return/break,
+math/string helpers, millis, encoder, chờ khoảng cách/góc, gripper.
+Hàm chưa hỗ trợ báo lỗi, không âm thầm thay bằng code mẫu. `LbMission.end()`
+kết thúc mission; nút Start thay thao tác chạm để bắt đầu nhiệm vụ.
 
-## Usage Examples
+## Kiểm tra và build
 
-### Basic Setup
-
-```typescript
-import { RobotSimulator, SimulatorRenderer } from '@src/simulator';
-import { AIROC2026_MAZE } from '@src/simulator/boardConfigs';
-
-// Create simulator
-const simulator = new RobotSimulator();
-simulator.setBoard(AIROC2026_MAZE);
-
-// Create renderer
-const canvas = document.getElementById('simulator-canvas') as HTMLCanvasElement;
-const renderer = new SimulatorRenderer(canvas, simulator, AIROC2026_MAZE);
-
-// Start simulation
-simulator.start();
-simulator.setMotorSpeeds(200, 200); // mm/s
+```sh
+npx vitest run src/simulator src/App.test.tsx
+npm run build
 ```
 
-### C++ Code Execution
+Sau khi sửa `cppRuntime.ts`, `npm run build:simulator` tạo lại runtime dùng chung
+cho IDE HTML. `npm run build` thực hiện bước này tự động.
 
-```typescript
-import { CppSimulatorBridge } from '@src/simulator';
-
-const bridge = new CppSimulatorBridge(simulator);
-
-const cppCode = `
-  Leanbot.begin();
-  LbMotion.runLR(200, 200);    // Run both wheels at 200 mm/s
-  LbDelay(2000);               // Wait 2 seconds
-  LbMotion.runLR(150, 250);    // Turn slightly left
-  LbDelay(1000);
-  LbMotion.stopAndWait();
-`;
-
-const result = bridge.loadCode(cppCode);
-if (result.success) {
-  bridge.startExecution();
-  // Update loop:
-  bridge.executeStep(currentTime);
-}
-```
-
-### React Component Integration
-
-```tsx
-import { SimulatorPanel } from '@src/components/SimulatorPanel';
-
-function App() {
-  return (
-    <SimulatorPanel 
-      isVisible={true}
-      cppCode={userCode}
-      onStatusChange={(msg) => console.log(msg)}
-    />
-  );
-}
-```
-
-## Board Configuration
-
-### Creating Custom Boards
-
-```typescript
-import { BoardConfig } from '@src/simulator';
-
-const customBoard: BoardConfig = {
-  name: 'My Custom Arena',
-  width: 2000,
-  height: 2000,
-  walls: [
-    // Border
-    { id: 'wall-north', x1: 0, y1: 0, x2: 2000, y2: 0 },
-    { id: 'wall-south', x1: 0, y1: 2000, x2: 2000, y2: 2000 },
-    { id: 'wall-west', x1: 0, y1: 0, x2: 0, y2: 2000 },
-    { id: 'wall-east', x1: 2000, y1: 0, x2: 2000, y2: 2000 },
-    // Custom walls
-    { id: 'sep-1', x1: 1000, y1: 0, x2: 1000, y2: 2000 },
-  ],
-  obstacles: [
-    {
-      id: 'block-1',
-      x: 500,
-      y: 500,
-      width: 200,
-      height: 200,
-    },
-  ],
-  lines: [
-    {
-      id: 'track-1',
-      points: [
-        { x: 100, y: 100 },
-        { x: 900, y: 100 },
-        { x: 900, y: 900 },
-      ],
-      width: 50,
-      color: '#000000',
-    },
-  ],
-  metadata: {
-    competition: 'Custom',
-    boardType: 'custom',
-  },
-};
-
-simulator.setBoard(customBoard);
-```
-
-## AIROC 2026 Boards
-
-### 1. Maze Challenge (`AIROC2026_MAZE`)
-- **Type**: Line following + navigation
-- **Difficulty**: Medium
-- **Features**:
-  - Black lines for line following
-  - Maze walls and obstacles
-  - Starting line at (100, 1000)
-
-### 2. Pickup & Delivery (`AIROC2026_DELIVERY`)
-- **Type**: Object manipulation
-- **Difficulty**: Hard
-- **Features**:
-  - Multiple delivery zones
-  - Objects to pick up and move
-  - Zone-based scoring
-
-## Sensor Simulation
-
-### IR Line Sensors
-
-The simulator includes 3 IR line sensors (left, center, right):
-
-```typescript
-const readings = simulator.getSensorReadings();
-console.log(readings.irLine.left);    // 0-4095
-console.log(readings.irLine.center);  // 0-4095
-console.log(readings.irLine.right);   // 0-4095
-```
-
-Values:
-- `0`: No line detected (white surface)
-- `4095`: Black line detected
-
-### Ultrasonic Distance Sensor
-
-Simulates front-facing distance measurement:
-
-```typescript
-const readings = simulator.getSensorReadings();
-console.log(readings.distance); // Distance in mm
-```
-
-### Touch Sensors
-
-Currently placeholder for future implementation:
-
-```typescript
-const readings = simulator.getSensorReadings();
-console.log(readings.touch); // [false, false, false, false]
-```
-
-## Renderer Configuration
-
-### Display Options
-
-```typescript
-renderer.setOptions({
-  pixelsPerMM: 0.5,              // Zoom level
-  showGrid: true,                // Show reference grid
-  showSensorDebug: true,         // Show sensor rays and values
-  showTrajectory: true,          // Show path history
-  backgroundColor: '#ffffff',    // Canvas background
-  robotColor: '#ff0000',         // Robot body color
-  lineColor: '#000000',          // Line color
-  wallColor: '#333333',          // Wall color
-  obstacleColor: '#ff6600',      // Obstacle color
-});
-```
-
-## Simulation State
-
-Access detailed simulation state:
-
-```typescript
-const state = simulator.getSimulationState();
-console.log(state.currentTime);           // Simulation time in ms
-console.log(state.robotState.pose);       // { x, y, heading }
-console.log(state.sensorReadings);        // Current sensor values
-console.log(state.history);               // Array of SimulationStep
-```
-
-### Accessing History
-
-```typescript
-const steps = simulator.getSimulationState().history;
-steps.forEach(step => {
-  console.log(step.timestamp);            // Time in ms
-  console.log(step.robotPose);            // Position and heading
-  console.log(step.sensorReadings);       // Sensor values at that time
-  console.log(step.motorSpeeds);          // Motor speeds at that time
-});
-```
-
-## C++ API Support
-
-### Supported Commands
-
-The simulator parses and executes:
-
-```cpp
-// Motion
-LbMotion.runLR(leftSpeed, rightSpeed);
-LbMotion.waitDistanceMm(distance);
-LbMotion.waitRotationDeg(degrees);
-LbMotion.stopAndWait();
-
-// Delays
-LbDelay(milliseconds);
-
-// Logging
-Serial.println("message");
-```
-
-### Limitations
-
-- IR sensor calibration commands are parsed but ignored
-- Gripper commands are not yet simulated
-- Touch sensor interrupts not yet supported
-- Advanced sensor processing not yet implemented
-
-## Integration with IDE
-
-### Adding to StudentIDE
-
-```tsx
-import { SimulatorPanel } from '@src/components/SimulatorPanel';
-
-export const StudentIDE: React.FC = () => {
-  const [showSimulator, setShowSimulator] = useState(false);
-
-  return (
-    <div>
-      <Toolbar onShowSimulator={() => setShowSimulator(!showSimulator)} />
-      {showSimulator && (
-        <SimulatorPanel 
-          isVisible={showSimulator}
-          cppCode={currentCode}
-        />
-      )}
-    </div>
-  );
-};
-```
-
-## Physics Model
-
-### Differential Drive Kinematics
-
-The simulator uses standard differential drive kinematics:
-
-```
-v = (v_left + v_right) / 2       // Linear velocity
-ω = (v_right - v_left) / wheelBase // Angular velocity
-```
-
-Where:
-- `v_left`, `v_right`: Wheel velocities (mm/s)
-- `wheelBase`: Distance between wheels (150 mm by default)
-
-### Collision Model
-
-- **Walls**: Elastic collisions that reverse and dampen motor speeds
-- **Obstacles**: Stop motor and prevent further movement
-- **Boundaries**: Robot is constrained within board limits
-
-## Performance
-
-- **Update Rate**: 100 Hz (10 ms timestep)
-- **Rendering**: 60 FPS
-- **History Buffer**: Automatically trimmed to last 10,000 frames
-- **Canvas Resolution**: Adaptive to container size
-
-## Troubleshooting
-
-### Robot not moving
-- Check that simulator is started: `simulator.start()`
-- Verify motor speeds are set: `simulator.setMotorSpeeds(...)`
-- Check for collision errors in console
-
-### Sensors always return 0
-- Ensure board has lines configured
-- Verify robot position and orientation
-- Check sensor debug view
-
-### Performance issues
-- Reduce history buffer size
-- Disable trajectory rendering
-- Reduce board complexity
-
-## Future Enhancements
-
-- [ ] 3D visualization option
-- [ ] Physics-based gripper simulation
-- [ ] Gyroscope/IMU sensor simulation
-- [ ] WiFi communication simulation
-- [ ] Multi-robot simulation
-- [ ] Replay system with timeline
-- [ ] Export simulation data to CSV
-- [ ] Servo motor simulation
-- [ ] Ball physics for soccer/pickup challenges
-
-## API Reference
-
-See `src/simulator/types.ts` for complete TypeScript interfaces.
-
-## License
-
-Part of Leanbot Studio - Educational Robotics Platform
-
-### Synapse City
-
-The default mat is 4 ft × 4 ft (1219.2 × 1219.2 mm, including its border).
-`public/simulator/synapse-city.svg` reconstructs the supplied district layout; it is
-not the original printed artwork. Colored reference annotations are omitted.
-Track polylines use the same 794-unit reference coordinates scaled to millimetres
-for IR sensing. Printed lines and district graphics are not physical walls.
-The top-down Leanbot chassis is estimated at 80 × 55 mm, with wheels and a front
-gripper (overall footprint about 87 × 75 mm); these are visual estimates, not calibrated hardware dimensions.
-
-City road centerlines are calibrated to 350 mm between adjacent intersections
-(35 cm per city side). The complete mat remains 1219.2 mm square, with 84.6 mm
-from each edge to the outer road centerline. Illustration and IR polylines use
-the same piecewise mapping. Straight driving uses mm/s × seconds without an
-extra display-distance multiplier; robot artwork size does not scale travel.
-
-### Running the current C++ editor source
-
-The IDE sends its current source directly to the simulator. In React, select
-“Code C++ đang viết”; the editor stays mounted when opening the simulator. The
-static IDE reads the active file through `getLeanbotSimulatorCode()` on each Start.
-Both use `cppRuntime.ts`, a cooperative interpreter (not a full C++ compiler).
-It supports the custom mission fixture: functions/parameters, numeric casts,
-variables, enums, numeric arrays, if/else, for/while, switch, break/return, common
-math/string helpers, millis, motion encoder reads, waits, and gripper commands.
-`LbMission.end()` finishes a simulated mission; touch-start is acknowledged by
-Start. Unsupported calls stop with an error instead of running sample motion.
-
-Motion calibration: runLR ±2000 maps to ±70 mm/s (measured: 350 mm in 5 seconds), wheelbase 75 mm. Encoder
-distance is signed wheel-average travel; rotation accumulates without wrapping.
-The full-speed value uses the supplied measurement; intermediate commands use a linear approximation.
-Pause freezes simulation time; Stop cancels the program; Start reloads edited code.
-Run `npm run build:simulator` after editing the interpreter when using the static
-IDE; production builds regenerate `public/leanbot-ide/cpp-runtime.js` automatically.
-
-The mat SVG now uses one flat millimetre coordinate space (no nested image
-slices). Both interfaces support click/tap to place and pointer-dragging before
-Start, including CSS-scaled canvases. Placement is locked while running or paused.
-Full-speed calibration uses the supplied 35 cm / 5 s measurement, so command
-2000 is 70 mm/s. Intermediate commands are approximated linearly; turn timing
-still depends on the estimated 75 mm wheelbase. Slow display frames no longer
-discard elapsed simulation time.
-
-### Competition site markers
-
-The supplied CITY GRID diagram defines four potential pollution sites per city:
-1 upper-left, 2 lower-left, 3 upper-right, 4 lower-right. All eight cities A–H
-have these markers outside their cyan containment diamond (32 sites total).
-S1/S3/S5 are along the bottom border; S2/S4/S6 along the right border.
-CRL is the starting/ending area and the robot now resets there.
-Marker centres are reconstructed from the supplied diagram, not surveyed values.
-Field blocks are 15 × 25 × 75 mm; the empty markers are not physical obstacles.
-No random pollution/neutralizer arrangement or scoring rules are inferred.
-The typed `cityZones` and `storageSites` data matches the SVG marker IDs.
+`robotAppearance.ts` dùng chung hình robot cho React và IDE HTML; góc càng được cập nhật trực tiếp từ lệnh C++.

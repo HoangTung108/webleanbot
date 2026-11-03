@@ -1,10 +1,9 @@
 import { StudentIDE } from './student/StudentIDE'
 import SimulatorDemo from './simulator/demo'
-import { defaultCode } from './lib/defaultCode'
 import { useState } from 'react'
 
 function App() {
-  const [simulatorCode, setSimulatorCode] = useState(defaultCode)
+  const [simulatorCode, setSimulatorCode] = useState('')
   const [showSimulator, setShowSimulator] = useState(false)
 
   return (
@@ -31,7 +30,7 @@ function App() {
             e.currentTarget.style.transform = 'scale(1)';
           }}
         >
-          {showSimulator ? '← IDE' : '🤖 Simulator →'}
+          {showSimulator ? '<- IDE' : '[BOT] Simulator ->'}
         </button>
       </div>
       <div style={{ display: showSimulator ? 'none' : 'contents' }}><StudentIDE onSourceChange={setSimulatorCode} /></div>

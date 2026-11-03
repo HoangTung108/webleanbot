@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Leanbot Serial</title>
+  <title>Leanbot Studio</title>
   <link rel="icon" type="image/png" href="./img/logo-lb-title.png">
   <link rel="stylesheet" href="./styles.css?v=20260930-2">
   <link href="https://unpkg.com/react-complex-tree/lib/style.css" rel="stylesheet" />
@@ -43,31 +43,31 @@
     <div class="lb-top-left">
       <div class="lb-tabs">
         <button class="lb-tab disabled">
-          <img class="lb-tab-icon" id="logoIcon" src="./img/logo-lb.png" />
+          <img class="lb-tab-icon" id="logoIcon" alt="Leanbot" src="./img/logo-lb-title.png" />
         </button>
 
         <!-- <button id="btnCode" class="lb-tab disabled hidden">
-          <img class="lb-tab-icon" id="codeIcon" src="./img/icons/code.png" />
+          <span class="lb-ascii-icon" aria-hidden="true">{}</span><img hidden aria-hidden="true" style="display:none" class="lb-tab-icon" id="codeIcon" src="./img/icons/code.png" />
           <span>CODE</span>
         </button>
 
         <button class="lb-tab disabled hidden">
-          <img class="lb-tab-icon" src="./img/icons/libraries.png" />
+          <span class="lb-ascii-icon" aria-hidden="true">[ ]</span>
           <span>LIBRARIES</span>
         </button>
 
         <button class="lb-tab disabled hidden">
-          <img class="lb-tab-icon" src="./img/icons/tools.png" />
+          <span class="lb-ascii-icon" aria-hidden="true">[=]</span>
           <span>TOOLS</span>
         </button> -->
 
         <!-- <button class="lb-tab disabled">
-          <img class="lb-tab-icon" src="./img/icons/about.png" />
+          <span class="lb-ascii-icon" aria-hidden="true">[i]</span>
           <span>ABOUT</span>
         </button> -->
 
         <button class="lb-tab disabled">
-          <img class="lb-tab-icon" id="ptutorIcon" src="./img/icons/ptutor.png" />
+          <span class="lb-ascii-icon" aria-hidden="true">[?]</span><img hidden aria-hidden="true" style="display:none" class="lb-tab-icon" id="ptutorIcon" src="./img/icons/ptutor.png" />
           <span>PTUTOR</span>
         </button>
       </div>
@@ -76,32 +76,32 @@
     <div class="lb-top-right">
 
       <button id="btnCompile" class="lb-icon-btn">
-        <img class="lb-icon-img" src="./img/icons/compile.png" />
+        <span class="lb-ascii-icon" aria-hidden="true">[C]</span>
         <span>COMPILE</span>
       </button>
 
       <button id="btnUpload-2" class="lb-icon-btn">
-        <img class="lb-icon-img" src="./img/icons/upload.png" />
+        <span class="lb-ascii-icon" aria-hidden="true">[^]</span>
         <span>UPLOAD</span>
       </button>
 
-      <button id="btnMultiUploads" class="lb-icon-btn">
-        <img class="lb-icon-img" src="./img/icons/upload.png" />
+      <button id="btnMultiUploads" aria-label="Nạp nhiều Leanbot" class="lb-icon-btn">
+        <span class="lb-ascii-icon" aria-hidden="true">[^]</span>
       </button>
 
       <!-- Not use (old flow upload 1) -->
       <button id="btnUpload" class="lb-icon-btn" style="display: none;">
-        <img class="lb-icon-img" src="./img/icons/upload.png" />
+        <span class="lb-ascii-icon" aria-hidden="true">[^]</span>
         <span>UPLOAD</span>
       </button>
 
       <button id="btnSerial" class="lb-icon-btn">
-        <img class="lb-icon-img" src="./img/icons/serial.png" />
+        <span class="lb-ascii-icon" aria-hidden="true">&gt;_</span>
         <span>SERIAL</span>
       </button>
 
-      <button id="btnSimulator" class="lb-icon-btn">
-        <span style="font-size: 18px;">🤖</span>
+      <button id="btnSimulator" aria-label="Mở giả lập" class="lb-icon-btn">
+        <span style="font-size: 18px;">[BOT]</span>
         <span>SIMULATOR</span>
       </button>
     </div>
@@ -123,11 +123,11 @@
           <!-- row 1 -->
           <div class="ft-toolbar-row">
             <button class="lb-icon-btn" id="btnShowTree">
-              <img class="lb-icon-img" src="./img/icons/tree.png" />
+              <span class="lb-ascii-icon" aria-hidden="true">[/]</span>
             </button>
-            <button class="lb-icon-btn" id="btnNewFile">＋C++</button>
-            <button class="lb-icon-btn" id="btnNewBlocklyFile">＋Blockly</button>
-            <button class="lb-icon-btn" id="btnNewFolder">＋Folder</button>
+            <button class="lb-icon-btn" id="btnNewFile">+C++</button>
+            <button class="lb-icon-btn" id="btnNewBlocklyFile">+Blockly</button>
+            <button class="lb-icon-btn" id="btnNewFolder">+Folder</button>
           </div>
 
           <!-- row 2 -->
@@ -188,7 +188,7 @@
           </label>
 
           <button id="btnCloseSerial">
-            <img class="lb-icon-img" src="./img/icons/close.png" />
+            <span class="lb-ascii-icon" aria-hidden="true">[x]</span>
           </button>
         </div>
       </div>
@@ -298,11 +298,11 @@
     <div class="lb-bottom-left">
       <span>Leanbot BLE © 2025</span>
       <button class="lb-icon-btn" data-tooltip="Go To Leanbot GIT Server" onclick="newPGitTab()">
-        <img class="lb-icon-img" src="./img/icons/git.png" />
+        <span class="lb-ascii-icon" aria-hidden="true">[G]</span>
         <span>LEANBOT GIT</span>
       </button>
       <!-- <button class="lb-icon-btn disabled">
-        <img class="lb-icon-img" src="./img/icons/blockly.png" />
+        <span class="lb-ascii-icon" aria-hidden="true">[#]</span>
         <span>BLOCKLY LEANBOT</span>
       </button> -->
     </div>
@@ -352,7 +352,7 @@
         align-items: center;
       ">
         <div>
-          <h2 style="margin: 0; font-size: 18px;">🤖 Leanbot 2D Robot Simulator</h2>
+          <h2 style="margin: 0; font-size: 18px;"> Leanbot 2D Robot Simulator</h2>
           <p style="margin: 4px 0 0 0; font-size: 12px; color: #858585;">Real-time 2D simulation with physics and sensor visualization</p>
         </div>
         <button id="btnCloseSimulator" style="
@@ -363,7 +363,7 @@
           border-radius: 4px;
           cursor: pointer;
           font-weight: bold;
-        ">✕ Close</button>
+        ">x Close</button>
       </div>
 
       <!-- Content -->
@@ -399,48 +399,39 @@
               <button id="simStart" style="
                 flex: 1; padding: 8px; background: #007acc; color: white; border: none;
                 border-radius: 3px; cursor: pointer; font-size: 12px; font-weight: bold;
-              ">▶ Start</button>
+              ">[>] Start</button>
               <button id="simPause" style="
                 flex: 1; padding: 8px; background: #d9b14d; color: white; border: none;
                 border-radius: 3px; cursor: pointer; font-size: 12px; font-weight: bold; opacity: 0.5;
-              " disabled>⏸ Pause</button>
+              " disabled>[||] Pause</button>
             </div>
             <div style="display: flex; gap: 8px;">
               <button id="simStop" style="
                 flex: 1; padding: 8px; background: #c41e3a; color: white; border: none;
                 border-radius: 3px; cursor: pointer; font-size: 12px; font-weight: bold; opacity: 0.5;
-              " disabled>⏹ Stop</button>
+              " disabled>[x] Stop</button>
               <button id="simReset" style="
                 flex: 1; padding: 8px; background: #6a7c8c; color: white; border: none;
                 border-radius: 3px; cursor: pointer; font-size: 12px; font-weight: bold;
-              ">🔄 Reset</button>
+              ">[R] Reset</button>
             </div>
           </div>
 
           <!-- Board Selection -->
           <div style="padding: 12px; border-bottom: 1px solid #3e3e42;">
             <label style="display: block; font-size: 11px; color: #858585; margin-bottom: 6px;">Board:</label>
-            <select id="simBoard" style="
-              width: 100%; padding: 6px; background: #3e3e42; color: #d4d4d4;
-              border: 1px solid #555; border-radius: 3px; font-size: 12px; cursor: pointer;
-            ">
-              <option value="synapse">Synapse City — 4 ft × 4 ft</option>
-              <option value="simple">📍 Simple Line Following</option>
-              <option value="maze">📍 AIROC 2026 - Maze</option>
-              <option value="delivery">📍 AIROC 2026 - Delivery</option>
-              <option value="obstacle">📍 Obstacle Avoidance</option>
-            </select>
+            <div id="simBoard">Synapse City — 4 ft × 4 ft</div>
           </div>
 
           <div style="padding: 12px; border-bottom: 1px solid #3e3e42;">
             <label for="simRobotHeading" style="display: block; margin-bottom: 6px;">Góc robot trước khi chạy:</label>
             <div style="display: flex; align-items: center; gap: 6px;">
-              <button id="simRotateLeft" type="button" aria-label="Xoay trái 15 độ">↶ −15°</button>
+              <button id="simRotateLeft" type="button" aria-label="Xoay trái 15 độ">[L] -15°</button>
               <input id="simRobotHeading" type="number" min="0" max="359" step="1" value="0" style="width: 58px;" aria-label="Góc robot (độ)">
               <span>°</span>
-              <button id="simRotateRight" type="button" aria-label="Xoay phải 15 độ">↷ +15°</button>
+              <button id="simRotateRight" type="button" aria-label="Xoay phải 15 độ">[R] +15°</button>
             </div>
-            <div style="font-size: 11px; margin-top: 6px;">0° → · 90° ↓ · 180° ← · 270° ↑</div>
+            <div style="font-size: 11px; margin-top: 6px;">0° [R] · 90° v · 180° [L] · 270° ^</div>
           </div>
 
           <div style="padding: 12px; border-bottom: 1px solid #3e3e42; font-size: 12px;">

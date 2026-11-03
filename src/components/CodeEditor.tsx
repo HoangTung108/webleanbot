@@ -1,4 +1,4 @@
-import { Braces, Code2 } from 'lucide-react'
+import { Braces, Code2 } from './ui/asciiIcons'
 
 export function CodeEditor({ code, onChange }: { code: string; onChange: (code: string) => void }) {
   const lines = code.split('\n').length

@@ -34,8 +34,8 @@ describe('robot placement', () => {
   it('clamps the full robot footprint inside the mat and rejects invalid positions', () => {
     const robot = new RobotSimulator();
     robot.setPose({ x: -10, y: 99999, heading: -15 });
-    expect(robot.getRobotPose()).toEqual({ x: 60, y: 1940, heading: 345 });
+    expect(robot.getRobotPose()).toEqual({ x: 75, y: 1144.2, heading: 345 });
     robot.setPose({ x: NaN, y: 100, heading: 0 });
-    expect(robot.getRobotPose()).toEqual({ x: 60, y: 1940, heading: 345 });
+    expect(robot.getRobotPose()).toEqual({ x: 75, y: 1144.2, heading: 345 });
   });
 });

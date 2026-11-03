@@ -3,6 +3,7 @@
  * Renders robot, board, and sensor visualizations
  */
 
+import { drawLeanbot, LEANBOT_APPEARANCE } from './robotAppearance';
 import { RobotSimulator } from './robotSimulator';
 import {
   BoardConfig,
@@ -69,7 +70,7 @@ export class SimulatorRenderer {
     if (board.backgroundImage) {
       this.boardImage = new Image();
       this.boardImage.onload = () => this.render();
-      this.boardImage.src = `${import.meta.env.BASE_URL}${board.backgroundImage.replace(/^\//, '')}?v=sites-3`;
+      this.boardImage.src = `${import.meta.env.BASE_URL}${board.backgroundImage.replace(/^\//, '')}?v=sites-4`;
     }
   }
 
@@ -125,7 +126,7 @@ export class SimulatorRenderer {
       const point = this.clientToBoard(event.clientX, event.clientY);
       if (point.x < 0 || point.y < 0 || point.x > this.board.width || point.y > this.board.height) return;
       const pose = this.simulator.getRobotPose();
-      const onRobot = Math.hypot(point.x - pose.x, point.y - pose.y) < 60;
+      const onRobot = Math.hypot(point.x - pose.x, point.y - pose.y) < LEANBOT_APPEARANCE.collisionRadius;
       dx = onRobot ? point.x - pose.x : 0; dy = onRobot ? point.y - pose.y : 0;
       dragging = true;
       this.canvas.setPointerCapture?.(event.pointerId);
@@ -309,34 +310,9 @@ export class SimulatorRenderer {
     ctx.save();
     ctx.translate(center.x, center.y);
     ctx.rotate(pose.heading * Math.PI / 180);
-    ctx.scale(this.scale * 0.5, this.scale * 0.5);
-    // Half-size chassis: 80 × 55 mm; full footprint about 87 × 75 mm.
-    ctx.fillStyle = '#202830';
-    ctx.fillRect(-35, -75, 65, 20);
-    ctx.fillRect(-35, 55, 65, 20);
-    ctx.fillStyle = '#d9e5e8';
-    ctx.strokeStyle = '#536b77';
-    ctx.lineWidth = 3;
-    ctx.fillRect(-80, -55, 160, 110);
-    ctx.strokeRect(-80, -55, 160, 110);
-    ctx.fillStyle = '#117c91';
-    ctx.fillRect(-55, -40, 90, 80);
-    ctx.fillStyle = '#263b48';
-    ctx.fillRect(-43, -22, 42, 44);
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 13px sans-serif';
-    ctx.fillText('Leanbot', -49, 5);
-    ctx.fillStyle = '#53dfbd';
-    for (const y of [-28, 0, 28]) ctx.fillRect(66, y - 4, 10, 8);
-    ctx.strokeStyle = '#efab39';
-    ctx.lineWidth = 6;
-    ctx.beginPath();
+    ctx.scale(this.scale, this.scale);
     const grip = this.simulator.getGripper();
-    ctx.moveTo(55, -35); ctx.lineTo(94, -35 + grip.left / 90 * 17); ctx.lineTo(94, -18 + grip.left / 90 * 14);
-    ctx.moveTo(55, 35); ctx.lineTo(94, 35 - grip.right / 90 * 17); ctx.lineTo(94, 18 - grip.right / 90 * 14);
-    ctx.stroke();
-    ctx.fillStyle = '#ffffff';
-    ctx.beginPath(); ctx.moveTo(48, -9); ctx.lineTo(61, 0); ctx.lineTo(48, 9); ctx.fill();
+    drawLeanbot(ctx, grip.left, grip.right);
     ctx.restore();
   }
 

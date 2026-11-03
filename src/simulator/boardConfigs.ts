@@ -1,204 +1,5 @@
-/**
- * Predefined Board Configurations
- * Including AIROC 2026 competition boards
- */
-
 import { BoardConfig } from './types';
 
-/**
- * AIROC 2026 Maze Challenge Board
- * Typical maze competition with black lines for line following
- */
-export const AIROC2026_MAZE: BoardConfig = {
-  name: 'AIROC 2026 - Maze Challenge',
-  width: 2000,
-  height: 2000,
-  walls: [
-    // Border walls
-    { id: 'wall-north', x1: 0, y1: 0, x2: 2000, y2: 0 },
-    { id: 'wall-south', x1: 0, y1: 2000, x2: 2000, y2: 2000 },
-    { id: 'wall-west', x1: 0, y1: 0, x2: 0, y2: 2000 },
-    { id: 'wall-east', x1: 2000, y1: 0, x2: 2000, y2: 2000 },
-
-    // Internal maze walls
-    { id: 'maze-1', x1: 300, y1: 300, x2: 1700, y2: 300 },
-    { id: 'maze-2', x1: 1700, y1: 300, x2: 1700, y2: 700 },
-    { id: 'maze-3', x1: 500, y1: 500, x2: 500, y2: 1500 },
-    { id: 'maze-4', x1: 500, y1: 1500, x2: 1500, y2: 1500 },
-    { id: 'maze-5', x1: 1500, y1: 700, x2: 1500, y2: 1200 },
-  ],
-  obstacles: [
-    { id: 'obs-1', x: 400, y: 400, width: 100, height: 100 },
-    { id: 'obs-2', x: 1600, y: 1600, width: 100, height: 100 },
-  ],
-  lines: [
-    // Main track line
-    {
-      id: 'line-track-start',
-      points: [
-        { x: 100, y: 1000 },
-        { x: 300, y: 1000 },
-        { x: 300, y: 200 },
-        { x: 1700, y: 200 },
-        { x: 1700, y: 1000 },
-        { x: 1900, y: 1000 },
-      ],
-      width: 50,
-      color: '#000000',
-    },
-  ],
-  metadata: {
-    competition: 'AIROC 2026',
-    boardType: 'maze_challenge',
-    difficulty: 'medium',
-    description: 'Maze navigation with black line following',
-  },
-};
-
-/**
- * AIROC 2026 - Pickup & Delivery Challenge
- * Board with multiple zones for object manipulation
- */
-export const AIROC2026_DELIVERY: BoardConfig = {
-  name: 'AIROC 2026 - Pickup & Delivery',
-  width: 2400,
-  height: 1800,
-  walls: [
-    // Border walls
-    { id: 'wall-north', x1: 0, y1: 0, x2: 2400, y2: 0 },
-    { id: 'wall-south', x1: 0, y1: 1800, x2: 2400, y2: 1800 },
-    { id: 'wall-west', x1: 0, y1: 0, x2: 0, y2: 1800 },
-    { id: 'wall-east', x1: 2400, y1: 0, x2: 2400, y2: 1800 },
-
-    // Zone separators
-    { id: 'sep-1', x1: 800, y1: 0, x2: 800, y2: 1800 },
-    { id: 'sep-2', x1: 1600, y1: 0, x2: 1600, y2: 1800 },
-  ],
-  obstacles: [
-    // Objects to deliver
-    { id: 'obj-1', x: 400, y: 900, width: 100, height: 100, type: 'box' },
-    { id: 'obj-2', x: 2000, y: 450, width: 100, height: 100, type: 'box' },
-    { id: 'obj-3', x: 2000, y: 1350, width: 100, height: 100, type: 'box' },
-  ],
-  lines: [
-    // Navigation line
-    {
-      id: 'line-start',
-      points: [
-        { x: 200, y: 900 },
-        { x: 400, y: 900 },
-      ],
-      width: 50,
-      color: '#000000',
-    },
-    // Pickup zone
-    {
-      id: 'line-pickup',
-      points: [
-        { x: 300, y: 800 },
-        { x: 300, y: 1000 },
-        { x: 500, y: 1000 },
-        { x: 500, y: 800 },
-      ],
-      width: 40,
-      color: '#000000',
-    },
-  ],
-  metadata: {
-    competition: 'AIROC 2026',
-    boardType: 'delivery_challenge',
-    difficulty: 'hard',
-    description: 'Object pickup and delivery challenge',
-  },
-};
-
-/**
- * Simple Line Following Challenge
- * Basic track for testing line following algorithms
- */
-export const SIMPLE_LINE_FOLLOWING: BoardConfig = {
-  name: 'Simple Line Following',
-  width: 1500,
-  height: 1000,
-  walls: [
-    { id: 'wall-north', x1: 0, y1: 0, x2: 1500, y2: 0 },
-    { id: 'wall-south', x1: 0, y1: 1000, x2: 1500, y2: 1000 },
-    { id: 'wall-west', x1: 0, y1: 0, x2: 0, y2: 1000 },
-    { id: 'wall-east', x1: 1500, y1: 0, x2: 1500, y2: 1000 },
-  ],
-  obstacles: [],
-  lines: [
-    {
-      id: 'line-simple',
-      points: [
-        { x: 150, y: 500 },
-        { x: 750, y: 500 },
-        { x: 750, y: 200 },
-        { x: 1350, y: 200 },
-      ],
-      width: 50,
-      color: '#000000',
-    },
-  ],
-  metadata: {
-    competition: 'Tutorial',
-    boardType: 'line_following',
-    difficulty: 'easy',
-    description: 'Simple line following for beginners',
-  },
-};
-
-/**
- * Obstacle Avoidance Challenge
- * Multiple obstacles with narrow passages
- */
-export const OBSTACLE_AVOIDANCE: BoardConfig = {
-  name: 'Obstacle Avoidance',
-  width: 2000,
-  height: 1500,
-  walls: [
-    { id: 'wall-north', x1: 0, y1: 0, x2: 2000, y2: 0 },
-    { id: 'wall-south', x1: 0, y1: 1500, x2: 2000, y2: 1500 },
-    { id: 'wall-west', x1: 0, y1: 0, x2: 0, y2: 1500 },
-    { id: 'wall-east', x1: 2000, y1: 0, x2: 2000, y2: 1500 },
-
-    // Narrow corridor walls
-    { id: 'corr-1', x1: 500, y1: 400, x2: 500, y2: 800 },
-    { id: 'corr-2', x1: 1500, y1: 700, x2: 1500, y2: 1100 },
-  ],
-  obstacles: [
-    { id: 'obs-1', x: 300, y: 300, width: 150, height: 150 },
-    { id: 'obs-2', x: 700, y: 1100, width: 150, height: 150 },
-    { id: 'obs-3', x: 1300, y: 400, width: 150, height: 150 },
-    { id: 'obs-4', x: 1800, y: 1100, width: 150, height: 150 },
-  ],
-  lines: [
-    {
-      id: 'line-path',
-      points: [
-        { x: 100, y: 750 },
-        { x: 400, y: 750 },
-        { x: 600, y: 750 },
-        { x: 1000, y: 300 },
-        { x: 1400, y: 300 },
-        { x: 1600, y: 900 },
-        { x: 1900, y: 900 },
-      ],
-      width: 40,
-      color: '#000000',
-    },
-  ],
-  metadata: {
-    competition: 'Tutorial',
-    boardType: 'obstacle_avoidance',
-    difficulty: 'medium',
-    description: 'Navigate through obstacles using sensors',
-  },
-};
-
-/**
- * Get all available boards
- */
 export const SYNAPSE_CITY: BoardConfig = {
   "name": "Synapse City — 4 ft × 4 ft",
   "width": 1219.2,
@@ -944,8 +745,8 @@ export const SYNAPSE_CITY: BoardConfig = {
         {
           "id": "A1",
           "number": 1,
-          "x": 184.60000000000002,
-          "y": 184.60000000000002,
+          "x": 184.6,
+          "y": 184.6,
           "width": 15,
           "height": 25,
           "rotation": 45
@@ -953,20 +754,20 @@ export const SYNAPSE_CITY: BoardConfig = {
         {
           "id": "A2",
           "number": 2,
-          "x": 184.60000000000002,
-          "y": 334.6,
+          "x": 334.6,
+          "y": 184.6,
           "width": 15,
           "height": 25,
-          "rotation": 45
+          "rotation": -45
         },
         {
           "id": "A3",
           "number": 3,
-          "x": 334.6,
-          "y": 184.60000000000002,
+          "x": 184.6,
+          "y": 334.6,
           "width": 15,
           "height": 25,
-          "rotation": 45
+          "rotation": -45
         },
         {
           "id": "A4",
@@ -996,7 +797,7 @@ export const SYNAPSE_CITY: BoardConfig = {
           "id": "C1",
           "number": 1,
           "x": 534.6,
-          "y": 184.60000000000002,
+          "y": 184.6,
           "width": 15,
           "height": 25,
           "rotation": 45
@@ -1004,20 +805,20 @@ export const SYNAPSE_CITY: BoardConfig = {
         {
           "id": "C2",
           "number": 2,
-          "x": 534.6,
-          "y": 334.6,
+          "x": 684.6,
+          "y": 184.6,
           "width": 15,
           "height": 25,
-          "rotation": 45
+          "rotation": -45
         },
         {
           "id": "C3",
           "number": 3,
-          "x": 684.6,
-          "y": 184.60000000000002,
+          "x": 534.6,
+          "y": 334.6,
           "width": 15,
           "height": 25,
-          "rotation": 45
+          "rotation": -45
         },
         {
           "id": "C4",
@@ -1047,7 +848,7 @@ export const SYNAPSE_CITY: BoardConfig = {
           "id": "F1",
           "number": 1,
           "x": 884.6,
-          "y": 184.60000000000002,
+          "y": 184.6,
           "width": 15,
           "height": 25,
           "rotation": 45
@@ -1055,20 +856,20 @@ export const SYNAPSE_CITY: BoardConfig = {
         {
           "id": "F2",
           "number": 2,
-          "x": 884.6,
-          "y": 334.6,
+          "x": 1034.6,
+          "y": 184.6,
           "width": 15,
           "height": 25,
-          "rotation": 45
+          "rotation": -45
         },
         {
           "id": "F3",
           "number": 3,
-          "x": 1034.6,
-          "y": 184.60000000000002,
+          "x": 884.6,
+          "y": 334.6,
           "width": 15,
           "height": 25,
-          "rotation": 45
+          "rotation": -45
         },
         {
           "id": "F4",
@@ -1097,7 +898,7 @@ export const SYNAPSE_CITY: BoardConfig = {
         {
           "id": "B1",
           "number": 1,
-          "x": 184.60000000000002,
+          "x": 184.6,
           "y": 534.6,
           "width": 15,
           "height": 25,
@@ -1106,20 +907,20 @@ export const SYNAPSE_CITY: BoardConfig = {
         {
           "id": "B2",
           "number": 2,
-          "x": 184.60000000000002,
-          "y": 684.6,
-          "width": 15,
-          "height": 25,
-          "rotation": 45
-        },
-        {
-          "id": "B3",
-          "number": 3,
           "x": 334.6,
           "y": 534.6,
           "width": 15,
           "height": 25,
-          "rotation": 45
+          "rotation": -45
+        },
+        {
+          "id": "B3",
+          "number": 3,
+          "x": 184.6,
+          "y": 684.6,
+          "width": 15,
+          "height": 25,
+          "rotation": -45
         },
         {
           "id": "B4",
@@ -1157,20 +958,20 @@ export const SYNAPSE_CITY: BoardConfig = {
         {
           "id": "E2",
           "number": 2,
-          "x": 534.6,
-          "y": 684.6,
-          "width": 15,
-          "height": 25,
-          "rotation": 45
-        },
-        {
-          "id": "E3",
-          "number": 3,
           "x": 684.6,
           "y": 534.6,
           "width": 15,
           "height": 25,
-          "rotation": 45
+          "rotation": -45
+        },
+        {
+          "id": "E3",
+          "number": 3,
+          "x": 534.6,
+          "y": 684.6,
+          "width": 15,
+          "height": 25,
+          "rotation": -45
         },
         {
           "id": "E4",
@@ -1208,20 +1009,20 @@ export const SYNAPSE_CITY: BoardConfig = {
         {
           "id": "H2",
           "number": 2,
-          "x": 884.6,
-          "y": 684.6,
-          "width": 15,
-          "height": 25,
-          "rotation": 45
-        },
-        {
-          "id": "H3",
-          "number": 3,
           "x": 1034.6,
           "y": 534.6,
           "width": 15,
           "height": 25,
-          "rotation": 45
+          "rotation": -45
+        },
+        {
+          "id": "H3",
+          "number": 3,
+          "x": 884.6,
+          "y": 684.6,
+          "width": 15,
+          "height": 25,
+          "rotation": -45
         },
         {
           "id": "H4",
@@ -1250,7 +1051,7 @@ export const SYNAPSE_CITY: BoardConfig = {
         {
           "id": "D1",
           "number": 1,
-          "x": 184.60000000000002,
+          "x": 184.6,
           "y": 884.6,
           "width": 15,
           "height": 25,
@@ -1259,20 +1060,20 @@ export const SYNAPSE_CITY: BoardConfig = {
         {
           "id": "D2",
           "number": 2,
-          "x": 184.60000000000002,
-          "y": 1034.6,
-          "width": 15,
-          "height": 25,
-          "rotation": 45
-        },
-        {
-          "id": "D3",
-          "number": 3,
           "x": 334.6,
           "y": 884.6,
           "width": 15,
           "height": 25,
-          "rotation": 45
+          "rotation": -45
+        },
+        {
+          "id": "D3",
+          "number": 3,
+          "x": 184.6,
+          "y": 1034.6,
+          "width": 15,
+          "height": 25,
+          "rotation": -45
         },
         {
           "id": "D4",
@@ -1310,20 +1111,20 @@ export const SYNAPSE_CITY: BoardConfig = {
         {
           "id": "G2",
           "number": 2,
-          "x": 534.6,
-          "y": 1034.6,
-          "width": 15,
-          "height": 25,
-          "rotation": 45
-        },
-        {
-          "id": "G3",
-          "number": 3,
           "x": 684.6,
           "y": 884.6,
           "width": 15,
           "height": 25,
-          "rotation": 45
+          "rotation": -45
+        },
+        {
+          "id": "G3",
+          "number": 3,
+          "x": 534.6,
+          "y": 1034.6,
+          "width": 15,
+          "height": 25,
+          "rotation": -45
         },
         {
           "id": "G4",
@@ -1391,10 +1192,6 @@ export const SYNAPSE_CITY: BoardConfig = {
 
 export const AVAILABLE_BOARDS: Record<string, BoardConfig> = {
   synapse_city: SYNAPSE_CITY,
-  airoc2026_maze: AIROC2026_MAZE,
-  airoc2026_delivery: AIROC2026_DELIVERY,
-  simple_line_following: SIMPLE_LINE_FOLLOWING,
-  obstacle_avoidance: OBSTACLE_AVOIDANCE,
 };
 
 /**

@@ -963,3 +963,6 @@ progress.red::-moz-progress-bar{background:#b71c1c}
 .tippy-upload-compile-item.hidden {
   display: none !important;
 }
+/* ASCII toolbar icons; the Leanbot brand remains its original logo. */
+.lb-ascii-icon { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 14px; font-weight: 700; line-height: 1; white-space: pre; color: inherit; }
+#logoIcon { object-fit: contain; width: 54px; height: 32px; }

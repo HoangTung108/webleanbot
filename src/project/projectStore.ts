@@ -6,6 +6,8 @@ export type SyncState = 'synced' | 'blocks-newer' | 'cpp-newer' | 'unsupported-c
 
 export interface LeanbotProject {
   id: string
+  legacyCodeReady?: boolean
+  legacyXml?: string
   name: string
   sourceMode: SourceMode
   cppSource: string
@@ -48,7 +50,7 @@ export function updateBlocks(project: LeanbotProject, blockWorkspace: BlocklyWor
 
 export function synchronizeToCpp(project: LeanbotProject): LeanbotProject {
   if (project.syncState === 'conflict') return project
-  const cppSource = irToCpp(project.ir)
+  const cppSource = project.legacyXml !== undefined ? project.cppSource : irToCpp(project.ir)
   return { ...project, sourceMode: 'cpp', cppSource, syncState: 'synced', baselineCppHash: hashValue(cppSource), baselineBlocksHash: hashValue(project.blockWorkspace), diagnostics: [], updatedAt: Date.now() }
 }
 
@@ -69,5 +71,5 @@ export function resolveConflict(project: LeanbotProject, winner: SourceMode): Le
 }
 
 export function freshestCppSource(project: LeanbotProject) {
-  return project.syncState === 'blocks-newer' ? irToCpp(project.ir) : project.cppSource
+  return project.legacyXml === undefined && project.syncState === 'blocks-newer' ? irToCpp(project.ir) : project.cppSource
 }

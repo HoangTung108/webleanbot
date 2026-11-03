@@ -1,4 +1,4 @@
-import { Activity, Gauge, Hand, Radar, RotateCw } from 'lucide-react'
+import { Activity, Gauge, Hand, Radar, RotateCw } from './ui/asciiIcons'
 import type { SensorSnapshot } from '../types'
 
 function Meter({ value, max = 768 }: { value: number; max?: number }) {

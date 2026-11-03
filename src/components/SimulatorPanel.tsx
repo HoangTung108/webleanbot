@@ -2,11 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { CppSimulatorBridge } from '../simulator/cppBridge';
 import { RobotSimulator } from '../simulator/robotSimulator';
 import { SimulatorRenderer, RendererOptions } from '../simulator/renderer';
-import {
-  AVAILABLE_BOARDS,
-  getAllBoardNames,
-  getBoardByName,
-} from '../simulator/boardConfigs';
+import { SYNAPSE_CITY } from '../simulator/boardConfigs';
 import { BoardConfig, Pose } from '../simulator/types';
 
 interface SimulatorPanelProps {
@@ -26,7 +22,6 @@ export const SimulatorPanel: React.FC<SimulatorPanelProps> = ({
   const [renderer, setRenderer] = useState<SimulatorRenderer | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
-  const [selectedBoard, setSelectedBoard] = useState<string>('synapse_city');
   const [showSensorDebug, setShowSensorDebug] = useState(false);
   const [showTrajectory, setShowTrajectory] = useState(true);
   const [showGrid, setShowGrid] = useState(true);
@@ -39,13 +34,13 @@ export const SimulatorPanel: React.FC<SimulatorPanelProps> = ({
     if (!isVisible || !canvasRef.current) return;
 
     const newSimulator = new RobotSimulator();
-    const board = getBoardByName(selectedBoard);
+    const board = SYNAPSE_CITY;
 
     if (board) {
       newSimulator.setBoard(board);
     }
 
-    const newRenderer = new SimulatorRenderer(canvasRef.current, newSimulator, board || AVAILABLE_BOARDS.simple_line_following, {
+    const newRenderer = new SimulatorRenderer(canvasRef.current, newSimulator, board, {
       showSensorDebug,
       showTrajectory,
       showGrid,
@@ -69,7 +64,7 @@ export const SimulatorPanel: React.FC<SimulatorPanelProps> = ({
     window.addEventListener('resize', handleResize);
     handleResize();
     return () => { detachPlacement(); window.removeEventListener('resize', handleResize); }; 
-  }, [isVisible, selectedBoard]);
+  }, [isVisible]);
 
   // Animation loop
   useEffect(() => {
@@ -161,11 +156,6 @@ export const SimulatorPanel: React.FC<SimulatorPanelProps> = ({
     }
   };
 
-  const handleBoardChange = (boardName: string) => {
-    setSelectedBoard(boardName);
-    handleReset();
-  };
-
   const handleHeadingChange = (heading: number) => {
     if (!simulator || isRunning || !Number.isFinite(heading)) return;
     simulator.setHeading(heading);
@@ -173,7 +163,6 @@ export const SimulatorPanel: React.FC<SimulatorPanelProps> = ({
     renderer?.render();
   };
 
-  const boardNames = getAllBoardNames();
 
   return (
     <div
@@ -211,7 +200,7 @@ export const SimulatorPanel: React.FC<SimulatorPanelProps> = ({
             opacity: isRunning ? 0.5 : 1,
           }}
         >
-          ▶ Start
+          [&gt;] Start
         </button>
 
         <button
@@ -227,7 +216,7 @@ export const SimulatorPanel: React.FC<SimulatorPanelProps> = ({
             opacity: !isRunning ? 0.5 : 1,
           }}
         >
-          {isPaused ? '⏵ Resume' : '⏸ Pause'}
+          {isPaused ? '[>] Resume' : '[||] Pause'}
         </button>
 
         <button
@@ -243,7 +232,7 @@ export const SimulatorPanel: React.FC<SimulatorPanelProps> = ({
             opacity: !isRunning ? 0.5 : 1,
           }}
         >
-          ⏹ Stop
+          [x] Stop
         </button>
 
         <button
@@ -257,30 +246,13 @@ export const SimulatorPanel: React.FC<SimulatorPanelProps> = ({
             cursor: 'pointer',
           }}
         >
-          🔄 Reset
+          [R] Reset
         </button>
 
         <div style={{ flex: 1 }} />
 
-        {/* Board selector */}
-        <select
-          value={selectedBoard}
-          onChange={(e) => handleBoardChange(e.target.value)}
-          style={{
-            padding: '4px 8px',
-            backgroundColor: 'var(--vscode-input-background)',
-            color: 'var(--vscode-input-foreground)',
-            border: '1px solid var(--vscode-input-border)',
-            borderRadius: '3px',
-            cursor: 'pointer',
-          }}
-        >
-          {boardNames.map((name) => (
-            <option key={name} value={name}>
-              {AVAILABLE_BOARDS[name]?.name || name}
-            </option>
-          ))}
-        </select>
+        <span>Synapse City · 4 ft × 4 ft</span>
+
       </div>
 
       {/* Canvas */}
@@ -319,14 +291,14 @@ export const SimulatorPanel: React.FC<SimulatorPanelProps> = ({
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
           <label htmlFor="robot-heading">Góc robot:</label>
-          <button disabled={isRunning} onClick={() => handleHeadingChange(robotHeading - 15)} aria-label="Xoay trái 15 độ">↶ −15°</button>
+          <button disabled={isRunning} onClick={() => handleHeadingChange(robotHeading - 15)} aria-label="Xoay trái 15 độ">[L] -15°</button>
           <input id="robot-heading" type="number" min="0" max="359" step="1"
             value={robotHeading} disabled={isRunning}
             onChange={(e) => { if (e.target.value !== '') handleHeadingChange(Number(e.target.value)); }}
             style={{ width: '64px' }} />
           <span>°</span>
-          <button disabled={isRunning} onClick={() => handleHeadingChange(robotHeading + 15)} aria-label="Xoay phải 15 độ">↷ +15°</button>
-          <span>0° → · 90° ↓ · 180° ← · 270° ↑</span>
+          <button disabled={isRunning} onClick={() => handleHeadingChange(robotHeading + 15)} aria-label="Xoay phải 15 độ">[R] +15°</button>
+          <span>0° [R] · 90° v · 180° [L] · 270° ^</span>
         </div>
         <div>Tốc độ do code C++ điều khiển · lệnh 2000: 70 mm/s (35 cm / 5 giây).</div>
 
@@ -361,7 +333,7 @@ export const SimulatorPanel: React.FC<SimulatorPanelProps> = ({
         {/* Info */}
         <div style={{ fontSize: '11px', color: 'var(--vscode-foreground)' }}>
           Time: {elapsedTime.toFixed(2)}s | Status:{' '}
-          {isRunning ? (isPaused ? '⏸ Paused' : '▶ Running') : '⏹ Stopped'}
+          {isRunning ? (isPaused ? '[||] Paused' : '[>] Running') : '[x] Stopped'}
         </div>
       </div>
     </div>

@@ -1,3 +1,4 @@
+export { drawLeanbot, LEANBOT_APPEARANCE } from './robotAppearance';
 import { tokenizeCpp, type Token } from '../transpiler/cppParser/tokenizer';
 
 type Node = { k: string; [key: string]: any };

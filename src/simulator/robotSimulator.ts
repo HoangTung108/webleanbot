@@ -1,7 +1,10 @@
+import { LEANBOT_APPEARANCE } from './robotAppearance';
 /**
  * 2D Robot Physics Simulator Engine
  * Simulates Leanbot robot movement and sensor interactions
  */
+
+import { SYNAPSE_CITY } from './boardConfigs';
 
 import {
   Vector2D,
@@ -42,13 +45,13 @@ export class RobotSimulator {
 
   constructor(robotConfig?: RobotConfig) {
     this.robotConfig = robotConfig || DEFAULT_ROBOT_CONFIG;
-    this.board = this.getDefaultBoard();
+    this.board = SYNAPSE_CITY;
 
     this.state = {
       isRunning: false,
       isPaused: false,
       robotState: {
-        pose: { x: 100, y: 100, heading: 0 },
+        pose: { ...SYNAPSE_CITY.initialPose! },
         velocityLeft: 0,
         velocityRight: 0,
         accelerationLeft: 0,
@@ -60,44 +63,6 @@ export class RobotSimulator {
     };
 
     this.lastUpdateTime = Date.now();
-  }
-
-  /**
-   * Get default board configuration (AIROC 2026 style)
-   */
-  private getDefaultBoard(): BoardConfig {
-    return {
-      name: 'Default Arena',
-      width: 2000, // mm
-      height: 2000, // mm
-      obstacles: [],
-      walls: [
-        // Border walls
-        { id: 'wall-north', x1: 0, y1: 0, x2: 2000, y2: 0 },
-        { id: 'wall-south', x1: 0, y1: 2000, x2: 2000, y2: 2000 },
-        { id: 'wall-west', x1: 0, y1: 0, x2: 0, y2: 2000 },
-        { id: 'wall-east', x1: 2000, y1: 0, x2: 2000, y2: 2000 },
-      ],
-      lines: [
-        // Black lines for line follower
-        {
-          id: 'line-1',
-          points: [
-            { x: 100, y: 100 },
-            { x: 900, y: 100 },
-            { x: 900, y: 900 },
-            { x: 100, y: 900 },
-            { x: 100, y: 100 },
-          ],
-          width: 50,
-          color: '#000000',
-        },
-      ],
-      metadata: {
-        competition: 'AIROC 2026',
-        boardType: 'default_arena',
-      },
-    };
   }
 
   /**
@@ -188,8 +153,8 @@ export class RobotSimulator {
   setPose(pose: Pose): void {
     if (this.state.isRunning || ![pose.x, pose.y, pose.heading].every(Number.isFinite)) return;
     this.state.robotState.pose = {
-      x: Math.max(60, Math.min(this.board.width - 60, pose.x)),
-      y: Math.max(60, Math.min(this.board.height - 60, pose.y)),
+      x: Math.max(LEANBOT_APPEARANCE.collisionRadius, Math.min(this.board.width - LEANBOT_APPEARANCE.collisionRadius, pose.x)),
+      y: Math.max(LEANBOT_APPEARANCE.collisionRadius, Math.min(this.board.height - LEANBOT_APPEARANCE.collisionRadius, pose.y)),
       heading: ((pose.heading % 360) + 360) % 360,
     };
     this.state.history = [];
@@ -291,7 +256,7 @@ export class RobotSimulator {
    */
   private checkCollisions(): void {
     const pose = this.state.robotState.pose;
-    const robotRadius = 60; // mm - approximate robot size
+    const robotRadius = LEANBOT_APPEARANCE.collisionRadius; // mm - approximate robot size
 
     // Check wall collisions
     for (const wall of this.board.walls) {

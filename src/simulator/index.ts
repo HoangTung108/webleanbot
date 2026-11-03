@@ -7,10 +7,6 @@ export { SimulatorRenderer } from './renderer';
 export { CppSimulatorBridge } from './cppBridge';
 export {
   SYNAPSE_CITY,
-  AIROC2026_MAZE,
-  AIROC2026_DELIVERY,
-  SIMPLE_LINE_FOLLOWING,
-  OBSTACLE_AVOIDANCE,
   AVAILABLE_BOARDS,
   getBoardByName,
   getAllBoardNames,

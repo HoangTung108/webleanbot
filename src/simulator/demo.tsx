@@ -8,57 +8,8 @@ import {
   RobotSimulator,
   SimulatorRenderer,
   CppSimulatorBridge,
-  AIROC2026_MAZE,
-  AIROC2026_DELIVERY,
-  SIMPLE_LINE_FOLLOWING,
-  OBSTACLE_AVOIDANCE,
-  AVAILABLE_BOARDS,
+  SYNAPSE_CITY,
 } from '../simulator';
-
-const DEMO_CODE_EXAMPLES: Record<string, string> = {
-  simple: `Leanbot.begin();
-LbMotion.runLR(200, 200);
-LbDelay(2000);
-LbMotion.stopAndWait();`,
-
-  maze: `Leanbot.begin();
-LbMotion.setZeroOrigin();
-// Follow the maze
-LbMotion.runLR(150, 150);
-LbDelay(5000);
-LbMotion.stopAndWait();`,
-
-  turn: `Leanbot.begin();
-// Go straight
-LbMotion.runLR(200, 200);
-LbDelay(1500);
-// Turn right
-LbMotion.runLR(200, 100);
-LbDelay(1000);
-// Go straight again
-LbMotion.runLR(200, 200);
-LbDelay(1500);
-LbMotion.stopAndWait();`,
-
-  complex: `Leanbot.begin();
-// Move forward
-LbMotion.runLR(200, 200);
-LbDelay(1000);
-// Turn left
-LbMotion.runLR(100, 200);
-LbDelay(800);
-// Move forward
-LbMotion.runLR(200, 200);
-LbDelay(1500);
-// Turn right sharply
-LbMotion.runLR(200, 50);
-LbDelay(500);
-// Final forward
-LbMotion.runLR(200, 200);
-LbDelay(1000);
-LbMotion.stopAndWait();
-Serial.println("Mission complete!");`,
-};
 
 export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -70,8 +21,6 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
   const [robotHeading, setRobotHeading] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
-  const [selectedBoard, setSelectedBoard] = useState<string>('synapse_city');
-  const [selectedCode, setSelectedCode] = useState<string>('custom');
   const [showSensorDebug, setShowSensorDebug] = useState(false);
   const [showTrajectory, setShowTrajectory] = useState(true);
   const [showGrid, setShowGrid] = useState(true);
@@ -92,7 +41,7 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
   useEffect(() => {
     if (!canvasRef.current) return;
 
-    const board = AVAILABLE_BOARDS[selectedBoard];
+    const board = SYNAPSE_CITY;
     if (!board) return;
 
     const simulator = new RobotSimulator();
@@ -123,7 +72,7 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
     renderer.render();
     addLog(`Board loaded: ${board.name}`);
     return () => { detachPlacement(); observer?.disconnect(); window.removeEventListener('resize', resize); bridge.stopExecution(); simulator.stop(); };
-  }, [selectedBoard]);
+  }, []);
 
   useEffect(() => {
     rendererRef.current?.setOptions({ showGrid, showTrajectory, showSensorDebug });
@@ -153,10 +102,10 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
       if (bridge) {
         try {
           bridge.executeStep(performance.now());
-          if (!bridge.isExecuting()) { sim.stop(); setIsRunning(false); addLog('✓ Chương trình kết thúc'); }
+          if (!bridge.isExecuting()) { sim.stop(); setIsRunning(false); addLog('[OK] Chương trình kết thúc'); }
         } catch (error) {
           sim.stop(); setIsRunning(false);
-          addLog(`❌ ${error instanceof Error ? error.message : String(error)}`);
+          addLog(`[ERROR] ${error instanceof Error ? error.message : String(error)}`);
         }
       }
 
@@ -198,11 +147,12 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
     if (!simulatorRef.current || !bridgeRef.current) return;
 
     // Load and compile code
-    const code = selectedCode === 'custom' ? (cppCode ?? '') : DEMO_CODE_EXAMPLES[selectedCode];
+    const code = cppCode ?? '';
+    if (!code.trim()) { addLog('Chưa có code C++. Hãy mở hoặc viết code trong IDE.'); return; }
     const result = bridgeRef.current.loadCode(code);
 
     if (!result.success) {
-      addLog(`❌ Error: ${result.error}`);
+      addLog(`[ERROR] Error: ${result.error}`);
       return;
     }
 
@@ -212,7 +162,7 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
     setIsRunning(true);
     setIsPaused(false);
 
-    addLog(selectedCode === 'custom' ? '▶ Chạy code C++ đang viết' : `▶ Chạy ví dụ ${selectedCode}`);
+    addLog('[>] Chạy code C++');
   };
 
   const handleStop = () => {
@@ -221,7 +171,7 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
     simulatorRef.current.stop();
     setIsRunning(false);
     setIsPaused(false);
-    addLog('⏹ Simulation stopped');
+    addLog('[x] Simulation stopped');
   };
 
   const handlePause = () => {
@@ -230,11 +180,11 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
       bridgeRef.current?.resetClock();
       simulatorRef.current.resume();
       setIsPaused(false);
-      addLog('⏵ Simulation resumed');
+      addLog('[>] Simulation resumed');
     } else {
       simulatorRef.current.pause();
       setIsPaused(true);
-      addLog('⏸ Simulation paused');
+      addLog('[||] Simulation paused');
     }
   };
 
@@ -248,14 +198,9 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
     setIsRunning(false);
     setIsPaused(false);
     rendererRef.current.render();
-    addLog('🔄 Simulation reset');
+    addLog('[R] Simulation reset');
   };
 
-  const handleBoardChange = (board: string) => {
-    setSelectedBoard(board);
-    handleReset();
-    addLog(`📍 Board changed to: ${AVAILABLE_BOARDS[board]?.name}`);
-  };
 
   return (
     <div
@@ -278,7 +223,7 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
           }}
         >
           <h1 style={{ margin: '0 0 8px 0', fontSize: '20px' }}>
-            🤖 Leanbot 2D Robot Simulator Demo
+            Leanbot 2D Robot Simulator
           </h1>
           <p style={{ margin: 0, fontSize: '12px', color: '#858585' }}>
             Real-time simulation with physics, sensors, and C++ code execution
@@ -313,7 +258,7 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
               fontWeight: 'bold',
             }}
           >
-            ▶ Start
+            [&gt;] Start
           </button>
 
           <button
@@ -331,7 +276,7 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
               fontWeight: 'bold',
             }}
           >
-            {isPaused ? '⏵ Resume' : '⏸ Pause'}
+            {isPaused ? '[>] Resume' : '[||] Pause'}
           </button>
 
           <button
@@ -349,7 +294,7 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
               fontWeight: 'bold',
             }}
           >
-            ⏹ Stop
+            [x] Stop
           </button>
 
           <button
@@ -365,7 +310,7 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
               fontWeight: 'bold',
             }}
           >
-            🔄 Reset
+             Reset
           </button>
 
           <label>Góc robot: <input aria-label="Góc robot" type="number" min="0" max="359" value={robotHeading} disabled={isRunning}
@@ -377,46 +322,8 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
             }} />°</label>
           <div style={{ flex: 1 }} />
 
-          {/* Selectors */}
-          <select
-            value={selectedBoard}
-            onChange={(e) => handleBoardChange(e.target.value)}
-            style={{
-              padding: '4px 8px',
-              backgroundColor: '#3e3e42',
-              color: '#d4d4d4',
-              border: '1px solid #555',
-              borderRadius: '3px',
-              cursor: 'pointer',
-              fontSize: '12px',
-            }}
-          >
-            {Object.entries(AVAILABLE_BOARDS).map(([key, board]) => (
-              <option key={key} value={key}>
-                📍 {board.name}
-              </option>
-            ))}
-          </select>
-
-          <select
-            value={selectedCode}
-            onChange={(e) => setSelectedCode(e.target.value)}
-            style={{
-              padding: '4px 8px',
-              backgroundColor: '#3e3e42',
-              color: '#d4d4d4',
-              border: '1px solid #555',
-              borderRadius: '3px',
-              cursor: 'pointer',
-              fontSize: '12px',
-            }}
-          >
-            <option value="custom">Code C++ đang viết</option>
-            <option value="simple">Simple Movement</option>
-            <option value="maze">Maze Navigation</option>
-            <option value="turn">Turn and Go</option>
-            <option value="complex">Complex Path</option>
-          </select>
+          <span>Synapse City · 4 ft × 4 ft</span>
+          <span>Code C++ đang viết</span>
         </div>
 
         {/* Main Content Area */}
@@ -554,7 +461,7 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
                   color: '#ce9178',
                 }}
               >
-                {selectedCode === 'custom' ? cppCode : DEMO_CODE_EXAMPLES[selectedCode]}
+                {cppCode?.trim() ? cppCode : 'Chưa có code C++. Mở hoặc viết code trong IDE.'}
               </pre>
             </div>
 

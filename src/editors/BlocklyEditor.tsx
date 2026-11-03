@@ -6,7 +6,7 @@ import { leanbotToolbox } from '../blockly/toolbox/toolbox'
 import { stateToProgram, type BlocklyWorkspaceState } from '../blockly/serialization/adapters'
 import type { LeanbotProgram } from '../transpiler'
 
-export interface BlocklyCommands { undo(): void; redo(): void; zoomIn(): void; zoomOut(): void; center(): void }
+export interface BlocklyCommands { undo(): void; redo(): void; zoomIn(): void; zoomOut(): void; center(): void; getLegacySnapshot?(): { xml: string; cpp: string } | undefined }
 
 export const BlocklyEditor = forwardRef<BlocklyCommands, { state: BlocklyWorkspaceState; onChange(state: BlocklyWorkspaceState, program: LeanbotProgram): void }>(function BlocklyEditor({ state, onChange }, ref) {
   const hostRef = useRef<HTMLDivElement>(null)
