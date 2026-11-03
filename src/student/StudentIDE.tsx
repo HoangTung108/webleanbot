@@ -174,8 +174,8 @@ export function StudentIDE({ onSourceChange }: { onSourceChange?: (source: strin
       <aside className="file-sidebar" aria-label="Quản lý tệp">
         <div className="file-sidebar-title"><strong>TỆP CỦA BẠN</strong><button title="Mở tệp từ máy" aria-label="Mở tệp từ máy" onClick={() => fileInput.current?.click()}><FolderOpen /></button></div>
         <div className="file-actions">
-          <button onClick={() => createFile('blocks')}><FilePlus2 />Blockly cũ +</button>
-          <button onClick={() => createFile('cpp')}><FileCode2 />C++ mới</button>
+          <button onClick={() => createFile('blocks')}><FilePlus2 />Blockly+</button>
+          <button onClick={() => createFile('cpp')}><FileCode2 />C++</button>
         </div>
         <input ref={fileInput} type="file" hidden multiple accept=".ino,.cpp,.h,.hpp,.c,.txt,.xml,.bduino,.blockly,.json,.leanbot" onChange={e => void openFiles(e.target.files)} />
         <div className="file-list">
@@ -190,7 +190,7 @@ export function StudentIDE({ onSourceChange }: { onSourceChange?: (source: strin
         <div className="file-downloads">
           <strong>LƯU VỀ MÁY</strong>
           <button onClick={() => saveAs('cpp')}><Download />Code C++ (.ino)</button>
-          {project.legacyXml !== undefined && <button onClick={() => saveAs('blocks')}><Download />Blockly cũ (.bduino)</button>}
+          {project.legacyXml !== undefined && <button onClick={() => saveAs('blocks')}><Download />Blockly(.bduino)</button>}
           {project.legacyXml !== undefined && <button onClick={() => saveAs('xml')}><Download />XML Blockly (.xml)</button>}
           <button onClick={() => saveAs('project')}><Download />Project đầy đủ</button>
           <small>Tự động lưu từng tệp trên trình duyệt. Đổi tên ở thanh trên.</small>
@@ -204,7 +204,7 @@ export function StudentIDE({ onSourceChange }: { onSourceChange?: (source: strin
           : <CppEditor key={project.id} ref={cppRef} value={project.cppSource} diagnostics={project.diagnostics} onChange={(source) => setProject((current) => updateCpp(current, source))} onSave={() => saveAs('cpp')} />}
       </section>
     </div>
-    <footer className="student-footer"><span><Sparkles />Hai chế độ, một chương trình</span><span><Cloud />Lưu trên trình duyệt</span><span className="footer-help">Blockly Leanbot · C++ · Tệp trên máy</span></footer>
+    <footer className="student-footer"><span><Cloud />Lưu trên trình duyệt</span><span className="footer-help">Blockly Leanbot · C++ · Tệp trên máy</span></footer>
     <ConversionDialog candidate={candidate} onCancel={() => setCandidate(null)} onStay={() => { setCandidate(null); setProject((current) => ({ ...current, sourceMode: 'cpp', syncState: 'unsupported-cpp', diagnostics: candidate?.result.diagnostics ?? [] })) }} onPartial={() => { if (candidate) setProject(acceptBlocksCandidate(project, candidate, true)); setCandidate(null) }} />
     <ConflictDialog open={conflictOpen} cpp={project.cppSource} onCancel={() => setConflictOpen(false)} onChoose={(side) => { setProject(resolveConflict(project, side)); setConflictOpen(false) }} />
     {notice && <Toast {...notice} onClose={() => setNotice(null)} />}

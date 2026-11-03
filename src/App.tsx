@@ -30,7 +30,7 @@ function App() {
             e.currentTarget.style.transform = 'scale(1)';
           }}
         >
-          {showSimulator ? '<- IDE' : '[BOT] Simulator ->'}
+          {showSimulator ? '<- IDE' : 'Simulator ->'}
         </button>
       </div>
       <div style={{ display: showSimulator ? 'none' : 'contents' }}><StudentIDE onSourceChange={setSimulatorCode} /></div>
