@@ -28,6 +28,10 @@ export class LeanbotSerialClient {
   onDisconnect: () => void = () => undefined
   private reading = false
   private monitorPromise: Promise<void> | null = null
+  private uploadSession: { push(chunk: Uint8Array): void; fail(error: Error): void; close(): Promise<void> } | null = null
+  private baudRate: number = LEANBOT_PROFILE.serial.baudRate
+  private disconnecting = false
+  private decoder = new TextDecoder()
   private lastDevice: SerialPortInfo | null = null
 
   get supported() { return Boolean((navigator as NavigatorWithSerial).serial) }
@@ -58,6 +62,7 @@ export class LeanbotSerialClient {
 
   private async openSelectedPort() {
     if (!this.port) throw new Error('Không có cổng Leanbot được chọn.')
+    this.baudRate = LEANBOT_PROFILE.serial.baudRate
     await this.port.open({ baudRate: LEANBOT_PROFILE.serial.baudRate, bufferSize: LEANBOT_PROFILE.serial.bufferSize })
     await this.port.setSignals?.({ dataTerminalReady: true })
     this.lastDevice = this.port.getInfo?.() ?? null
@@ -66,13 +71,17 @@ export class LeanbotSerialClient {
 
   async disconnect() {
     const port = this.port
+    this.disconnecting = true
+    await this.uploadSession?.close()
     await this.stopReadLoop()
     try { await port?.close() } catch {}
     this.port = null
+    this.disconnecting = false
     this.onDisconnect()
   }
 
   async send(text: string) {
+    if (this.uploadSession) throw new Error('Cổng USB đang được dùng để nạp firmware.')
     if (!this.port?.writable) throw new Error('Leanbot chưa kết nối.')
     const writer = this.port.writable.getWriter()
     try { await writer.write(new TextEncoder().encode(text)) }
@@ -80,6 +89,7 @@ export class LeanbotSerialClient {
   }
 
   async reset() {
+    if (this.uploadSession) throw new Error('Đang nạp firmware; không thể reset thủ công.')
     if (!this.port?.setSignals) throw new Error('Cổng USB không hỗ trợ reset DTR.')
     await this.port.setSignals({ dataTerminalReady: false })
     await new Promise((resolve) => setTimeout(resolve, LEANBOT_PROFILE.serial.dtrPulseMs))
@@ -87,95 +97,129 @@ export class LeanbotSerialClient {
   }
 
   async createUploadTransport(): Promise<UploadTransport> {
+    if (this.uploadSession) throw new Error('Đã có một phiên nạp firmware đang chạy.')
     if (!this.port?.readable || !this.port.writable) throw new Error('Leanbot chưa kết nối.')
-    await this.stopReadLoop()
     const port = this.port
-    const readable = port.readable
-    const writable = port.writable
-    if (!readable || !writable) throw new Error('Cổng Leanbot không sẵn sàng.')
-    const reader = readable.getReader()
-    const writer = writable.getWriter()
+    let writer = port.writable!.getWriter()
     let queue = new Uint8Array()
-    let pendingRead: Promise<ReadableStreamReadResult<Uint8Array>> | null = null
-
-    const nextChunk = async (timeoutMs: number, signal?: AbortSignal) => {
+    let closed = false
+    let error: Error | undefined
+    const waiters = new Set<() => void>()
+    const notify = () => { for (const wake of [...waiters]) wake() }
+    const check = (signal?: AbortSignal) => {
       if (signal?.aborted) throw abortError()
-      pendingRead ??= reader.read()
-      let timer: ReturnType<typeof setTimeout> | undefined
-      let abortHandler: (() => void) | undefined
+      if (closed) throw new Error('Phiên nạp firmware đã đóng.')
+      if (error) throw error
+    }
+    const wait = (timeoutMs: number, signal?: AbortSignal) => new Promise<void>((resolve, reject) => {
+      const cleanup = () => { clearTimeout(timer); waiters.delete(wake); signal?.removeEventListener('abort', abort) }
+      const wake = () => { cleanup(); resolve() }
+      const abort = () => { cleanup(); reject(abortError()) }
+      const timer = setTimeout(() => { cleanup(); reject(timeoutError()) }, Math.max(0,timeoutMs))
+      waiters.add(wake); signal?.addEventListener('abort', abort, { once: true })
+      if (signal?.aborted) abort()
+    })
+    const switchBaud = async (baudRate: number) => {
+      if (this.baudRate === baudRate) return
+      await this.stopReadLoop()
+      writer.releaseLock()
+      await port.close()
+      await port.open({ baudRate, bufferSize: LEANBOT_PROFILE.serial.bufferSize })
+      if (!port.writable || !port.readable) throw new Error('Không mở lại được cổng USB khi đổi baud.')
+      writer = port.writable.getWriter()
+      this.baudRate = baudRate
+      queue = new Uint8Array()
+      this.startReadLoop()
+    }
+    const close = async () => {
+      if (closed) return
+      closed = true; notify()
       try {
-        const timeout = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(timeoutError()), timeoutMs) })
-        const aborted = new Promise<never>((_, reject) => {
-          abortHandler = () => reject(abortError())
-          signal?.addEventListener('abort', abortHandler, { once: true })
-        })
-        const result = await Promise.race([pendingRead, timeout, aborted])
-        pendingRead = null
-        if (result.done) throw new Error('Cổng USB đã đóng.')
-        return result.value ?? new Uint8Array()
+        if (!this.disconnecting && this.baudRate !== LEANBOT_PROFILE.serial.baudRate) await switchBaud(LEANBOT_PROFILE.serial.baudRate)
       } finally {
-        if (timer) clearTimeout(timer)
-        if (abortHandler) signal?.removeEventListener('abort', abortHandler)
+        try { writer.releaseLock() } catch { /* port may have been unplugged */ }
+        this.uploadSession = null
+        if (queue.length && !this.disconnecting) this.onText(this.decoder.decode(queue, { stream: true }))
+        queue = new Uint8Array()
       }
     }
-
-    const append = (chunk: Uint8Array) => {
-      const next = new Uint8Array(queue.length + chunk.length)
-      next.set(queue)
-      next.set(chunk, queue.length)
-      queue = next
+    // A single reader routes bytes to the monitor or this queue. Never cancel it
+    // just to hand ownership to the uploader: ACK bytes must not be lost.
+    this.decoder = new TextDecoder()
+    this.uploadSession = {
+      push: chunk => {
+        const next = new Uint8Array(queue.length + chunk.length)
+        next.set(queue); next.set(chunk,queue.length); queue = next
+        if (queue.length > 131072) error = new Error('Bộ đệm USB bị tràn trong khi nạp firmware.')
+        notify()
+      },
+      fail: reason => { error = reason; notify() }, close,
     }
-
+    if (!this.reading) this.startReadLoop()
     return {
-      write: (data) => writer.write(data),
-      read: async (length, timeoutMs, signal) => {
-        const deadline = Date.now() + timeoutMs
+      write: async data => { check(); await writer.write(data) },
+      read: async (length,timeoutMs,signal) => {
+        check(signal)
+        const deadline = Date.now()+timeoutMs
         while (queue.length < length) {
-          const remaining = deadline - Date.now()
-          if (remaining <= 0) throw timeoutError()
-          append(await nextChunk(remaining, signal))
+          check(signal)
+          const remaining=deadline-Date.now(); if (remaining<=0) throw timeoutError()
+          await wait(remaining,signal)
         }
-        const value = queue.slice(0, length)
-        queue = queue.slice(length)
-        return value
+        check(signal)
+        const result=queue.slice(0,length); queue=queue.slice(length); return result
       },
-      setDtr: async (value) => { await port.setSignals?.({ dataTerminalReady: value }) },
-      flush: async (durationMs, signal) => {
-        queue = new Uint8Array()
-        const deadline = Date.now() + durationMs
-        while (Date.now() < deadline) {
-          try { await nextChunk(deadline - Date.now(), signal) }
-          catch (error) { if (error instanceof DOMException && error.name === 'AbortError') throw error; break }
+      setDtr: async value => {
+        check()
+        if (!port.setSignals) throw new Error('Cổng USB không hỗ trợ tín hiệu DTR để vào bootloader.')
+        await port.setSignals({ dataTerminalReady:value })
+      },
+      setBaudRate: async baudRate => { check(); await switchBaud(baudRate) },
+      flush: async (durationMs,signal) => {
+        check(signal); queue=new Uint8Array()
+        const deadline=Date.now()+durationMs
+        while(Date.now()<deadline) {
+          check(signal)
+          try { await wait(deadline-Date.now(),signal) }
+          catch(e) { check(signal); if (e instanceof DOMException && e.name==='AbortError') throw e; break }
+          queue=new Uint8Array()
         }
-        queue = new Uint8Array()
-      },
-      close: async () => {
-        try { reader.releaseLock() } catch {}
-        try { writer.releaseLock() } catch {}
-        this.startReadLoop()
-      },
+        queue=new Uint8Array()
+      }, close,
     }
   }
 
   private startReadLoop() {
     if (!this.port?.readable || this.reading) return
     this.reading = true
-    const reader = this.port.readable.getReader()
-    this.reader = reader
-    const decoder = new TextDecoder()
+    const port = this.port
     this.monitorPromise = (async () => {
-      try {
-        while (this.reading) {
-          const { value, done } = await reader.read()
-          if (done) break
-          if (value) this.onText(decoder.decode(value, { stream: true }))
+      let failure: unknown
+      while (this.reading && this.port === port && port.readable) {
+        const stream = port.readable
+        const reader = stream.getReader()
+        this.reader = reader
+        try {
+          while (this.reading) {
+            const { value, done } = await reader.read()
+            if (done) break
+            if (value?.length) {
+              if (this.uploadSession) this.uploadSession.push(value)
+              else this.onText(this.decoder.decode(value, { stream: true }))
+            }
+          }
+        } catch (e) { failure = e }
+        finally {
+          try { reader.releaseLock() } catch { /* already released */ }
+          if (this.reader === reader) this.reader = null
         }
-      } catch (error) {
-        if (this.reading) console.warn('Serial read ended:', error)
-      } finally {
-        try { reader.releaseLock() } catch {}
-        if (this.reader === reader) this.reader = null
+        if (!this.reading || port.readable === stream) break
+        // Web Serial may replace its readable stream after a recoverable error.
+      }
+      if (this.reading) {
         this.reading = false
+        this.uploadSession?.fail(new Error(`Không đọc được dữ liệu USB${failure instanceof Error ? `: ${failure.message}` : '.'}`))
+        this.onDisconnect()
       }
     })()
   }

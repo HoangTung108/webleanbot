@@ -133,9 +133,9 @@ export function StudentIDE({ onSourceChange }: { onSourceChange?: (source: strin
   }
 
   async function run() {
+    if (runAbortRef.current) return
     if (project.sourceMode === 'blocks' && project.legacyXml !== undefined && !blocksRef.current?.getLegacySnapshot?.()) { setNotice({ message: 'Blockly đang tải; vui lòng chờ trước khi chạy.', tone: 'info' }); return }
     const controller = new AbortController()
-    runAbortRef.current?.abort()
     runAbortRef.current = controller
     setBusy(true)
     const current = snapshot()
@@ -148,17 +148,16 @@ export function StudentIDE({ onSourceChange }: { onSourceChange?: (source: strin
       if (!connected) { setNotice({ message: 'Biên dịch thành công. Hãy kết nối Leanbot để nạp chương trình.', tone: 'info' }); return }
       const phaseLabel: Record<UploadPhase, string> = { idle: 'Sẵn sàng.', resetting: 'Đang khởi động bootloader…', syncing: 'Đang đồng bộ Leanbot…', uploading: 'Đang ghi firmware…', verifying: 'Đang xác minh firmware…', done: 'Nạp chương trình thành công.' }
       const transport = await serial.createUploadTransport()
-      await uploadHex(transport, result.hex, { signal: controller.signal, onProgress: (phase, progress) => setNotice({ message: `${phaseLabel[phase]}${['uploading', 'verifying'].includes(phase) ? ` ${Math.round(progress * 100)}%` : ''}`, tone: phase === 'done' ? 'success' : 'info' }) })
+      await uploadHex(transport, result.hex, { signal: controller.signal, onMessage: message => setNotice({ message, tone: 'info' }), onProgress: (phase, progress) => setNotice({ message: `${phaseLabel[phase]}${['uploading', 'verifying'].includes(phase) ? ` ${Math.round(progress * 100)}%` : ''}`, tone: phase === 'done' ? 'success' : 'info' }) })
     }
     catch (error) { setNotice({ message: error instanceof Error ? error.message : String(error), tone: 'error' }) }
-    finally { if (runAbortRef.current === controller) runAbortRef.current = null; setBusy(false) }
+    finally { if (runAbortRef.current === controller) { runAbortRef.current = null; setBusy(false) } }
   }
 
   function stop() {
-    runAbortRef.current?.abort()
-    runAbortRef.current = null
-    setBusy(false)
-    setNotice({ message: 'Đã hủy tiến trình biên dịch hoặc nạp chương trình.', tone: 'info' })
+    if (!runAbortRef.current) return
+    runAbortRef.current.abort()
+    setNotice({ message: 'Đang hủy và giải phóng cổng USB…', tone: 'info' })
   }
 
   const activeCommands = project.sourceMode === 'blocks' ? blocksRef.current : cppRef.current

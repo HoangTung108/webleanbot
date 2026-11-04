@@ -24,6 +24,9 @@ describe('Leanbot Standard hardware profile', () => {
       loadAddressTimeoutMs: 1500,
       writeFlashTimeoutMs: 750,
       readFlashTimeoutMs: 750,
+      baudRates: [115200, 57600],
+      maximumApplicationBytes: 32256,
+      legacyMaximumApplicationBytes: 30720,
     })
   })
 })

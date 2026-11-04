@@ -3,7 +3,7 @@ import { LEANBOT_PROFILE } from '../profile/leanbotDeviceProfile'
 export interface FlashPage { address: number; data: Uint8Array }
 
 function recordBytes(line: string) {
-  if (!line.startsWith(':') || line.length < 11 || line.length % 2 === 0) throw new Error('Intel HEX không hợp lệ.')
+  if (!/^:[0-9a-f]+$/i.test(line) || line.length < 11 || line.length % 2 === 0) throw new Error('Intel HEX không hợp lệ.')
   const record = Array.from({ length: (line.length - 1) / 2 }, (_, index) => Number.parseInt(line.slice(1 + index * 2, 3 + index * 2), 16))
   if (record.some(Number.isNaN)) throw new Error('Intel HEX chứa ký tự không hợp lệ.')
   const length = record[0]
@@ -54,34 +54,15 @@ export function toFlashPages(hex: string, pageSize = LEANBOT_PROFILE.uploader.pa
   if (!Number.isInteger(pageSize) || pageSize <= 0) throw new Error('Kích thước flash page không hợp lệ.')
   const memory = decodeIntelHex(hex)
   if (!memory.size) return []
-  
-  // Filter out bootloader addresses
-  const bootloaderStart = LEANBOT_PROFILE.uploader.bootloaderStart
-  const bootloaderEnd = bootloaderStart + LEANBOT_PROFILE.uploader.bootloaderSize
-  const filteredMemory = new Map(
-    [...memory.entries()].filter(([addr]) => addr < bootloaderStart || addr >= bootloaderEnd)
-  )
-  
-  if (!filteredMemory.size) return []
-  
-  const addresses = [...filteredMemory.keys()]
-  const first = Math.floor(Math.min(...addresses) / pageSize) * pageSize
-  const last = Math.floor(Math.max(...addresses) / pageSize) * pageSize
-  const pages: FlashPage[] = []
-  for (let address = first; address <= last; address += pageSize) {
-    // Skip pages in bootloader area
-    if (address >= bootloaderStart && address < bootloaderEnd) continue
-    
-    const data = new Uint8Array(pageSize).fill(0xff)
-    let used = false
-    for (let offset = 0; offset < pageSize; offset += 1) {
-      const addr = address + offset
-      // Skip bytes in bootloader area
-      if (addr >= bootloaderStart && addr < bootloaderEnd) continue
-      const value = filteredMemory.get(addr)
-      if (value !== undefined) { data[offset] = value; used = true }
-    }
-    if (used) pages.push({ address, data })
+
+  const pages = new Map<number, Uint8Array>()
+  for (const [address,value] of memory) {
+    const base = Math.floor(address/pageSize)*pageSize
+    let data = pages.get(base)
+    if (!data) { data = new Uint8Array(pageSize).fill(0xff); pages.set(base,data) }
+    data[address-base] = value
   }
-  return pages
+  // Preserve every firmware byte here. The uploader validates the application
+  // boundary for the detected bootloader before programming anything.
+  return [...pages].sort(([a],[b])=>a-b).map(([address,data])=>({address,data}))
 }
