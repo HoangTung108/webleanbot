@@ -97,8 +97,15 @@ export class Stk500Uploader {
         if (attempt < 2) await delay(uploader.getSyncRepeatMs, this.signal)
       }
     }
-    if (lastError) throw lastError
-    await this.transact([0x50], 0, uploader.getSyncTimeoutMs, 'SYNC_ERROR')
+    if (lastError) {
+      throw new UploadProtocolError('SYNC_ERROR', 'Không thể kết nối với bootloader Leanbot. Vui lòng kiểm tra kết nối USB và thử lại.', { cause: lastError })
+    }
+    
+    try {
+      await this.transact([0x50], 0, uploader.getSyncTimeoutMs, 'SYNC_ERROR')
+    } catch (error) {
+      throw new UploadProtocolError('SYNC_ERROR', 'Bootloader Leanbot không phản hồi. Thiết bị có thể cần được khởi động lại.', { cause: error })
+    }
   }
 
   private async loadAddress(page: FlashPage, code: UploadErrorCode) {
@@ -108,8 +115,18 @@ export class Stk500Uploader {
 
   private async program(pages: FlashPage[]) {
     this.onProgress('uploading', 0)
+    const bootloaderStart = LEANBOT_PROFILE.uploader.bootloaderStart
+    const bootloaderEnd = bootloaderStart + LEANBOT_PROFILE.uploader.bootloaderSize
+    
     for (let index = 0; index < pages.length; index += 1) {
       const page = pages[index]
+      
+      // Skip programming for pages in bootloader area
+      if (page.address >= bootloaderStart && page.address < bootloaderEnd) {
+        this.onProgress('uploading', (index + 1) / pages.length)
+        continue
+      }
+      
       await this.loadAddress(page, 'WRITE_ERROR')
       await this.transact([0x64, page.data.length >> 8, page.data.length & 0xff, 0x46, ...page.data], 0, LEANBOT_PROFILE.uploader.writeFlashTimeoutMs, 'WRITE_ERROR')
       this.onProgress('uploading', (index + 1) / pages.length)
@@ -118,12 +135,32 @@ export class Stk500Uploader {
 
   private async verify(pages: FlashPage[]) {
     this.onProgress('verifying', 0)
+    const bootloaderStart = LEANBOT_PROFILE.uploader.bootloaderStart
+    const bootloaderEnd = bootloaderStart + LEANBOT_PROFILE.uploader.bootloaderSize
+    
     for (let index = 0; index < pages.length; index += 1) {
       const page = pages[index]
+      
+      // Skip verification for pages in bootloader area
+      if (page.address >= bootloaderStart && page.address < bootloaderEnd) {
+        this.onProgress('verifying', (index + 1) / pages.length)
+        continue
+      }
+      
       await this.loadAddress(page, 'VERIFY_ERROR')
       const actual = await this.transact([0x74, page.data.length >> 8, page.data.length & 0xff, 0x46], page.data.length, LEANBOT_PROFILE.uploader.readFlashTimeoutMs, 'VERIFY_ERROR')
-      const mismatch = actual.findIndex((value, offset) => value !== page.data[offset])
-      if (mismatch >= 0) throw new UploadProtocolError('VERIFY_ERROR', `Xác minh firmware thất bại tại địa chỉ 0x${(page.address + mismatch).toString(16)}.`)
+      
+      const mismatch = actual.findIndex((value, offset) => {
+        const addr = page.address + offset
+        // Skip bytes in bootloader area
+        if (addr >= bootloaderStart && addr < bootloaderEnd) return false
+        return value !== page.data[offset]
+      })
+      
+      if (mismatch >= 0) {
+        const errorAddr = page.address + mismatch
+        throw new UploadProtocolError('VERIFY_ERROR', `Xác minh firmware thất bại tại địa chỉ 0x${errorAddr.toString(16)}.`)
+      }
       this.onProgress('verifying', (index + 1) / pages.length)
     }
   }

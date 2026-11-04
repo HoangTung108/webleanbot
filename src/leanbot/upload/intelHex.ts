@@ -54,15 +54,31 @@ export function toFlashPages(hex: string, pageSize = LEANBOT_PROFILE.uploader.pa
   if (!Number.isInteger(pageSize) || pageSize <= 0) throw new Error('Kích thước flash page không hợp lệ.')
   const memory = decodeIntelHex(hex)
   if (!memory.size) return []
-  const addresses = [...memory.keys()]
+  
+  // Filter out bootloader addresses
+  const bootloaderStart = LEANBOT_PROFILE.uploader.bootloaderStart
+  const bootloaderEnd = bootloaderStart + LEANBOT_PROFILE.uploader.bootloaderSize
+  const filteredMemory = new Map(
+    [...memory.entries()].filter(([addr]) => addr < bootloaderStart || addr >= bootloaderEnd)
+  )
+  
+  if (!filteredMemory.size) return []
+  
+  const addresses = [...filteredMemory.keys()]
   const first = Math.floor(Math.min(...addresses) / pageSize) * pageSize
   const last = Math.floor(Math.max(...addresses) / pageSize) * pageSize
   const pages: FlashPage[] = []
   for (let address = first; address <= last; address += pageSize) {
+    // Skip pages in bootloader area
+    if (address >= bootloaderStart && address < bootloaderEnd) continue
+    
     const data = new Uint8Array(pageSize).fill(0xff)
     let used = false
     for (let offset = 0; offset < pageSize; offset += 1) {
-      const value = memory.get(address + offset)
+      const addr = address + offset
+      // Skip bytes in bootloader area
+      if (addr >= bootloaderStart && addr < bootloaderEnd) continue
+      const value = filteredMemory.get(addr)
       if (value !== undefined) { data[offset] = value; used = true }
     }
     if (used) pages.push({ address, data })

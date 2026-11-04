@@ -20,6 +20,8 @@ export const LEANBOT_PROFILE = Object.freeze({
     loadAddressTimeoutMs: 1500,
     writeFlashTimeoutMs: 750,
     readFlashTimeoutMs: 750,
+    bootloaderStart: 0x7000,
+    bootloaderSize: 0x1000,
   }),
 })
 
