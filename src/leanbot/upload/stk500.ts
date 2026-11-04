@@ -79,6 +79,8 @@ export class Stk500Uploader {
   private async enterBootloader() {
     const { serial, uploader } = LEANBOT_PROFILE
     this.onProgress('resetting', 0)
+    
+    // Reset sequence
     await this.transport.setDtr(false)
     await delay(serial.dtrPulseMs, this.signal)
     await this.transport.setDtr(true)
@@ -86,25 +88,32 @@ export class Stk500Uploader {
     await delay(serial.bootloaderSettleMs, this.signal)
 
     this.onProgress('syncing', 0)
+    
+    // Aggressive sync with keep-alive messages
     let lastError: unknown
-    for (let attempt = 0; attempt < 3; attempt += 1) {
+    const syncDeadline = Date.now() + 5000 // 5 second timeout for initial sync
+    
+    while (Date.now() < syncDeadline) {
       try {
         await this.transact([0x30], 0, uploader.getSyncTimeoutMs, 'SYNC_ERROR')
         lastError = undefined
         break
       } catch (error) {
         lastError = error
-        if (attempt < 2) await delay(uploader.getSyncRepeatMs, this.signal)
+        // Send keep-alive at regular intervals
+        await delay(uploader.getSyncRepeatMs, this.signal)
       }
     }
+    
     if (lastError) {
-      throw new UploadProtocolError('SYNC_ERROR', 'Không thể kết nối với bootloader Leanbot. Vui lòng kiểm tra kết nối USB và thử lại.', { cause: lastError })
+      throw new UploadProtocolError('SYNC_ERROR', 'Không thể kết nối với bootloader Leanbot. Vui lòng kiểm tra kết nối USB và rebooting thiết bị.', { cause: lastError })
     }
     
+    // Confirm bootloader mode with second sync command
     try {
       await this.transact([0x50], 0, uploader.getSyncTimeoutMs, 'SYNC_ERROR')
     } catch (error) {
-      throw new UploadProtocolError('SYNC_ERROR', 'Bootloader Leanbot không phản hồi. Thiết bị có thể cần được khởi động lại.', { cause: error })
+      throw new UploadProtocolError('SYNC_ERROR', 'Bootloader Leanbot không phản hồi. Vui lòng kiểm tra thiết bị có được nạp bootloader đúng cách.', { cause: error })
     }
   }
 
