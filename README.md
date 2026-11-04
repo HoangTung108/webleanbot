@@ -90,3 +90,15 @@ src/
 8. Thêm Project storage: IndexedDB trước, sau đó tài khoản/cloud.
 
 Xem thêm `ARCHITECTURE.md`.
+
+## Compiler của giao diện mới
+
+Mặc định nút Chạy trên Leanbot gửi source tới Leanbot Cloud
+`https://cs.leanbot.space/v3/compile`, giống IDE HTML cũ. Không cần API
+`/api/compile` trên hosting tĩnh. Chân trang hiển thị compiler đang dùng.
+
+Nếu tự vận hành compiler Arduino CLI, đặt `VITE_COMPILER_API` thành URL backend
+(ví dụ `http://localhost:8787`), rồi khởi động lại Vite/build lại. Backend cần
+Arduino CLI, AVR core và thư viện Leanbot; frontend tĩnh không xử lý POST compile.
+Xem `.env.example`. Lỗi HTTP 405 tại `/api/compile` cho biết URL được cấu hình
+không chấp nhận POST của API này; bỏ cấu hình để dùng Cloud hoặc trỏ đúng backend.

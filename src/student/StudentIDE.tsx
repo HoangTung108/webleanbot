@@ -7,7 +7,7 @@ import { BlocklyEditor } from '../editors/BlocklyEditor'
 import type { EditorCommands } from '../editors/CppEditor'
 import { CppEditor } from '../editors/CppEditor'
 import { LeanbotSerialClient } from '../lib/serial'
-import { compileLeanbot } from '../leanbot/compile/compilerClient'
+import { compileLeanbot, compilerDescription } from '../leanbot/compile/compilerClient'
 import { uploadHex, type UploadPhase } from '../leanbot/upload/stk500'
 import { bindProjectPersistence, loadProject, saveProject } from '../project/projectPersistence'
 import { acceptBlocksCandidate, createBlocksCandidate, resolveConflict, synchronizeToCpp, updateBlocks, updateCpp, type ConversionCandidate, type LeanbotProject, type SourceMode } from '../project/projectStore'
@@ -204,7 +204,7 @@ export function StudentIDE({ onSourceChange }: { onSourceChange?: (source: strin
           : <CppEditor key={project.id} ref={cppRef} value={project.cppSource} diagnostics={project.diagnostics} onChange={(source) => setProject((current) => updateCpp(current, source))} onSave={() => saveAs('cpp')} />}
       </section>
     </div>
-    <footer className="student-footer"><span><Cloud />Lưu trên trình duyệt</span><span className="footer-help">Blockly Leanbot · C++ · Tệp trên máy</span></footer>
+    <footer className="student-footer"><span><Cloud />Lưu trên trình duyệt</span><span className="footer-help" title={compilerDescription}>{compilerDescription}</span></footer>
     <ConversionDialog candidate={candidate} onCancel={() => setCandidate(null)} onStay={() => { setCandidate(null); setProject((current) => ({ ...current, sourceMode: 'cpp', syncState: 'unsupported-cpp', diagnostics: candidate?.result.diagnostics ?? [] })) }} onPartial={() => { if (candidate) setProject(acceptBlocksCandidate(project, candidate, true)); setCandidate(null) }} />
     <ConflictDialog open={conflictOpen} cpp={project.cppSource} onCancel={() => setConflictOpen(false)} onChoose={(side) => { setProject(resolveConflict(project, side)); setConflictOpen(false) }} />
     {notice && <Toast {...notice} onClose={() => setNotice(null)} />}

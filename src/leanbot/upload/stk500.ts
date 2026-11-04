@@ -43,9 +43,9 @@ export class Stk500Uploader {
   }
 
   async upload(hex: string) {
-    const pages = toFlashPages(hex, LEANBOT_PROFILE.uploader.pageSize)
-    if (!pages.length) throw new UploadProtocolError('WRITE_ERROR', 'Intel HEX không chứa dữ liệu firmware.')
     try {
+      const pages = toFlashPages(hex, LEANBOT_PROFILE.uploader.pageSize)
+      if (!pages.length) throw new UploadProtocolError('WRITE_ERROR', 'Intel HEX không chứa dữ liệu firmware.')
       await this.enterBootloader()
       await this.program(pages)
       await this.verify(pages)

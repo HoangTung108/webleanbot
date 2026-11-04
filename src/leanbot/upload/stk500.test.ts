@@ -56,4 +56,11 @@ describe('STK500v1 Leanbot uploader', () => {
     await expect(new Stk500Uploader(transport).upload(HEX)).rejects.toMatchObject({ code: 'VERIFY_ERROR' } satisfies Partial<UploadProtocolError>)
     expect(transport.closed).toBe(true)
   })
+  it('releases the port without flashing when firmware is malformed', async () => {
+    const transport = new FakeTransport()
+    await expect(new Stk500Uploader(transport).upload('not Intel HEX')).rejects.toThrow()
+    expect(transport.closed).toBe(true)
+    expect(transport.writes).toHaveLength(0)
+  })
+
 })
