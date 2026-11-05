@@ -1,0 +1,28 @@
+2026-11-05T09:31:44.901Z Compiling diagnostic firmware with Leanbot Cloud...
+2026-11-05T09:31:53.357Z Firmware compiled: 7328 flash bytes. Opening /dev/cu.usbserial-1120.
+2026-11-05T09:31:53.452Z USB baud 115200
+2026-11-05T09:31:53.456Z Kết nối bootloader 115200 baud, lần 1/3…
+2026-11-05T09:31:53.456Z resetting: 0%
+2026-11-05T09:31:53.876Z syncing: 0%
+2026-11-05T09:31:55.484Z Kết nối bootloader 115200 baud, lần 2/3…
+2026-11-05T09:31:55.485Z resetting: 0%
+2026-11-05T09:31:55.906Z syncing: 0%
+2026-11-05T09:31:57.515Z Kết nối bootloader 115200 baud, lần 3/3…
+2026-11-05T09:31:57.515Z resetting: 0%
+2026-11-05T09:31:57.935Z syncing: 0%
+2026-11-05T09:31:59.442Z USB baud 57600
+2026-11-05T09:31:59.445Z Kết nối bootloader 57600 baud, lần 1/3…
+2026-11-05T09:31:59.445Z resetting: 0%
+2026-11-05T09:31:59.864Z syncing: 0%
+2026-11-05T09:32:01.469Z Kết nối bootloader 57600 baud, lần 2/3…
+2026-11-05T09:32:01.469Z resetting: 0%
+2026-11-05T09:32:01.889Z syncing: 0%
+2026-11-05T09:32:03.494Z Kết nối bootloader 57600 baud, lần 3/3…
+2026-11-05T09:32:03.494Z resetting: 0%
+2026-11-05T09:32:03.915Z syncing: 0%
+2026-11-05T09:32:05.430Z FAIL: Không bắt tay được bootloader ở 115200/57600 baud sau khi reset. Lệnh STK500 0x0030: USB read timeout: 0/1 bytes (flashVerified=false, bootloaderBaud=57600)
+
+After user replugged USB: avrdude at 115200 did not sync in ten attempts. User confirmed Leanbot power switch ON and board LED lit.
+Read-only GET_SYNC probes with combined DTR/RTS reset at 57600/115200, waits 50/300 ms: no received bytes in all four cases.
+A 30-second GET_SYNC window at 115200 for manual reset returned NO_SYNC. User subsequently confirmed pressing RESET in response to the manual-reset test request; exact timing relative to the probe window was not independently recorded.
+No flash programming occurred on this replacement-board test because bootloader synchronization never succeeded.
