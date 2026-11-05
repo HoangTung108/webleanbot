@@ -13,7 +13,9 @@
     "test:myblocks": "node scripts/test-myblocks-runtime.cjs",
     "coverage": "vitest run --coverage",
     "preview": "vite preview",
-    "server:network": "tsx server/robotNetworkServer.ts"
+    "server:network": "tsx server/robotNetworkServer.ts",
+    "build:network": "esbuild server/robotNetworkServer.ts --bundle --platform=node --format=esm --packages=external --outfile=build-server/robotNetworkServer.js",
+    "start:network": "node build-server/robotNetworkServer.js"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",

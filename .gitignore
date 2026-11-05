@@ -16889,3 +16889,9 @@ node_modules/.vite/deps/chunk-QIWUAX5S.js.map
 node_modules/.vite/deps/chunk-ZIOOOMZK.js
 node_modules/.vite/deps/chunk-ZIOOOMZK.js.map
 node_modules/.vite/vitest/da39a3ee5e6b4b0d3255bfef95601890afd80709/results.json
+
+# Compiled standalone WebSocket backend
+/build-server/
+
+# Local production environment overrides
+.env.production.local

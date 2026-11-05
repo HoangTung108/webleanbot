@@ -47,7 +47,15 @@ class RobotNetworkServer {
 
   constructor(port: number = 8080) {
     this.port = port;
-    this.server = http.createServer();
+    this.server = http.createServer((request, response) => {
+      if (request.url?.split('?')[0] === '/health') {
+        response.writeHead(200, { 'Content-Type': 'application/json' });
+        response.end(JSON.stringify({ ok: true, service: 'leanbot-robot-network' }));
+        return;
+      }
+      response.writeHead(404, { 'Content-Type': 'text/plain' });
+      response.end('Not found');
+    });
     this.wss = new WebSocketServer({ noServer: true });
     this.setupRoutes();
   }
@@ -256,7 +264,7 @@ class RobotNetworkServer {
   }
 
   start() {
-    this.server.listen(this.port, () => {
+    this.server.listen(this.port, '0.0.0.0', () => {
       console.log(`Robot Network Server running on ws://localhost:${this.port}`);
       console.log('Waiting for connections...');
     });

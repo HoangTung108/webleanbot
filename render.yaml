@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: webleanbot-robot-server
+    runtime: node
+    plan: free
+    buildCommand: npm ci --include=dev && npm run build:network
+    startCommand: npm run start:network
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production

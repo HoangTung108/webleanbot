@@ -102,3 +102,7 @@ Nếu tự vận hành compiler Arduino CLI, đặt `VITE_COMPILER_API` thành U
 Arduino CLI, AVR core và thư viện Leanbot; frontend tĩnh không xử lý POST compile.
 Xem `.env.example`. Lỗi HTTP 405 tại `/api/compile` cho biết URL được cấu hình
 không chấp nhận POST của API này; bỏ cấu hình để dùng Cloud hoặc trỏ đúng backend.
+
+## Máy chủ nhiều robot trên hosting tĩnh
+
+Cần backend WebSocket riêng; GitHub Pages không chạy backend. Xem [hướng dẫn deploy Render](docs/WEBSOCKET_DEPLOYMENT.md). Repo có `render.yaml`; GitHub Actions đọc repository variable `VITE_WEBSOCKET_URL` khi build frontend.
