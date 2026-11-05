@@ -55,7 +55,7 @@ export function MultiRobotConnector() {
   const handleCreateRoom = async () => {
     const newRoomId = await robotNetworkManager.createRoom(password || undefined);
     if (!newRoomId) {
-      setError('Failed to create room');
+      setError(current => current || 'Không tạo được phòng.');
     }
   };
 
@@ -66,7 +66,7 @@ export function MultiRobotConnector() {
     }
     const success = await robotNetworkManager.connectToRoom(roomId.toUpperCase(), password || undefined);
     if (!success) {
-      setError('Failed to join room');
+      setError(current => current || 'Không tham gia được phòng.');
     }
   };
 

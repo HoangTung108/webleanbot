@@ -36,27 +36,16 @@ export class RobotNetworkManager {
   private maxReconnectAttempts = 5;
   private reconnectDelay = 1000;
   private serverUrl: string;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(serverUrl?: string) {
-    // Auto-detect server URL if not provided
-    if (!serverUrl) {
-      // Get from environment variable or use default
-      const envUrl = import.meta.env.VITE_WEBSOCKET_URL;
-      if (envUrl) {
-        this.serverUrl = envUrl;
-      } else {
-        // Default: localhost for dev, or detect from current host for production
-        if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
-          this.serverUrl = 'ws://localhost:8080';
-        } else {
-          // For production, use environment variable or fallback to /webleanbot-ws/
-          this.serverUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.hostname}:8080`;
-        }
-      }
-    } else {
-      this.serverUrl = serverUrl;
-    }
-    
+    const configuredUrl = serverUrl || import.meta.env.VITE_WEBSOCKET_URL;
+    const base = typeof window !== 'undefined' ? window.location.href : 'http://localhost:8080/';
+    const url = new URL(configuredUrl || '/ws', base);
+    if (url.protocol === 'http:') url.protocol = 'ws:';
+    if (url.protocol === 'https:') url.protocol = 'wss:';
+    this.serverUrl = url.toString();
+
     this.clientId = this.generateClientId();
     this.initializeListeners();
     console.log('RobotNetworkManager initialized with server:', this.serverUrl);
@@ -105,6 +94,8 @@ export class RobotNetworkManager {
    */
   async connectToRoom(roomId: string, password?: string): Promise<boolean> {
     try {
+      this.disconnect();
+      this.reconnectAttempts = 0;
       this.roomId = roomId;
       return await this.connectWebSocket();
     } catch (error) {
@@ -118,6 +109,8 @@ export class RobotNetworkManager {
    */
   async createRoom(password?: string, maxPeers: number = 2): Promise<string | null> {
     try {
+      this.disconnect();
+      this.reconnectAttempts = 0;
       this.roomId = this.generateRoomId();
       const connected = await this.connectWebSocket();
       if (connected) {
@@ -153,35 +146,54 @@ export class RobotNetworkManager {
    */
   private connectWebSocket(): Promise<boolean> {
     return new Promise((resolve) => {
+      let timeout: ReturnType<typeof setTimeout> | undefined;
+      let settled = false;
+      const settle = (connected: boolean) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        resolve(connected);
+      };
       try {
-        this.ws = new WebSocket(`${this.serverUrl}?clientId=${this.clientId}&roomId=${this.roomId}`);
-
-        this.ws.onopen = () => {
-          console.log('WebSocket connected');
+        const url = new URL(this.serverUrl);
+        url.searchParams.set('clientId', this.clientId);
+        url.searchParams.set('roomId', this.roomId || '');
+        const socket = new WebSocket(url.toString());
+        this.ws = socket;
+        const reportError = () => this.emit('error', undefined,
+          `Không kết nối được máy chủ nhiều robot (${this.serverUrl}). Khi chạy local, dùng npm run dev hoặc npm run server:network. Khi triển khai, cấu hình VITE_WEBSOCKET_URL tới máy chủ WSS đang hoạt động.`);
+        timeout = setTimeout(() => {
+          if (this.ws !== socket) return;
+          reportError();
+          settle(false);
+          socket.close();
+        }, 8000);
+        socket.onopen = () => {
+          if (this.ws !== socket) return;
           this.reconnectAttempts = 0;
+          settle(true);
           this.emit('connected', { clientId: this.clientId, roomId: this.roomId });
-          resolve(true);
         };
-
-        this.ws.onmessage = (event) => {
-          this.handleMessage(JSON.parse(event.data));
+        socket.onmessage = (event) => {
+          if (this.ws !== socket) return;
+          try { this.handleMessage(JSON.parse(event.data)); }
+          catch { this.emit('error', undefined, 'Máy chủ nhiều robot trả dữ liệu không hợp lệ.'); }
         };
-
-        this.ws.onerror = (error) => {
-          console.error('WebSocket error:', error);
-          this.emit('error', undefined, 'WebSocket connection error');
-          resolve(false);
+        socket.onerror = () => {
+          if (this.ws !== socket) return;
+          reportError();
+          settle(false);
         };
-
-        this.ws.onclose = () => {
-          console.log('WebSocket closed');
+        socket.onclose = () => {
+          settle(false);
+          if (this.ws !== socket) return;
+          this.ws = null;
           this.emit('disconnected');
           this.attemptReconnect();
         };
       } catch (error) {
-        console.error('Failed to create WebSocket:', error);
-        this.emit('error', undefined, `WebSocket creation error: ${error instanceof Error ? error.message : String(error)}`);
-        resolve(false);
+        this.emit('error', undefined, `Không thể mở WebSocket: ${error instanceof Error ? error.message : String(error)}`);
+        settle(false);
       }
     });
   }
@@ -279,10 +291,12 @@ export class RobotNetworkManager {
    * Disconnect
    */
   disconnect(): void {
-    if (this.ws) {
-      this.ws.close();
-      this.ws = null;
-    }
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    this.reconnectTimer = null;
+    const socket = this.ws;
+    this.ws = null;
+    socket?.close();
+    this.emit('disconnected');
     this.roomId = null;
     this.peers.clear();
   }
@@ -294,7 +308,8 @@ export class RobotNetworkManager {
     if (this.reconnectAttempts < this.maxReconnectAttempts) {
       this.reconnectAttempts++;
       console.log(`Attempting reconnect ${this.reconnectAttempts}/${this.maxReconnectAttempts}...`);
-      setTimeout(() => {
+      this.reconnectTimer = setTimeout(() => {
+        this.reconnectTimer = null;
         if (this.roomId) {
           this.connectWebSocket();
         }

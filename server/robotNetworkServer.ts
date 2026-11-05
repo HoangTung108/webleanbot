@@ -2,10 +2,10 @@
  * Multi-Robot WebSocket Server
  * Handles room management and robot state synchronization
  * 
- * Run with: node server/robotNetworkServer.js
+ * Run with: npm run server:network
  */
 
-import WebSocket from 'ws';
+import WebSocket, { WebSocketServer } from 'ws';
 import http from 'http';
 
 interface Room {
@@ -41,14 +41,14 @@ interface Message {
 
 class RobotNetworkServer {
   private rooms: Map<string, Room> = new Map();
-  private wss: WebSocket.Server;
+  private wss: WebSocketServer;
   private server: http.Server;
   private port: number;
 
   constructor(port: number = 8080) {
     this.port = port;
     this.server = http.createServer();
-    this.wss = new WebSocket.Server({ noServer: true });
+    this.wss = new WebSocketServer({ noServer: true });
     this.setupRoutes();
   }
 
