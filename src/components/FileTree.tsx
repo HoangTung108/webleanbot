@@ -1,4 +1,4 @@
-import { Box, ChevronDown, FileCode2, FolderOpen, Settings2 } from './ui/asciiIcons'
+import { Box, ChevronDown, FileCode2, FolderOpen, Settings2 } from './ui/icons'
 
 export function FileTree() {
   return (

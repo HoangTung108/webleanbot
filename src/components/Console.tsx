@@ -1,4 +1,4 @@
-import { Bug, CircleCheck, TerminalSquare } from './ui/asciiIcons'
+import { Bug, CircleCheck, TerminalSquare } from './ui/icons'
 
 export function Console({ output, serial, compiling }: { output: string; serial: string; compiling: boolean }) {
   return (

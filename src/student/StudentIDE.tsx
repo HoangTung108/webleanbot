@@ -1,4 +1,5 @@
-import { Cloud, Save, Sparkles, FilePlus2, FolderOpen, Download, FileCode2, Blocks, Trash2 } from '../components/ui/asciiIcons'
+import { PanelLeft } from 'lucide-react'
+import { Cloud, Save, Sparkles, FilePlus2, FolderOpen, Download, FileCode2, Blocks, Trash2 } from '../components/ui/icons'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { BlocklyCommands } from '../editors/BlocklyEditor'
 import { LegacyBlocklyEditor } from '../editors/LegacyBlocklyEditor'
@@ -166,7 +167,7 @@ export function StudentIDE({ onSourceChange }: { onSourceChange?: (source: strin
 
   return <main className="student-shell">
     <header className="student-header">
-      <button className="sidebar-toggle" aria-label={filesVisible ? 'Thu gọn danh sách tệp' : 'Mở danh sách tệp'} aria-expanded={filesVisible} aria-controls="project-files" onClick={() => setFilesVisible(value => !value)} title="Ẩn / hiện danh sách tệp">[=]</button>
+      <button className="sidebar-toggle" aria-label={filesVisible ? 'Thu gọn danh sách tệp' : 'Mở danh sách tệp'} aria-expanded={filesVisible} aria-controls="project-files" onClick={() => setFilesVisible(value => !value)} title="Ẩn / hiện danh sách tệp"><PanelLeft size={16} /></button>
       <div className="brand-lockup"><img className="brand-logo" src={`${import.meta.env.BASE_URL}leanbot-ide/img/logo-lb-title.png`} alt="Leanbot" /><div><strong>Leanbot Studio</strong><small>Student IDE</small></div></div>
       <div className="project-name"><span>Tệp</span><input aria-label="Tên tệp" value={project.name} onChange={e => setProject(current => ({ ...current, name: e.target.value, updatedAt: Date.now() }))} /></div>
       <div className="save-state"><Save />Tự động lưu<small>{new Date(project.updatedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</small></div>

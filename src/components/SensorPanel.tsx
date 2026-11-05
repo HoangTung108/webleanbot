@@ -1,4 +1,4 @@
-import { Activity, Gauge, Hand, Radar, RotateCw } from './ui/asciiIcons'
+import { Activity, Gauge, Hand, Radar, RotateCw } from './ui/icons'
 import type { SensorSnapshot } from '../types'
 
 function Meter({ value, max = 768 }: { value: number; max?: number }) {

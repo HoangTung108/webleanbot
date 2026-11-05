@@ -1,4 +1,4 @@
-import { Blocks, GripVertical, Plus } from './ui/asciiIcons'
+import { Blocks, GripVertical, Plus } from './ui/icons'
 
 const categories = [
   ['Motion', 'motion'], ['Sensors', 'sensor'], ['Gripper', 'gripper'], ['RGB', 'rgb'], ['Sound', 'sound'], ['Control', 'control']

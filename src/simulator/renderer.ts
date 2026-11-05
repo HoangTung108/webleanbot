@@ -45,6 +45,8 @@ export class SimulatorRenderer {
   private offsetX: number = 0;
   private offsetY: number = 0;
   private scale: number = 1;
+  private viewportWidth = 800;
+  private viewportHeight = 600;
   private boardImage?: HTMLImageElement;
 
   constructor(
@@ -82,8 +84,8 @@ export class SimulatorRenderer {
     const boardWidth = this.board.width;
     const boardHeight = this.board.height;
 
-    const canvasWidth = this.canvas.width;
-    const canvasHeight = this.canvas.height;
+    const canvasWidth = this.viewportWidth;
+    const canvasHeight = this.viewportHeight;
 
     const scaleX = canvasWidth / boardWidth;
     const scaleY = canvasHeight / boardHeight;
@@ -107,8 +109,8 @@ export class SimulatorRenderer {
   clientToBoard(clientX: number, clientY: number): { x: number; y: number } {
     const rect = this.canvas.getBoundingClientRect();
     return {
-      x: ((clientX - rect.left) * this.canvas.width / rect.width - this.offsetX) / this.scale,
-      y: ((clientY - rect.top) * this.canvas.height / rect.height - this.offsetY) / this.scale,
+      x: ((clientX - rect.left) * this.viewportWidth / rect.width - this.offsetX) / this.scale,
+      y: ((clientY - rect.top) * this.viewportHeight / rect.height - this.offsetY) / this.scale,
     };
   }
 
@@ -178,7 +180,7 @@ export class SimulatorRenderer {
    */
   private clearCanvas(): void {
     this.context.fillStyle = this.options.backgroundColor;
-    this.context.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    this.context.fillRect(0, 0, this.viewportWidth, this.viewportHeight);
   }
 
   /**
@@ -225,7 +227,7 @@ export class SimulatorRenderer {
       const canvasX = this.boardToCanvas(x, 0).x;
       this.context.beginPath();
       this.context.moveTo(canvasX, 0);
-      this.context.lineTo(canvasX, this.canvas.height);
+      this.context.lineTo(canvasX, this.viewportHeight);
       this.context.stroke();
     }
 
@@ -233,7 +235,7 @@ export class SimulatorRenderer {
       const canvasY = this.boardToCanvas(0, y).y;
       this.context.beginPath();
       this.context.moveTo(0, canvasY);
-      this.context.lineTo(this.canvas.width, canvasY);
+      this.context.lineTo(this.viewportWidth, canvasY);
       this.context.stroke();
     }
   }
@@ -406,7 +408,7 @@ export class SimulatorRenderer {
     this.context.fillStyle = '#000000';
     this.context.font = 'bold 12px monospace';
 
-    let y = this.canvas.height - 110;
+    let y = this.viewportHeight - 110;
 
     this.context.fillText(`Position: (${pose.x.toFixed(0)}, ${pose.y.toFixed(0)})`, 10, y);
     y += 15;
@@ -432,8 +434,14 @@ export class SimulatorRenderer {
    * Resize canvas
    */
   resizeCanvas(width: number, height: number): void {
-    this.canvas.width = width;
-    this.canvas.height = height;
+    this.viewportWidth = Math.max(1, width);
+    this.viewportHeight = Math.max(1, height);
+    const ratio = Math.max(1, window.devicePixelRatio || 1);
+    this.canvas.width = Math.round(this.viewportWidth * ratio);
+    this.canvas.height = Math.round(this.viewportHeight * ratio);
+    this.context.setTransform(ratio, 0, 0, ratio, 0, 0);
+    this.context.imageSmoothingEnabled = true;
+    this.context.imageSmoothingQuality = 'high';
     this.fitBoardToCanvas();
   }
 }

@@ -18,25 +18,6 @@ body { font-family: Inter, system-ui, sans-serif; background: #fff; }
 .blocklyToolboxDiv { background: #f8fafc !important; border-right: 1px solid #dce3ec; }
 .blocklyTreeRow { border-radius: 5px; height: 30px !important; min-height: 30px !important; line-height: 30px !important; padding: 0 7px !important; margin-bottom: 3px !important; }
 .blocklyTreeLabel { font-family: system-ui, sans-serif !important; font-size: 13px !important; font-weight: 600 !important; }
-.customIcon::before, .fa::before, .fas::before, .far::before, .fab::before { font-family: ui-monospace, monospace !important; font-weight: 700; content: "[*]" !important; font-size: 12px; }
-.fa-robot::before { content: "[LB]" !important; }
-.fa-code::before { content: "{}" !important; }
-.fa-cog::before, .fa-cogs::before { content: "[=]" !important; }
-.fa-folder::before, .fa-folder-open::before { content: "[/]" !important; }
-.fa-puzzle-piece::before, .fa-cubes::before, .fa-cube::before { content: "[#]" !important; }
-.fa-microchip::before { content: "[IC]" !important; }
-.fa-project-diagram::before { content: "[?]" !important; }
-.fa-retweet::before { content: "[@]" !important; }
-.fa-calculator::before { content: "[+]" !important; }
-.fa-quote-left::before { content: "Aa" !important; }
-.fa-list::before { content: "[=]" !important; }
-.fa-palette::before { content: "RGB" !important; }
-.fa-question::before { content: "[?]" !important; }
-.fa-whmcs::before { content: "fn" !important; }
-.fa-bolt::before { content: "[V]" !important; }
-.fa-thermometer-half::before { content: "[T]" !important; }
-.fa-redo::before { content: "->" !important; }
-.fa-undo::before { content: "<-" !important; }
 .blocklyMainBackground { stroke: none !important; fill: #fff !important; }
 `
 export const LegacyBlocklyEditor = forwardRef<BlocklyCommands, { xml: string; onChange(xml: string, cpp: string): void; onError(message: string): void }>(function LegacyBlocklyEditor({ xml, onChange, onError }, ref) {

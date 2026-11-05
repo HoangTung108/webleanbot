@@ -1,3 +1,4 @@
+import { Network, Plus, LogIn, Check } from 'lucide-react';
 import React, { useState, useEffect } from 'react';
 import { robotNetworkManager } from '../lib/robotNetworkManager';
 
@@ -85,7 +86,7 @@ export function MultiRobotConnector() {
         aria-label="Kết nối nhiều robot"
         title={isConnected ? `Connected to room ${currentRoom}` : 'Click to connect'}
       >
-        [NET] {isConnected ? `${peers.length + 1}` : ''}
+        <Network size={16} /> {isConnected ? `${peers.length + 1}` : ''}
       </button>
 
       {/* Dropdown menu */}
@@ -93,7 +94,7 @@ export function MultiRobotConnector() {
         <div style={styles.dropdown}>
           {isConnected && currentRoom ? (
             <>
-              <div style={styles.dropdownHeader}>Connected ✓</div>
+              <div style={styles.dropdownHeader}><Check size={14} /> Connected</div>
               <div style={styles.dropdownRow}>
                 <span style={styles.dropdownLabel}>Room:</span>
                 <span style={styles.dropdownValue}>{currentRoom}</span>
@@ -129,13 +130,13 @@ export function MultiRobotConnector() {
                     onClick={() => setConnectionMode('create')}
                     style={styles.dropdownBtn}
                   >
-                    ➕ Create Room
+                    <Plus size={14} /> Create Room
                   </button>
                   <button 
                     onClick={() => setConnectionMode('join')}
                     style={styles.dropdownBtn}
                   >
-                    🔗 Join Room
+                    <LogIn size={14} /> Join Room
                   </button>
                 </>
               )}
@@ -215,6 +216,9 @@ const styles = {
     display: 'inline-block',
   } as React.CSSProperties,
   statusBtn: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '5px',
     padding: '6px 12px',
     backgroundColor: '#f5f5f5',
     border: '1px solid #ddd',
@@ -246,6 +250,9 @@ const styles = {
     fontSize: '13px',
   } as React.CSSProperties,
   dropdownHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '5px',
     padding: '6px 8px',
     fontWeight: 'bold',
     borderBottom: '1px solid #eee',
@@ -273,7 +280,9 @@ const styles = {
     textAlign: 'right',
   } as React.CSSProperties,
   dropdownBtn: {
-    display: 'block',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
     width: '100%',
     padding: '6px 8px',
     marginTop: '4px',

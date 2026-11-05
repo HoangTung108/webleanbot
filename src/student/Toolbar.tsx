@@ -1,4 +1,4 @@
-import { Blocks, Braces, Cable, CircleStop, LocateFixed, Play, Redo2, Undo2, ZoomIn, ZoomOut } from '../components/ui/asciiIcons'
+import { Blocks, Braces, Cable, CircleStop, LocateFixed, Play, Redo2, Undo2, ZoomIn, ZoomOut } from '../components/ui/icons'
 import type { SourceMode, SyncState } from '../project/projectStore'
 import { Button } from '../components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '../components/ui/tabs'

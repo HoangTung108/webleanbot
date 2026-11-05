@@ -4,6 +4,7 @@ import { mountMissionEditor } from './missionEditor';
  * Standalone demo showing all simulator features
  */
 
+import { Play, Pause, Square, RotateCcw, Terminal, Trash2, Maximize2, Settings2, CircleAlert, Info, CircleCheck, Code2, MapPin, Gauge, MousePointer2 } from 'lucide-react';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   RobotSimulator,
@@ -26,7 +27,11 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
   const [showSensorDebug, setShowSensorDebug] = useState(false);
   const [showTrajectory, setShowTrajectory] = useState(true);
   const [showGrid, setShowGrid] = useState(true);
-  const [logs, setLogs] = useState<string[]>(['Simulator ready']);
+  const [logs, setLogs] = useState<{ time: string; message: string; level: 'info' | 'error' | 'success' }[]>([]);
+  const [followLogs, setFollowLogs] = useState(true);
+  const logViewRef = useRef<HTMLDivElement>(null);
+  const fieldRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (followLogs && logViewRef.current) logViewRef.current.scrollTop = logViewRef.current.scrollHeight; }, [logs, followLogs]);
   const [stats, setStats] = useState({
     time: 0,
     frames: 0,
@@ -61,14 +66,16 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
     rendererRef.current = renderer;
     bridgeRef.current = bridge;
 
-    setRobotHeading(simulator.getRobotPose().heading);
+    const initialPose = simulator.getRobotPose();
+    setRobotHeading(initialPose.heading);
+    setStats(prev => ({...prev,posX:initialPose.x,posY:initialPose.y,heading:initialPose.heading}));
     const detachMission = missionHostRef.current ? mountMissionEditor(missionHostRef.current, simulator.mission, {
       canvas: canvasRef.current,
       toBoard: (x,y) => renderer.clientToBoard(x,y),
       locked: () => simulator.getSimulationState().isRunning,
       pose: () => simulator.getRobotPose(), render: () => renderer.render(),
     }) : () => {};
-    const detachPlacement = renderer.enablePlacement(pose => setRobotHeading(pose.heading));
+    const detachPlacement = renderer.enablePlacement(pose => { setRobotHeading(pose.heading); setStats(prev => ({...prev,posX:pose.x,posY:pose.y,heading:pose.heading})); });
     const resize = () => {
       const rect = canvasRef.current?.getBoundingClientRect();
       if (rect && rect.width > 0 && rect.height > 0) { renderer.resizeCanvas(rect.width, rect.height); renderer.render(); }
@@ -78,7 +85,7 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
     window.addEventListener('resize', resize);
     resize();
     renderer.render();
-    addLog(`Board loaded: ${board.name}`);
+    addLog(`Đã tải sa bàn: ${board.name}`);
     return () => { detachMission(); detachPlacement(); observer?.disconnect(); window.removeEventListener('resize', resize); bridge.stopExecution(); simulator.stop(); };
   }, []);
 
@@ -148,7 +155,9 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
   }, [isRunning, isPaused]);
 
   const addLog = (message: string) => {
-    setLogs((prev) => [...prev.slice(-19), `[${new Date().toLocaleTimeString()}] ${message}`]);
+    const level = message.includes('[ERROR]') || message.includes('Chưa có code') ? 'error' : message.includes('Đã tải sa bàn') || message.includes('Chạy code') ? 'success' : 'info';
+    const text = message.replace(/^\[(?:ERROR|>|x|R|\|\|)\]\s*/, '');
+    setLogs(prev => message.startsWith('Đã tải sa bàn:') && prev.some(log => log.message === text) ? prev : [...prev.slice(-199), { time: new Date().toLocaleTimeString('vi-VN', { hour12: false }), message: text, level }]);
   };
 
   const handleStart = () => {
@@ -179,7 +188,8 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
     simulatorRef.current.stop();
     setIsRunning(false);
     setIsPaused(false);
-    addLog('[x] Simulation stopped');
+    setStats(prev => ({...prev,speedL:0,speedR:0}));
+    addLog('Đã dừng mô phỏng');
   };
 
   const handlePause = () => {
@@ -188,11 +198,11 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
       bridgeRef.current?.resetClock();
       simulatorRef.current.resume();
       setIsPaused(false);
-      addLog('[>] Simulation resumed');
+      addLog('Đã tiếp tục mô phỏng');
     } else {
       simulatorRef.current.pause();
       setIsPaused(true);
-      addLog('[||] Simulation paused');
+      addLog('Đã tạm dừng mô phỏng');
     }
   };
 
@@ -206,294 +216,58 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
     setIsRunning(false);
     setIsPaused(false);
     rendererRef.current.render();
-    addLog('[R] Simulation reset');
+    const pose = simulatorRef.current.getRobotPose();
+    setStats({time:0,frames:0,posX:pose.x,posY:pose.y,heading:pose.heading,speedL:0,speedR:0,irC:0,distance:0});
+    addLog('Đã đặt lại mô phỏng');
   };
 
 
+  const status = isPaused ? 'Tạm dừng' : isRunning ? 'Đang chạy' : 'Sẵn sàng';
   return (
-    <div className="simulator-shell"
-      style={{
-        display: 'flex',
-        height: '100%',
-        backgroundColor: '#f5f7fa',
-        color: '#334155',
-        fontFamily: 'Segoe UI, Tahoma, Geneva, Verdana, sans-serif',
-      }}
-    >
-      {/* Main Content */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        {/* Header */}
-        <div
-          style={{
-            padding: '10px 14px',
-            backgroundColor: '#ffffff',
-            borderBottom: '1px solid #3e3e42',
-          }}
-        >
-          <h1 style={{ margin: '0 0 8px 0', fontSize: '16px' }}>
-            Giả lập Leanbot
-          </h1>
-          <p style={{ margin: 0, fontSize: '12px', color: '#858585' }}>
-            Synapse City · Vật lý, cảm biến và chương trình C++
-          </p>
+    <div className="simulator-shell sim-studio">
+      <header className="sim-heading">
+        <div><span className="sim-eyebrow">KHÔNG GIAN THỬ NGHIỆM</span><h1>Giả lập Leanbot</h1></div>
+        <span className={`sim-status ${isRunning && !isPaused ? 'running' : ''}`}><span />{status}</span>
+      </header>
+      <div className="sim-toolbar" role="toolbar" aria-label="Điều khiển mô phỏng">
+        <div className="sim-playback">
+          <button className="sim-button primary" onClick={handleStart} disabled={isRunning}><Play size={15} />Chạy</button>
+          <button className="sim-button" onClick={handlePause} disabled={!isRunning}>{isPaused ? <Play size={15} /> : <Pause size={15} />}{isPaused ? 'Tiếp tục' : 'Tạm dừng'}</button>
+          <button className="sim-button stop" onClick={handleStop} disabled={!isRunning}><Square size={14} />Dừng</button>
+          <button className="sim-button icon-only" onClick={handleReset} title="Đặt lại mô phỏng" aria-label="Đặt lại mô phỏng"><RotateCcw size={16} /></button>
         </div>
-
-        {/* Controls Toolbar */}
-        <div
-          style={{
-            display: 'flex',
-            gap: '8px',
-            padding: '12px',
-            backgroundColor: '#f8fafc',
-            borderBottom: '1px solid #3e3e42',
-            flexWrap: 'wrap',
-            alignItems: 'center',
-          }}
-        >
-          {/* Playback Controls */}
-          <button
-            onClick={handleStart}
-            disabled={isRunning}
-            style={{
-              padding: '6px 12px',
-              backgroundColor: isRunning ? '#444' : '#146c54',
-              color: 'white',
-              border: 'none',
-              borderRadius: '3px',
-              cursor: isRunning ? 'default' : 'pointer',
-              opacity: isRunning ? 0.5 : 1,
-              fontSize: '12px',
-              fontWeight: 'bold',
-            }}
-          >
-            [&gt;] Start
-          </button>
-
-          <button
-            onClick={handlePause}
-            disabled={!isRunning}
-            style={{
-              padding: '6px 12px',
-              backgroundColor: '#d9b14d',
-              color: 'white',
-              border: 'none',
-              borderRadius: '3px',
-              cursor: !isRunning ? 'default' : 'pointer',
-              opacity: !isRunning ? 0.5 : 1,
-              fontSize: '12px',
-              fontWeight: 'bold',
-            }}
-          >
-            {isPaused ? '[>] Resume' : '[||] Pause'}
-          </button>
-
-          <button
-            onClick={handleStop}
-            disabled={!isRunning}
-            style={{
-              padding: '6px 12px',
-              backgroundColor: '#c41e3a',
-              color: 'white',
-              border: 'none',
-              borderRadius: '3px',
-              cursor: !isRunning ? 'default' : 'pointer',
-              opacity: !isRunning ? 0.5 : 1,
-              fontSize: '12px',
-              fontWeight: 'bold',
-            }}
-          >
-            [x] Stop
-          </button>
-
-          <button
-            onClick={handleReset}
-            style={{
-              padding: '6px 12px',
-              backgroundColor: '#6a7c8c',
-              color: 'white',
-              border: 'none',
-              borderRadius: '3px',
-              cursor: 'pointer',
-              fontSize: '12px',
-              fontWeight: 'bold',
-            }}
-          >
-             Reset
-          </button>
-
-          <label>Góc robot: <input aria-label="Góc robot" type="number" min="0" max="359" value={robotHeading} disabled={isRunning}
-            style={{ width: '64px' }} onChange={e => {
-              if (e.target.value === '') return;
-              simulatorRef.current?.setHeading(Number(e.target.value));
-              setRobotHeading(simulatorRef.current?.getRobotPose().heading ?? 0);
-              rendererRef.current?.render();
-            }} />°</label>
-          <div style={{ flex: 1 }} />
-
-          <span>Synapse City · 4 ft × 4 ft</span>
-          <span>Code C++ đang viết</span>
+        <label className="sim-heading-input">Hướng robot <input aria-label="Góc robot" type="number" min="0" max="359" value={robotHeading} disabled={isRunning} onChange={e => {
+          if (e.target.value === '') return;
+          simulatorRef.current?.setHeading(Number(e.target.value));
+          const heading = simulatorRef.current?.getRobotPose().heading ?? 0;
+          setRobotHeading(heading);
+          setStats(prev => ({...prev,heading}));
+          rendererRef.current?.render();
+        }} /><span>°</span></label>
+        <span className="sim-toolbar-note">C++ từ tệp đang mở</span>
+      </div>
+      <div className="sim-layout">
+        <div className="sim-main">
+          <section className="sim-field" ref={fieldRef} aria-label="Sa bàn Synapse City">
+            <div className="sim-section-heading"><div><MapPin size={15} /><strong>Synapse City · 4 ft × 4 ft</strong></div><button className="sim-button icon-only" title="Toàn màn hình sa bàn" aria-label="Toàn màn hình sa bàn" onClick={() => { void fieldRef.current?.requestFullscreen?.().catch(() => addLog('[ERROR] Không mở được toàn màn hình.')); }}><Maximize2 size={15} /></button></div>
+            <div className="sim-canvas-wrap"><canvas ref={canvasRef} aria-label="Sa bàn và robot" /></div>
+            <div className="sim-field-caption"><MousePointer2 size={13} /><span>Kéo robot để đặt vị trí trước khi chạy</span><span>2000 = 35 cm / 5 giây</span></div>
+          </section>
+          <section className="sim-log-panel" aria-label="Nhật ký mô phỏng">
+            <div className="sim-section-heading"><div><Terminal size={15} /><strong>Nhật ký</strong><span className="sim-count">{logs.length}</span></div><div><label className="sim-follow"><input type="checkbox" checked={followLogs} onChange={e => setFollowLogs(e.target.checked)} />Theo dõi</label><button className="sim-button icon-only" aria-label="Xóa nhật ký" title="Xóa nhật ký" disabled={!logs.length} onClick={() => setLogs([])}><Trash2 size={14} /></button></div></div>
+            <div className="sim-log-entries" ref={logViewRef} role="log" aria-live="polite" aria-relevant="additions">
+              {logs.length === 0 ? <p className="sim-empty-log">Chưa có hoạt động. Chạy chương trình để xem kết quả tại đây.</p> : logs.map((log, i) => <div className={`sim-log-row ${log.level}`} key={`${log.time}-${i}`}><time>{log.time}</time>{log.level === 'error' ? <CircleAlert size={13} /> : log.level === 'success' ? <CircleCheck size={13} /> : <Info size={13} />}<span>{log.message}</span></div>)}
+            </div>
+          </section>
         </div>
-
-        {/* Main Content Area */}
-        <div className="simulator-workspace" style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-          {/* Canvas */}
-          <div className="simulator-canvas-area"
-            style={{
-              flex: 2,
-              display: 'flex',
-              flexDirection: 'column',
-              borderRight: '1px solid #3e3e42',
-            }}
-          >
-            <div style={{ fontSize: 12, padding: 8 }}>Bấm vào sa bàn hoặc kéo robot để đặt vị trí trước khi chạy. Tốc độ 2000: 35 cm / 5 giây.</div>
-            <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
-            <canvas
-              ref={canvasRef}
-              style={{
-                width: '100%',
-                height: '100%',
-                display: 'block',
-                backgroundColor: '#ffffff',
-                minHeight: 0,
-              }}
-            />
-            </div>
-          </div>
-
-          {/* Right Sidebar */}
-          <div className="simulator-inspector"
-            style={{
-              flex: 1,
-              display: 'flex',
-              flexDirection: 'column',
-              overflow: 'auto',
-              fontSize: '12px',
-            }}
-          >
-            <div ref={missionHostRef} />
-            {/* Options */}
-            <div
-              style={{
-                padding: '12px',
-                borderBottom: '1px solid #3e3e42',
-                backgroundColor: '#ffffff',
-              }}
-            >
-              <h3 style={{ margin: '0 0 8px 0', fontSize: '13px' }}>Options</h3>
-              <label
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  marginBottom: '6px',
-                  cursor: 'pointer',
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={showGrid}
-                  onChange={(e) => setShowGrid(e.target.checked)}
-                />
-                Show Grid
-              </label>
-              <label
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  marginBottom: '6px',
-                  cursor: 'pointer',
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={showTrajectory}
-                  onChange={(e) => setShowTrajectory(e.target.checked)}
-                />
-                Trajectory
-              </label>
-              <label
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  cursor: 'pointer',
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={showSensorDebug}
-                  onChange={(e) => setShowSensorDebug(e.target.checked)}
-                />
-                Sensor Debug
-              </label>
-            </div>
-
-            {/* Statistics */}
-            <div
-              style={{
-                padding: '12px',
-                borderBottom: '1px solid #3e3e42',
-                backgroundColor: '#ffffff',
-              }}
-            >
-              <h3 style={{ margin: '0 0 8px 0', fontSize: '13px' }}>Statistics</h3>
-              <div style={{ fontFamily: 'monospace', lineHeight: '1.5' }}>
-                <div>Time: {stats.time.toFixed(2)}s</div>
-                <div>Frames: {stats.frames}</div>
-                <div>Pos: ({stats.posX.toFixed(0)}, {stats.posY.toFixed(0)})</div>
-                <div>Heading: {stats.heading.toFixed(1)}°</div>
-                <div>Speed L/R: {stats.speedL.toFixed(0)} / {stats.speedR.toFixed(0)} mm/s</div>
-                <div>IR Center: {stats.irC}</div>
-                <div>Distance: {stats.distance.toFixed(1)}mm</div>
-              </div>
-            </div>
-
-            {/* Code */}
-            <div
-              style={{
-                padding: '12px',
-                borderBottom: '1px solid #3e3e42',
-                backgroundColor: '#ffffff',
-              }}
-            >
-              <h3 style={{ margin: '0 0 8px 0', fontSize: '13px' }}>C++ Code</h3>
-              <pre
-                style={{
-                  margin: 0,
-                  padding: '8px',
-                  backgroundColor: '#f5f7fa',
-                  borderRadius: '3px',
-                  fontSize: '10px',
-                  overflow: 'auto',
-                  maxHeight: '150px',
-                  color: '#ce9178',
-                }}
-              >
-                {cppCode?.trim() ? cppCode : 'Chưa có code C++. Mở hoặc viết code trong IDE.'}
-              </pre>
-            </div>
-
-            {/* Logs */}
-            <div
-              style={{
-                flex: 1,
-                padding: '12px',
-                overflow: 'auto',
-                backgroundColor: '#f5f7fa',
-              }}
-            >
-              <h3 style={{ margin: '0 0 8px 0', fontSize: '13px' }}>Logs</h3>
-              <div style={{ fontSize: '11px', fontFamily: 'monospace', lineHeight: '1.4' }}>
-                {logs.map((log, i) => (
-                  <div key={i} style={{ color: '#858585' }}>
-                    {log}
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
+        <aside className="sim-inspector" aria-label="Thiết lập mô phỏng">
+          <section className="sim-telemetry"><div className="sim-section-heading"><div><Gauge size={15} /><strong>Trạng thái robot</strong></div><span>Trực tiếp</span></div>
+            <dl className="sim-metrics"><div><dt>Thời gian</dt><dd>{stats.time.toFixed(1)}<small>s</small></dd></div><div><dt>Hướng</dt><dd>{stats.heading.toFixed(0)}<small>°</small></dd></div><div><dt>Vị trí X / Y</dt><dd>{stats.posX.toFixed(0)} / {stats.posY.toFixed(0)}<small>mm</small></dd></div><div><dt>Tốc độ trái / phải</dt><dd>{stats.speedL.toFixed(0)} / {stats.speedR.toFixed(0)}<small>mm/s</small></dd></div></dl>
+          </section>
+          <details className="sim-settings" open><summary><Settings2 size={15} />Hiển thị sa bàn</summary><div className="sim-options"><label><input type="checkbox" checked={showGrid} onChange={e => setShowGrid(e.target.checked)} />Lưới tọa độ</label><label><input type="checkbox" checked={showTrajectory} onChange={e => setShowTrajectory(e.target.checked)} />Đường di chuyển</label><label><input type="checkbox" checked={showSensorDebug} onChange={e => setShowSensorDebug(e.target.checked)} />Cảm biến</label></div></details>
+          <details className="sim-settings" open><summary><MapPin size={15} />Khối nhiệm vụ</summary><div ref={missionHostRef} /></details>
+          <details className="sim-settings"><summary><Code2 size={15} />Chương trình C++</summary><pre className="sim-code">{cppCode?.trim() ? cppCode : 'Chưa có code C++. Mở hoặc viết code trong IDE.'}</pre></details>
+        </aside>
       </div>
     </div>
   );
