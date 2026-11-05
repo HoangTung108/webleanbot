@@ -964,14 +964,17 @@ class Uploader {
     await this.#loadAddress(pageIndex, abortSignal);
 
     // 2) PROG PAGE
-    const progPageHeader = new Uint8Array([0x64, 0x00, Uploader.#config.pageSizeByte, 0x46]); // STK_PROG_PAGE + len_hi + len_lo + 'F'
-    const progPageTail = new Uint8Array([0x20]); // STK_CRC_EOP
+    const size = pageData.length;
+    const packet = new Uint8Array(size + 5);
+    packet[0] = 0x64; // STK_PROG_PAGE
+    packet[1] = (size >> 8) & 0xFF;
+    packet[2] = size & 0xFF;
+    packet[3] = 0x46; // Flash memory 'F'
+    packet.set(pageData, 4);
+    packet[size + 4] = 0x20; // STK_CRC_EOP
 
     console.log(`[WRITE] Sending PROG_PAGE command for page ${pageIndex}`);
-
-    await this.#leanbot.SerialSend(progPageHeader);
-    await this.#leanbot.SerialSend(pageData);
-    await this.#leanbot.SerialSend(progPageTail);
+    await this.#leanbot.SerialSend(packet);
 
     this.#emitUploadMessage(`Receive ${pageIndex + 1}`);
 
@@ -1056,6 +1059,12 @@ class Uploader {
 
         console.log(`[VERIFY] Reading page ${pageIndex}...`);
         const deviceData = await this.#readFlash(pageIndex);
+        if (pageIndex === 0) {
+          const hex = data => Array.from(data.slice(0, 16))
+            .map(byte => byte.toString(16).padStart(2, "0")).join(" ");
+          console.log("[VERIFY] Expected:", hex(page.bytes));
+          console.log("[VERIFY] Actual:  ", hex(deviceData));
+        }
         const isSame = this.#comparePage(page.bytes, deviceData);
 
         if (!isSame) {
@@ -1145,7 +1154,7 @@ class Uploader {
     await this.#writeAllPages(pages);
 
     // Verify
-    await this.#verifyUploadedCode();
+    await this.#verifyUploadedCode("full");
 
     // if any error above, we will throw it -> upload catch and terminate the session
     // if nothing happen => upload have successed

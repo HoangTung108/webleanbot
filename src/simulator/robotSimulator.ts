@@ -240,26 +240,53 @@ export class RobotSimulator {
 
   /**
    * Update robot position based on differential drive kinematics
+   * Uses proper integration for accurate diagonal and curved movement
    */
   private updateRobotKinematics(deltaTime: number): void {
     const pose = this.state.robotState.pose;
     const vL = this.state.robotState.velocityLeft;
     const vR = this.state.robotState.velocityRight;
     const wheelBase = this.robotConfig.wheelBase;
+    const dt = deltaTime; // deltaTime is already in seconds from update()
 
     // Differential drive kinematics
-    const v = (vL + vR) / 2; // linear velocity
-    const w = (vL - vR) / wheelBase; // angular velocity (rad/s)
+    const v = (vL + vR) / 2; // linear velocity (mm/s)
+    const w = (vR - vL) / wheelBase; // angular velocity (rad/s), note: positive = left turn
 
-    // Update heading
-    const headingRad = (pose.heading * Math.PI) / 180;
-    pose.heading += (w * deltaTime * 180) / Math.PI;
-    pose.heading = pose.heading % 360;
+    const theta = (pose.heading * Math.PI) / 180; // current heading in radians
 
-    // Update position
-    const headingRadUpdated = (pose.heading * Math.PI) / 180;
-    pose.x += v * Math.cos(headingRadUpdated) * deltaTime;
-    pose.y += v * Math.sin(headingRadUpdated) * deltaTime;
+    // Use more accurate integration for small time steps
+    // This handles both straight and curved motion correctly
+    if (Math.abs(w) < 1e-6) {
+      // Nearly straight line motion
+      const dx = v * Math.cos(theta) * dt;
+      const dy = v * Math.sin(theta) * dt;
+      pose.x += dx;
+      pose.y += dy;
+    } else {
+      // Curved motion with rotation
+      // Radius of curvature
+      const R = v / w;
+      
+      // Change in heading
+      const dtheta = w * dt;
+      
+      // New heading
+      const newTheta = theta + dtheta;
+      
+      // Position change using circular arc
+      // This is more accurate than simple Euler integration
+      const dx = R * (Math.sin(newTheta) - Math.sin(theta));
+      const dy = R * (Math.cos(theta) - Math.cos(newTheta));
+      
+      pose.x += dx;
+      pose.y += dy;
+      pose.heading = (newTheta * 180 / Math.PI) % 360;
+    }
+
+    // Keep heading in range [0, 360)
+    if (pose.heading < 0) pose.heading += 360;
+    if (pose.heading >= 360) pose.heading -= 360;
   }
 
   /**

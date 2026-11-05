@@ -130,7 +130,13 @@ export class Stk500Uploader {
       this.onMessage(`Đọc lại flash tại ${addressText(page.address)}…`)
       const actual=await this.transact([0x74,page.data.length>>8,page.data.length&0xff,0x46],page.data.length,LEANBOT_PROFILE.uploader.readFlashTimeoutMs,'VERIFY_ERROR')
       const mismatch=actual.findIndex((value,offset)=>value!==page.data[offset])
-      if(mismatch>=0)throw new UploadProtocolError('VERIFY_ERROR',`Flash không khớp tại ${addressText(page.address+mismatch)}: cần ${addressText(page.data[mismatch])}, đọc được ${addressText(actual[mismatch])}.`)
+      if(mismatch>=0) {
+        const constantReadback=actual.length>=16 && actual.every(value=>value===0x62)
+        const recovery=constantReadback
+          ? ' Bootloader trả toàn byte 0x62. Chưa xác nhận firmware được ghi đúng. Thử xác minh bằng Arduino IDE/avrdude; nếu cùng lỗi, cần kiểm tra flash, fuse/lock và bootloader qua ISP (USBasp hoặc Arduino as ISP).'
+          : ''
+        throw new UploadProtocolError('VERIFY_ERROR',`Flash không khớp tại ${addressText(page.address+mismatch)}: cần ${addressText(page.data[mismatch])}, đọc được ${addressText(actual[mismatch])}.${recovery}`)
+      }
       this.onProgress('verifying',(index+1)/pages.length)
     }
   }

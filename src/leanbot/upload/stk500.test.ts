@@ -58,6 +58,20 @@ describe('STK500v1 Leanbot uploader', () => {
     await expect(new Stk500Uploader(transport).upload(HEX)).rejects.toMatchObject({ code: 'VERIFY_ERROR' } satisfies Partial<UploadProtocolError>)
     expect(transport.closed).toBe(true)
   })
+  it('explains constant 0x62 readback and never reports a verified upload', async () => {
+    class ConstantReadback extends FakeTransport {
+      async write(data: Uint8Array) {
+        await super.write(data)
+        if(data[0]===0x74)this.response=[0x14,...Array((data[1]<<8)|data[2]).fill(0x62),0x10]
+      }
+    }
+    const transport=new ConstantReadback(), states:string[]=[]
+    await expect(new Stk500Uploader(transport,{onProgress:state=>states.push(state)}).upload(HEX))
+      .rejects.toMatchObject({code:'VERIFY_ERROR',message:expect.stringContaining('USBasp hoặc Arduino as ISP')})
+    expect(states).not.toContain('done')
+    expect(transport.closed).toBe(true)
+  })
+
   it('releases the port without flashing when firmware is malformed', async () => {
     const transport = new FakeTransport()
     await expect(new Stk500Uploader(transport).upload('not Intel HEX')).rejects.toThrow()
