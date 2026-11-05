@@ -16,8 +16,8 @@ body { font-family: Inter, system-ui, sans-serif; background: #fff; }
 #content_area { position: absolute !important; inset: 0 !important; }
 #content_blocks { position: absolute !important; inset: 0 !important; width: 100% !important; height: 100% !important; }
 .blocklyToolboxDiv { background: #f8fafc !important; border-right: 1px solid #dce3ec; }
-.blocklyTreeRow { border-radius: 6px; min-height: 34px; }
-.blocklyTreeLabel { font-family: system-ui, sans-serif !important; }
+.blocklyTreeRow { border-radius: 5px; height: 30px !important; min-height: 30px !important; line-height: 30px !important; padding: 0 7px !important; margin-bottom: 3px !important; }
+.blocklyTreeLabel { font-family: system-ui, sans-serif !important; font-size: 13px !important; font-weight: 600 !important; }
 .customIcon::before, .fa::before, .fas::before, .far::before, .fab::before { font-family: ui-monospace, monospace !important; font-weight: 700; content: "[*]" !important; font-size: 12px; }
 .fa-robot::before { content: "[LB]" !important; }
 .fa-code::before { content: "{}" !important; }

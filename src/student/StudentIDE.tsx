@@ -28,6 +28,7 @@ export function StudentIDE({ onSourceChange }: { onSourceChange?: (source: strin
   const fileInput = useRef<HTMLInputElement>(null)
   const [candidate, setCandidate] = useState<ConversionCandidate | null>(null)
   const [conflictOpen, setConflictOpen] = useState(false)
+  const [filesVisible, setFilesVisible] = useState(() => typeof window === 'undefined' || window.innerWidth >= 760)
   const [connected, setConnected] = useState(false)
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<{ message: string; tone: 'info' | 'success' | 'error' } | null>(null)
@@ -165,6 +166,7 @@ export function StudentIDE({ onSourceChange }: { onSourceChange?: (source: strin
 
   return <main className="student-shell">
     <header className="student-header">
+      <button className="sidebar-toggle" aria-label={filesVisible ? 'Thu gọn danh sách tệp' : 'Mở danh sách tệp'} aria-expanded={filesVisible} aria-controls="project-files" onClick={() => setFilesVisible(value => !value)} title="Ẩn / hiện danh sách tệp">[=]</button>
       <div className="brand-lockup"><img className="brand-logo" src={`${import.meta.env.BASE_URL}leanbot-ide/img/logo-lb-title.png`} alt="Leanbot" /><div><strong>Leanbot Studio</strong><small>Student IDE</small></div></div>
       <div className="project-name"><span>Tệp</span><input aria-label="Tên tệp" value={project.name} onChange={e => setProject(current => ({ ...current, name: e.target.value, updatedAt: Date.now() }))} /></div>
       <div className="save-state"><Save />Tự động lưu<small>{new Date(project.updatedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</small></div>
@@ -172,7 +174,7 @@ export function StudentIDE({ onSourceChange }: { onSourceChange?: (source: strin
     </header>
     <Toolbar mode={project.sourceMode} syncState={project.syncState} connected={connected} busy={busy} onMode={changeMode} onUndo={() => activeCommands?.undo()} onRedo={() => activeCommands?.redo()} onZoomIn={() => blocksRef.current?.zoomIn()} onZoomOut={() => blocksRef.current?.zoomOut()} onCenter={() => blocksRef.current?.center()} onConnect={() => void connect()} onRun={() => void run()} onStop={stop} />
     <div className="workspace-layout">
-      <aside className="file-sidebar" aria-label="Quản lý tệp">
+      <aside id="project-files" className="file-sidebar" aria-label="Quản lý tệp" hidden={!filesVisible}>
         <div className="file-sidebar-title"><strong>TỆP CỦA BẠN</strong><button title="Mở tệp từ máy" aria-label="Mở tệp từ máy" onClick={() => fileInput.current?.click()}><FolderOpen /></button></div>
         <div className="file-actions">
           <button onClick={() => createFile('blocks')}><FilePlus2 />Blockly+</button>
@@ -188,14 +190,14 @@ export function StudentIDE({ onSourceChange }: { onSourceChange?: (source: strin
         {closedFile && <button onClick={() => {
           setFiles(items => [...items.filter(file => file.id !== closedFile.id), closedFile]); activate(closedFile); setClosedFile(null)
         }}>Khôi phục tệp vừa đóng</button>}
-        <div className="file-downloads">
-          <strong>LƯU VỀ MÁY</strong>
+        <details className="file-downloads">
+          <summary><Download />Lưu về máy</summary>
           <button onClick={() => saveAs('cpp')}><Download />Code C++ (.ino)</button>
           {project.legacyXml !== undefined && <button onClick={() => saveAs('blocks')}><Download />Blockly(.bduino)</button>}
           {project.legacyXml !== undefined && <button onClick={() => saveAs('xml')}><Download />XML Blockly (.xml)</button>}
           <button onClick={() => saveAs('project')}><Download />Project đầy đủ</button>
           <small>Tự động lưu từng tệp trên trình duyệt. Đổi tên ở thanh trên.</small>
-        </div>
+        </details>
       </aside>
       <section className="editor-stage" aria-label="Không gian lập trình">
         {project.sourceMode === 'blocks'

@@ -81,9 +81,11 @@ export function MultiRobotConnector() {
       <button 
         onClick={() => setShowMenu(!showMenu)}
         style={{...styles.statusBtn, ...(isConnected ? styles.statusBtnConnected : {})}}
+        aria-expanded={showMenu}
+        aria-label="Kết nối nhiều robot"
         title={isConnected ? `Connected to room ${currentRoom}` : 'Click to connect'}
       >
-        🤖 {isConnected ? `${peers.length + 1}` : '○'}
+        [NET] {isConnected ? `${peers.length + 1}` : ''}
       </button>
 
       {/* Dropdown menu */}
@@ -238,6 +240,7 @@ const styles = {
     boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
     zIndex: 1000,
     minWidth: '220px',
+    maxWidth: 'calc(100vw - 24px)',
     padding: '8px',
     fontFamily: 'system-ui, -apple-system, sans-serif',
     fontSize: '13px',

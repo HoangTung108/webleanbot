@@ -211,12 +211,12 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
 
 
   return (
-    <div
+    <div className="simulator-shell"
       style={{
         display: 'flex',
-        height: '100vh',
-        backgroundColor: '#1e1e1e',
-        color: '#d4d4d4',
+        height: '100%',
+        backgroundColor: '#f5f7fa',
+        color: '#334155',
         fontFamily: 'Segoe UI, Tahoma, Geneva, Verdana, sans-serif',
       }}
     >
@@ -225,16 +225,16 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
         {/* Header */}
         <div
           style={{
-            padding: '16px',
-            backgroundColor: '#252526',
+            padding: '10px 14px',
+            backgroundColor: '#ffffff',
             borderBottom: '1px solid #3e3e42',
           }}
         >
-          <h1 style={{ margin: '0 0 8px 0', fontSize: '20px' }}>
-            Leanbot 2D Robot Simulator
+          <h1 style={{ margin: '0 0 8px 0', fontSize: '16px' }}>
+            Giả lập Leanbot
           </h1>
           <p style={{ margin: 0, fontSize: '12px', color: '#858585' }}>
-            Real-time simulation with physics, sensors, and C++ code execution
+            Synapse City · Vật lý, cảm biến và chương trình C++
           </p>
         </div>
 
@@ -244,7 +244,7 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
             display: 'flex',
             gap: '8px',
             padding: '12px',
-            backgroundColor: '#2d2d30',
+            backgroundColor: '#f8fafc',
             borderBottom: '1px solid #3e3e42',
             flexWrap: 'wrap',
             alignItems: 'center',
@@ -256,7 +256,7 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
             disabled={isRunning}
             style={{
               padding: '6px 12px',
-              backgroundColor: isRunning ? '#444' : '#007acc',
+              backgroundColor: isRunning ? '#444' : '#146c54',
               color: 'white',
               border: 'none',
               borderRadius: '3px',
@@ -335,9 +335,9 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
         </div>
 
         {/* Main Content Area */}
-        <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+        <div className="simulator-workspace" style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
           {/* Canvas */}
-          <div
+          <div className="simulator-canvas-area"
             style={{
               flex: 2,
               display: 'flex',
@@ -361,7 +361,7 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
           </div>
 
           {/* Right Sidebar */}
-          <div
+          <div className="simulator-inspector"
             style={{
               flex: 1,
               display: 'flex',
@@ -376,7 +376,7 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
               style={{
                 padding: '12px',
                 borderBottom: '1px solid #3e3e42',
-                backgroundColor: '#252526',
+                backgroundColor: '#ffffff',
               }}
             >
               <h3 style={{ margin: '0 0 8px 0', fontSize: '13px' }}>Options</h3>
@@ -434,7 +434,7 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
               style={{
                 padding: '12px',
                 borderBottom: '1px solid #3e3e42',
-                backgroundColor: '#252526',
+                backgroundColor: '#ffffff',
               }}
             >
               <h3 style={{ margin: '0 0 8px 0', fontSize: '13px' }}>Statistics</h3>
@@ -454,7 +454,7 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
               style={{
                 padding: '12px',
                 borderBottom: '1px solid #3e3e42',
-                backgroundColor: '#252526',
+                backgroundColor: '#ffffff',
               }}
             >
               <h3 style={{ margin: '0 0 8px 0', fontSize: '13px' }}>C++ Code</h3>
@@ -462,7 +462,7 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
                 style={{
                   margin: 0,
                   padding: '8px',
-                  backgroundColor: '#1e1e1e',
+                  backgroundColor: '#f5f7fa',
                   borderRadius: '3px',
                   fontSize: '10px',
                   overflow: 'auto',
@@ -480,7 +480,7 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
                 flex: 1,
                 padding: '12px',
                 overflow: 'auto',
-                backgroundColor: '#1e1e1e',
+                backgroundColor: '#f5f7fa',
               }}
             >
               <h3 style={{ margin: '0 0 8px 0', fontSize: '13px' }}>Logs</h3>
