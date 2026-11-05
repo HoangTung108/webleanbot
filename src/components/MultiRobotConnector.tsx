@@ -9,6 +9,7 @@ export function MultiRobotConnector() {
   const [currentRoom, setCurrentRoom] = useState<string | null>(null);
   const [peers, setPeers] = useState<any[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [showMenu, setShowMenu] = useState(false);
 
   useEffect(() => {
     const handleConnected = () => {
@@ -73,117 +74,133 @@ export function MultiRobotConnector() {
     robotNetworkManager.disconnect();
   };
 
-  if (isConnected && currentRoom) {
-    return (
-      <div style={styles.container}>
-        <div style={styles.header}>
-          <h3>🤖 Multi-Robot Network</h3>
-        </div>
-        <div style={styles.status}>
-          <div style={styles.statusItem}>
-            <span style={styles.label}>Room ID:</span>
-            <span style={styles.value}>{currentRoom}</span>
-            <button onClick={() => navigator.clipboard.writeText(currentRoom)} style={styles.copyBtn}>
-              📋 Copy
-            </button>
-          </div>
-          <div style={styles.statusItem}>
-            <span style={styles.label}>Connected Robots:</span>
-            <span style={styles.value}>{peers.length + 1}</span>
-          </div>
-        </div>
-        {peers.length > 0 && (
-          <div style={styles.peerList}>
-            <h4>Connected Peers:</h4>
-            <ul>
-              {peers.map((peerId, idx) => (
-                <li key={peerId}>Robot {idx + 2}: {peerId.substring(0, 8)}...</li>
-              ))}
-            </ul>
-          </div>
-        )}
-        <button onClick={handleDisconnect} style={styles.disconnectBtn}>
-          Disconnect
-        </button>
-      </div>
-    );
-  }
-
+  // Compact UI - just a small button with dropdown menu
   return (
-    <div style={styles.container}>
-      <div style={styles.header}>
-        <h3>🤖 Multi-Robot Network</h3>
-      </div>
+    <div style={styles.wrapper}>
+      {/* Status indicator button */}
+      <button 
+        onClick={() => setShowMenu(!showMenu)}
+        style={{...styles.statusBtn, ...(isConnected ? styles.statusBtnConnected : {})}}
+        title={isConnected ? `Connected to room ${currentRoom}` : 'Click to connect'}
+      >
+        🤖 {isConnected ? `${peers.length + 1}` : '○'}
+      </button>
 
-      {error && <div style={styles.errorBox}>{error}</div>}
+      {/* Dropdown menu */}
+      {showMenu && (
+        <div style={styles.dropdown}>
+          {isConnected && currentRoom ? (
+            <>
+              <div style={styles.dropdownHeader}>Connected ✓</div>
+              <div style={styles.dropdownRow}>
+                <span style={styles.dropdownLabel}>Room:</span>
+                <span style={styles.dropdownValue}>{currentRoom}</span>
+              </div>
+              <div style={styles.dropdownRow}>
+                <span style={styles.dropdownLabel}>Robots:</span>
+                <span style={styles.dropdownValue}>{peers.length + 1}</span>
+              </div>
+              <button 
+                onClick={() => navigator.clipboard.writeText(currentRoom)}
+                style={styles.dropdownBtn}
+              >
+                📋 Copy ID
+              </button>
+              <button 
+                onClick={() => {
+                  handleDisconnect();
+                  setShowMenu(false);
+                }}
+                style={{...styles.dropdownBtn, ...styles.dropdownBtnDanger}}
+              >
+                Disconnect
+              </button>
+            </>
+          ) : (
+            <>
+              <div style={styles.dropdownHeader}>Multi-Robot</div>
+              {error && <div style={styles.dropdownError}>{error}</div>}
 
-      {connectionMode === 'idle' && (
-        <div style={styles.buttonGroup}>
-          <button onClick={() => setConnectionMode('create')} style={styles.primaryBtn}>
-            ➕ Create Room
-          </button>
-          <button onClick={() => setConnectionMode('join')} style={styles.secondaryBtn}>
-            🔗 Join Room
-          </button>
-        </div>
-      )}
+              {connectionMode === 'idle' && (
+                <>
+                  <button 
+                    onClick={() => setConnectionMode('create')}
+                    style={styles.dropdownBtn}
+                  >
+                    ➕ Create Room
+                  </button>
+                  <button 
+                    onClick={() => setConnectionMode('join')}
+                    style={styles.dropdownBtn}
+                  >
+                    🔗 Join Room
+                  </button>
+                </>
+              )}
 
-      {connectionMode === 'create' && (
-        <div style={styles.formContainer}>
-          <h4>Create New Room</h4>
-          <div style={styles.formGroup}>
-            <label>Password (Optional):</label>
-            <input
-              type="password"
-              placeholder="Leave empty for no password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              style={styles.input}
-            />
-          </div>
-          <div style={styles.formActions}>
-            <button onClick={handleCreateRoom} style={styles.primaryBtn}>
-              Create
-            </button>
-            <button onClick={() => { setConnectionMode('idle'); setPassword(''); }} style={styles.cancelBtn}>
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
+              {connectionMode === 'create' && (
+                <>
+                  <div style={styles.formGroup}>
+                    <input
+                      type="password"
+                      placeholder="Password (optional)"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      style={styles.formInput}
+                    />
+                  </div>
+                  <button 
+                    onClick={handleCreateRoom}
+                    style={styles.dropdownBtn}
+                  >
+                    Create
+                  </button>
+                  <button 
+                    onClick={() => { setConnectionMode('idle'); setPassword(''); }}
+                    style={{...styles.dropdownBtn, ...styles.dropdownBtnCancel}}
+                  >
+                    Cancel
+                  </button>
+                </>
+              )}
 
-      {connectionMode === 'join' && (
-        <div style={styles.formContainer}>
-          <h4>Join Existing Room</h4>
-          <div style={styles.formGroup}>
-            <label>Room ID:</label>
-            <input
-              type="text"
-              placeholder="e.g., ABC123"
-              value={roomId}
-              onChange={(e) => setRoomId(e.target.value.toUpperCase())}
-              maxLength={6}
-              style={styles.input}
-            />
-          </div>
-          <div style={styles.formGroup}>
-            <label>Password (if required):</label>
-            <input
-              type="password"
-              placeholder="Leave empty if no password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              style={styles.input}
-            />
-          </div>
-          <div style={styles.formActions}>
-            <button onClick={handleJoinRoom} style={styles.primaryBtn}>
-              Join
-            </button>
-            <button onClick={() => { setConnectionMode('idle'); setRoomId(''); setPassword(''); }} style={styles.cancelBtn}>
-              Cancel
-            </button>
-          </div>
+              {connectionMode === 'join' && (
+                <>
+                  <div style={styles.formGroup}>
+                    <input
+                      type="text"
+                      placeholder="Room ID"
+                      value={roomId}
+                      onChange={(e) => setRoomId(e.target.value.toUpperCase())}
+                      maxLength={6}
+                      style={styles.formInput}
+                    />
+                  </div>
+                  <div style={styles.formGroup}>
+                    <input
+                      type="password"
+                      placeholder="Password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      style={styles.formInput}
+                    />
+                  </div>
+                  <button 
+                    onClick={handleJoinRoom}
+                    style={styles.dropdownBtn}
+                  >
+                    Join
+                  </button>
+                  <button 
+                    onClick={() => { setConnectionMode('idle'); setRoomId(''); setPassword(''); }}
+                    style={{...styles.dropdownBtn, ...styles.dropdownBtnCancel}}
+                  >
+                    Cancel
+                  </button>
+                </>
+              )}
+            </>
+          )}
         </div>
       )}
     </div>
@@ -191,132 +208,105 @@ export function MultiRobotConnector() {
 }
 
 const styles = {
-  container: {
-    padding: '16px',
-    border: '1px solid #e0e0e0',
-    borderRadius: '8px',
-    backgroundColor: '#fafafa',
-    fontFamily: 'system-ui, -apple-system, sans-serif',
+  wrapper: {
+    position: 'relative',
+    display: 'inline-block',
   } as React.CSSProperties,
-  header: {
-    marginBottom: '16px',
-    borderBottom: '2px solid #3498db',
-    paddingBottom: '8px',
-  } as React.CSSProperties,
-  status: {
-    marginBottom: '12px',
-  } as React.CSSProperties,
-  statusItem: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    marginBottom: '8px',
-  } as React.CSSProperties,
-  label: {
-    fontWeight: 'bold',
-    minWidth: '120px',
-  } as React.CSSProperties,
-  value: {
-    padding: '4px 8px',
-    backgroundColor: '#fff',
-    borderRadius: '4px',
-    fontFamily: 'monospace',
+  statusBtn: {
+    padding: '6px 12px',
+    backgroundColor: '#f5f5f5',
     border: '1px solid #ddd',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    fontSize: '14px',
+    fontWeight: '500',
+    transition: 'all 0.2s',
   } as React.CSSProperties,
-  copyBtn: {
-    padding: '4px 12px',
-    marginLeft: '8px',
+  statusBtnConnected: {
+    backgroundColor: '#d4edda',
+    borderColor: '#28a745',
+    color: '#28a745',
+  } as React.CSSProperties,
+  dropdown: {
+    position: 'absolute',
+    top: '100%',
+    right: 0,
+    marginTop: '4px',
+    backgroundColor: 'white',
+    border: '1px solid #ddd',
+    borderRadius: '6px',
+    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+    zIndex: 1000,
+    minWidth: '220px',
+    padding: '8px',
+    fontFamily: 'system-ui, -apple-system, sans-serif',
+    fontSize: '13px',
+  } as React.CSSProperties,
+  dropdownHeader: {
+    padding: '6px 8px',
+    fontWeight: 'bold',
+    borderBottom: '1px solid #eee',
+    marginBottom: '6px',
+    color: '#333',
+  } as React.CSSProperties,
+  dropdownRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    padding: '6px 8px',
+    fontSize: '12px',
+    gap: '8px',
+  } as React.CSSProperties,
+  dropdownLabel: {
+    fontWeight: '600',
+    color: '#666',
+  } as React.CSSProperties,
+  dropdownValue: {
+    fontFamily: 'monospace',
+    color: '#333',
+    backgroundColor: '#f5f5f5',
+    padding: '2px 6px',
+    borderRadius: '2px',
+    flex: 1,
+    textAlign: 'right',
+  } as React.CSSProperties,
+  dropdownBtn: {
+    display: 'block',
+    width: '100%',
+    padding: '6px 8px',
+    marginTop: '4px',
     backgroundColor: '#3498db',
     color: 'white',
     border: 'none',
-    borderRadius: '4px',
+    borderRadius: '3px',
     cursor: 'pointer',
     fontSize: '12px',
+    fontWeight: '500',
+    transition: 'background 0.2s',
   } as React.CSSProperties,
-  peerList: {
-    marginBottom: '16px',
-    padding: '12px',
-    backgroundColor: '#e8f4f8',
-    borderRadius: '4px',
-  } as React.CSSProperties,
-  buttonGroup: {
-    display: 'grid',
-    gridTemplateColumns: '1fr 1fr',
-    gap: '8px',
-  } as React.CSSProperties,
-  formContainer: {
-    padding: '12px',
-    backgroundColor: '#fff',
-    borderRadius: '4px',
-    border: '1px solid #ddd',
-  } as React.CSSProperties,
-  formGroup: {
-    marginBottom: '12px',
-  } as React.CSSProperties,
-  input: {
-    width: '100%',
-    padding: '8px',
-    marginTop: '4px',
-    border: '1px solid #ccc',
-    borderRadius: '4px',
-    fontSize: '14px',
-    boxSizing: 'border-box',
-  } as React.CSSProperties,
-  formActions: {
-    display: 'flex',
-    gap: '8px',
-  } as React.CSSProperties,
-  primaryBtn: {
-    flex: 1,
-    padding: '10px',
-    backgroundColor: '#3498db',
-    color: 'white',
-    border: 'none',
-    borderRadius: '4px',
-    cursor: 'pointer',
-    fontSize: '14px',
-    fontWeight: 'bold',
-  } as React.CSSProperties,
-  secondaryBtn: {
-    flex: 1,
-    padding: '10px',
+  dropdownBtnCancel: {
     backgroundColor: '#95a5a6',
-    color: 'white',
-    border: 'none',
-    borderRadius: '4px',
-    cursor: 'pointer',
-    fontSize: '14px',
-    fontWeight: 'bold',
   } as React.CSSProperties,
-  cancelBtn: {
-    flex: 1,
-    padding: '10px',
+  dropdownBtnDanger: {
     backgroundColor: '#e74c3c',
-    color: 'white',
-    border: 'none',
-    borderRadius: '4px',
-    cursor: 'pointer',
-    fontSize: '14px',
-    fontWeight: 'bold',
   } as React.CSSProperties,
-  disconnectBtn: {
-    width: '100%',
-    padding: '10px',
-    backgroundColor: '#e74c3c',
-    color: 'white',
-    border: 'none',
-    borderRadius: '4px',
-    cursor: 'pointer',
-    fontSize: '14px',
-    fontWeight: 'bold',
-  } as React.CSSProperties,
-  errorBox: {
-    padding: '12px',
-    marginBottom: '12px',
+  dropdownError: {
+    padding: '6px 8px',
+    marginBottom: '6px',
     backgroundColor: '#fee',
     border: '1px solid #f00',
-    borderRadius: '4px',
+    borderRadius: '3px',
     color: '#c00',
-    fontSize: '14px',
+    fontSize: '12px',
+  } as React.CSSProperties,
+  formGroup: {
+    marginBottom: '6px',
+  } as React.CSSProperties,
+  formInput: {
+    width: '100%',
+    padding: '6px 8px',
+    border: '1px solid #ccc',
+    borderRadius: '3px',
+    fontSize: '12px',
+    boxSizing: 'border-box',
   } as React.CSSProperties,
 };
