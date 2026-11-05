@@ -15,6 +15,7 @@ import { Toast } from '../components/ui/toast'
 import { ConflictDialog } from './ConflictDialog'
 import { ConversionDialog } from './ConversionDialog'
 import { Toolbar } from './Toolbar'
+import { MultiRobotConnector } from '../components/MultiRobotConnector'
 
 function initialProject() {
   return loadProject() ?? loadDocuments()[0] ?? newDocument('Bài 01.xml')
@@ -167,6 +168,7 @@ export function StudentIDE({ onSourceChange }: { onSourceChange?: (source: strin
       <div className="brand-lockup"><img className="brand-logo" src={`${import.meta.env.BASE_URL}leanbot-ide/img/logo-lb-title.png`} alt="Leanbot" /><div><strong>Leanbot Studio</strong><small>Student IDE</small></div></div>
       <div className="project-name"><span>Tệp</span><input aria-label="Tên tệp" value={project.name} onChange={e => setProject(current => ({ ...current, name: e.target.value, updatedAt: Date.now() }))} /></div>
       <div className="save-state"><Save />Tự động lưu<small>{new Date(project.updatedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</small></div>
+      <div style={{ marginLeft: 'auto', paddingRight: '1rem' }}><MultiRobotConnector /></div>
     </header>
     <Toolbar mode={project.sourceMode} syncState={project.syncState} connected={connected} busy={busy} onMode={changeMode} onUndo={() => activeCommands?.undo()} onRedo={() => activeCommands?.redo()} onZoomIn={() => blocksRef.current?.zoomIn()} onZoomOut={() => blocksRef.current?.zoomOut()} onCenter={() => blocksRef.current?.center()} onConnect={() => void connect()} onRun={() => void run()} onStop={stop} />
     <div className="workspace-layout">
