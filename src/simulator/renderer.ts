@@ -114,6 +114,75 @@ export class SimulatorRenderer {
     };
   }
 
+  /**
+   * Zoom in/out with center point
+   * @param factor - Zoom factor (>1 to zoom in, <1 to zoom out)
+   * @param centerX - Canvas X coordinate of zoom center (optional)
+   * @param centerY - Canvas Y coordinate of zoom center (optional)
+   */
+  zoom(factor: number, centerX?: number, centerY?: number): void {
+    const MIN_SCALE = 0.2;
+    const MAX_SCALE = 5;
+
+    // Default center to canvas center if not provided
+    if (centerX === undefined) centerX = this.viewportWidth / 2;
+    if (centerY === undefined) centerY = this.viewportHeight / 2;
+
+    // Get board coordinates of zoom center before scaling
+    const boardPoint = this.clientToBoard(centerX, centerY);
+
+    // Apply zoom
+    const newScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, this.scale * factor));
+    
+    // Adjust offset to keep the zoom center point fixed
+    this.offsetX = centerX - boardPoint.x * newScale;
+    this.offsetY = centerY - boardPoint.y * newScale;
+
+    this.scale = newScale;
+    this.constrainViewport();
+  }
+
+  /**
+   * Pan the viewport
+   * @param deltaX - X offset in canvas pixels
+   * @param deltaY - Y offset in canvas pixels
+   */
+  pan(deltaX: number, deltaY: number): void {
+    this.offsetX += deltaX;
+    this.offsetY += deltaY;
+    this.constrainViewport();
+  }
+
+  /**
+   * Constrain viewport to keep board visible
+   */
+  private constrainViewport(): void {
+    const boardLeft = 0;
+    const boardTop = 0;
+    const boardRight = this.board.width * this.scale;
+    const boardBottom = this.board.height * this.scale;
+
+    // Allow some panning outside the board, but keep it reasonable
+    const padding = 100;
+
+    // Constrain horizontal
+    const maxOffsetX = this.viewportWidth - boardLeft;
+    const minOffsetX = this.viewportWidth - boardRight - padding;
+    this.offsetX = Math.max(minOffsetX, Math.min(maxOffsetX, this.offsetX));
+
+    // Constrain vertical
+    const maxOffsetY = this.viewportHeight - boardTop;
+    const minOffsetY = this.viewportHeight - boardBottom - padding;
+    this.offsetY = Math.max(minOffsetY, Math.min(maxOffsetY, this.offsetY));
+  }
+
+  /**
+   * Reset zoom and pan to fit board
+   */
+  resetZoom(): void {
+    this.fitBoardToCanvas();
+  }
+
   enablePlacement(onChange?: (pose: Pose) => void): () => void {
     let dragging = false;
     let dx = 0, dy = 0;

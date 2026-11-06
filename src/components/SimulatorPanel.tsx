@@ -61,9 +61,67 @@ export const SimulatorPanel: React.FC<SimulatorPanelProps> = ({
       }
     };
 
+    // Handle mouse wheel zoom
+    const handleWheel = (event: WheelEvent) => {
+      if (!event.ctrlKey && !event.metaKey) return;
+      event.preventDefault();
+      const zoomFactor = event.deltaY > 0 ? 0.9 : 1.1; // Scroll down = zoom out, scroll up = zoom in
+      newRenderer.zoom(zoomFactor, event.clientX, event.clientY);
+      newRenderer.render();
+    };
+
+    // Handle pan with middle mouse button or right mouse button drag
+    let isPanning = false;
+    let lastX = 0;
+    let lastY = 0;
+
+    const handleMouseDown = (event: MouseEvent) => {
+      if (event.button === 1 || event.button === 2) { // Middle or right button
+        isPanning = true;
+        lastX = event.clientX;
+        lastY = event.clientY;
+        event.preventDefault();
+      }
+    };
+
+    const handleMouseMove = (event: MouseEvent) => {
+      if (isPanning) {
+        const deltaX = event.clientX - lastX;
+        const deltaY = event.clientY - lastY;
+        newRenderer.pan(deltaX, deltaY);
+        newRenderer.render();
+        lastX = event.clientX;
+        lastY = event.clientY;
+      }
+    };
+
+    const handleMouseUp = () => {
+      isPanning = false;
+    };
+
+    const handleContextMenu = (event: MouseEvent) => {
+      if (isPanning) {
+        event.preventDefault();
+      }
+    };
+
+    canvasRef.current.addEventListener('wheel', handleWheel, { passive: false });
+    canvasRef.current.addEventListener('mousedown', handleMouseDown);
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    canvasRef.current.addEventListener('contextmenu', handleContextMenu);
+
     window.addEventListener('resize', handleResize);
     handleResize();
-    return () => { detachPlacement(); window.removeEventListener('resize', handleResize); }; 
+    return () => { 
+      detachPlacement();
+      canvasRef.current?.removeEventListener('wheel', handleWheel);
+      canvasRef.current?.removeEventListener('mousedown', handleMouseDown);
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      canvasRef.current?.removeEventListener('contextmenu', handleContextMenu);
+      window.removeEventListener('resize', handleResize);
+    }; 
   }, [isVisible]);
 
   // Animation loop
@@ -153,6 +211,13 @@ export const SimulatorPanel: React.FC<SimulatorPanelProps> = ({
         renderer.render();
       }
       onStatusChange?.('Simulation reset');
+    }
+  };
+
+  const handleResetView = () => {
+    if (renderer) {
+      renderer.resetZoom();
+      renderer.render();
     }
   };
 
@@ -249,6 +314,20 @@ export const SimulatorPanel: React.FC<SimulatorPanelProps> = ({
           [R] Reset
         </button>
 
+        <button
+          onClick={handleResetView}
+          style={{
+            padding: '6px 12px',
+            backgroundColor: '#5a6db3',
+            color: 'white',
+            border: 'none',
+            borderRadius: '3px',
+            cursor: 'pointer',
+          }}
+        >
+          [V] Reset View
+        </button>
+
         <div style={{ flex: 1 }} />
 
         <span>Synapse City · 4 ft × 4 ft</span>
@@ -328,6 +407,11 @@ export const SimulatorPanel: React.FC<SimulatorPanelProps> = ({
             />
             Sensor Debug
           </label>
+        </div>
+
+        {/* View controls info */}
+        <div style={{ fontSize: '11px', color: 'var(--vscode-foreground)', opacity: 0.7 }}>
+          <strong>Điều khiển xem:</strong> Ctrl+Mouse Wheel để thu/phóng · Chuột phải để dịch chuyển
         </div>
 
         {/* Info */}
