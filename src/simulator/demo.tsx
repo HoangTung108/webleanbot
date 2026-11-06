@@ -43,6 +43,7 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
     irC: 0,
     distance: 0,
   });
+  const [speedMultiplier, setSpeedMultiplier] = useState<number>(1);
 
   // Initialize simulator
   useEffect(() => {
@@ -65,6 +66,10 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
     simulatorRef.current = simulator;
     rendererRef.current = renderer;
     bridgeRef.current = bridge;
+
+    // Initialize speed multiplier
+    simulator.setSpeedMultiplier(1);
+    setSpeedMultiplier(1);
 
     const initialPose = simulator.getRobotPose();
     setRobotHeading(initialPose.heading);
@@ -209,7 +214,9 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
   const handleReset = () => {
     if (!simulatorRef.current || !rendererRef.current) return;
     simulatorRef.current.reset();
+    simulatorRef.current.setSpeedMultiplier(1);
     setRobotHeading(simulatorRef.current.getRobotPose().heading);
+    setSpeedMultiplier(1);
     if (bridgeRef.current) {
       bridgeRef.current.reset();
     }
@@ -219,6 +226,12 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
     const pose = simulatorRef.current.getRobotPose();
     setStats({time:0,frames:0,posX:pose.x,posY:pose.y,heading:pose.heading,speedL:0,speedR:0,irC:0,distance:0});
     addLog('Đã đặt lại mô phỏng');
+  };
+
+  const handleSpeedChange = (multiplier: number) => {
+    if (!simulatorRef.current) return;
+    simulatorRef.current.setSpeedMultiplier(multiplier);
+    setSpeedMultiplier(multiplier);
   };
 
 
@@ -235,6 +248,36 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
           <button className="sim-button" onClick={handlePause} disabled={!isRunning}>{isPaused ? <Play size={15} /> : <Pause size={15} />}{isPaused ? 'Tiếp tục' : 'Tạm dừng'}</button>
           <button className="sim-button stop" onClick={handleStop} disabled={!isRunning}><Square size={14} />Dừng</button>
           <button className="sim-button icon-only" onClick={handleReset} title="Đặt lại mô phỏng" aria-label="Đặt lại mô phỏng"><RotateCcw size={16} /></button>
+          {/* Speed multiplier controls */}
+          <div style={{ display: 'flex', gap: '4px', alignItems: 'center', marginLeft: '8px', paddingLeft: '8px', borderLeft: '1px solid var(--vscode-panel-border)' }}>
+            <span style={{ fontSize: '12px', fontWeight: 'bold', marginRight: '4px' }}>Tua:</span>
+            {[1, 2, 5, 10].map(speed => (
+              <button
+                key={speed}
+                onClick={() => handleSpeedChange(speed)}
+                disabled={!isRunning}
+                style={{
+                  padding: '4px 8px',
+                  backgroundColor: speedMultiplier === speed && isRunning ? '#007acc' : '#444',
+                  color: 'white',
+                  border: '1px solid ' + (speedMultiplier === speed ? '#0e639c' : '#555'),
+                  borderRadius: '3px',
+                  cursor: isRunning ? 'pointer' : 'not-allowed',
+                  opacity: isRunning ? 1 : 0.6,
+                  fontSize: '11px',
+                  fontWeight: speedMultiplier === speed ? 'bold' : 'normal',
+                  minWidth: '36px',
+                  transition: 'all 0.2s',
+                }}
+                title={isRunning ? `Tua ${speed}x` : 'Chạy simulation để kích hoạt'}
+              >
+                ×{speed}
+              </button>
+            ))}
+            <span style={{ fontSize: '10px', marginLeft: '6px', color: '#0e639c', fontWeight: 'bold' }}>
+              [{speedMultiplier}x]
+            </span>
+          </div>
         </div>
         <label className="sim-heading-input">Hướng robot <input aria-label="Góc robot" type="number" min="0" max="359" value={robotHeading} disabled={isRunning} onChange={e => {
           if (e.target.value === '') return;
