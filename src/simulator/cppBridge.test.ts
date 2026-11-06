@@ -61,6 +61,18 @@ describe('editor code bridge', () => {
     expect(bridge.isExecuting()).toBe(false);
   });
 
+  it.each([1,10])('enforces the 120-second simulation limit at %sx', multiplier => {
+    const robot=new RobotSimulator(),bridge=new CppSimulatorBridge(robot);
+    robot.setSpeedMultiplier(multiplier);
+    expect(bridge.loadCode('void loop(){ LbDelay(1000000); }').success).toBe(true);
+    robot.start();bridge.startExecution();
+    for(let wall=0;wall<=125000&&bridge.isExecuting();wall+=1000)bridge.executeStep(wall);
+    expect(bridge.isExecuting()).toBe(false);
+    expect(bridge.getCompletionReason()).toBe('time-limit');
+    expect(robot.getSimulationState().currentTime).toBeCloseTo(120000,5);
+    expect(robot.getSimulationState().isRunning).toBe(false);
+  });
+
   it('uses freshly loaded code on the next run and reports unsupported code', () => {
     const robot = new RobotSimulator(), bridge = new CppSimulatorBridge(robot);
     expect(bridge.loadCode(code).success).toBe(true);

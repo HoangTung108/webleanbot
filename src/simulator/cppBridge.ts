@@ -2,6 +2,7 @@
  * Connect the cooperative C++ interpreter to the robot physics engine
  */
 
+import { ROUND_LIMIT_MS } from './scoring';
 import { CppRuntime } from './cppRuntime';
 import { RobotSimulator } from './robotSimulator';
 
@@ -26,6 +27,9 @@ export class CppSimulatorBridge {
   private runtime?: CppRuntime;
   private lastTick?: number;
   private logs: string[] = [];
+  private elapsed = 0;
+  private completionReason: 'program' | 'time-limit' | undefined;
+  getCompletionReason() { return this.completionReason; }
 
   constructor(simulator: RobotSimulator) {
     this.simulator = simulator;
@@ -66,8 +70,13 @@ export class CppSimulatorBridge {
     if (this.simulator.getSimulationState().isPaused) { this.lastTick = currentTime; return; }
     const delta = this.lastTick === undefined ? 0 : currentTime - this.lastTick;
     this.lastTick = currentTime;
-    if (this.simulator.getFallState().status === 'falling') this.simulator.advanceSimulatedTime(delta * this.simulator.getSpeedMultiplier());
-    else this.runtime?.tick(delta * this.simulator.getSpeedMultiplier());
+    const before=this.simulator.getSimulationState().currentTime;
+    const budget=Math.min(delta*this.simulator.getSpeedMultiplier(),Math.max(0,ROUND_LIMIT_MS-this.elapsed));
+    if (this.simulator.getFallState().status === 'falling') this.simulator.advanceSimulatedTime(budget);
+    else this.runtime?.tick(budget);
+    this.elapsed+=this.simulator.getSimulationState().currentTime-before;
+    if(this.elapsed>=ROUND_LIMIT_MS-1e-6) { this.runtime?.stop();this.simulator.stop();this.completionReason='time-limit'; }
+    else if(!this.runtime?.running) this.completionReason='program';
     if (this.simulator.getFallState().status === 'fallen') {
       this.stopExecution();
       throw new Error('Robot đã rơi khỏi sa bàn. Đặt lại mô phỏng hoặc kéo robot trở lại trước khi chạy.');
@@ -83,6 +92,7 @@ export class CppSimulatorBridge {
    * Start executing command queue
    */
   startExecution(): void {
+    this.elapsed=0;this.completionReason=undefined;
     this.runtime?.start();
     this.lastTick = undefined;
     this.commandQueue.isExecuting = true;

@@ -1,4 +1,4 @@
-import { LEANBOT_GEOMETRY } from './robotGeometry';
+import { gripperOpening, LEANBOT_GEOMETRY } from './robotGeometry';
 import type { BoardConfig, Pose } from './types';
 
 export type BlockKind = 'pollution' | 'neutralizer';
@@ -8,6 +8,7 @@ export const BLOCK_SIZE = { length: 15, width: 25, height: 75 } as const;
 export const NEUTRALIZER_COLORS: BlockColor[] = ['green', 'blue', 'purple'];
 export interface MissionBlock {
   id: string; kind: BlockKind; color: BlockColor; x: number; y: number; rotation: number;
+  originZone?: string; elevation?: number;
   slotId?: string; vx: number; vy: number; spin: number; tilt: number; tipSpeed: number;
   state: 'standing' | 'falling' | 'fallen'; held: boolean; mass: number;
 }
@@ -59,10 +60,13 @@ export class MissionWorld {
   }
   private make(kind: BlockKind, color: BlockColor, slot: Slot): MissionBlock {
     if (!Object.hasOwn(BLOCK_COLORS, color) || (kind === 'neutralizer' && !NEUTRALIZER_COLORS.includes(color))) throw new Error('Invalid color for this block type.');
-    return { id: `block-${++this.serial}`, kind, color, x: slot.x, y: slot.y, rotation: slot.rotation, slotId: slot.id, vx: 0, vy: 0, spin: 0, tilt: 0, tipSpeed: 0, state: 'standing', held: false, mass: 0.025 };
+    return { id: `block-${++this.serial}`, kind, color, originZone: kind==='pollution'?this.board.cityZones?.find(z=>z.sites.some(s=>s.id===slot.id))?.id:undefined, elevation:0, x: slot.x, y: slot.y, rotation: slot.rotation, slotId: slot.id, vx: 0, vy: 0, spin: 0, tilt: 0, tipSpeed: 0, state: 'standing', held: false, mass: 0.025 };
   }
   private available(kind: BlockKind, except?: string) {
-    return this.slots(kind).filter(s => ![...this.blocks,...this.initial].some(b => b.id !== except && b.slotId === s.id));
+    return this.slots(kind).filter(s => {
+      const zone=this.board.cityZones?.find(z=>z.sites.some(site=>site.id===s.id))?.id;
+      return ![...this.blocks,...this.initial].some(b=>b.id!==except&&(b.slotId===s.id||(kind==='pollution'&&b.kind==='pollution'&&b.originZone===zone)));
+    });
   }
   place(kind: BlockKind, color: BlockColor, x: number, y: number, id?: string) {
     const slots = this.available(kind, id).sort((a,b) => Math.hypot(a.x-x,a.y-y) - Math.hypot(b.x-x,b.y-y));
@@ -80,14 +84,20 @@ export class MissionWorld {
   remove(id: string) { this.blocks = this.blocks.filter(b => b.id !== id); this.initial = this.initial.filter(b => b.id !== id); this.changed(); }
   clear() { this.blocks = []; this.commitLayout(); }
   randomize(pollution: number, neutralizers: number, seed = Date.now()) {
-    if (!Number.isInteger(pollution) || !Number.isInteger(neutralizers) || pollution < 0 || pollution > this.slots('pollution').length || neutralizers < 0 || neutralizers > this.slots('neutralizer').length) throw new Error('Choose 0–32 pollution blocks and 0–6 neutralizers.');
+    if (!Number.isInteger(pollution) || !Number.isInteger(neutralizers) || pollution < 0 || pollution > (this.board.cityZones?.length??0) || neutralizers < 0 || neutralizers > this.slots('neutralizer').length) throw new Error('Choose 0–8 pollution blocks (one per city) and 0–6 neutralizers.');
     if (!Number.isFinite(seed)) throw new Error('Seed must be a finite number.');
     const random = seededRandom(seed);
     const shuffle = (slots: Slot[]) => { const result = [...slots]; for (let i = result.length - 1; i > 0; i--) { const j = Math.floor(random() * (i+1)); [result[i], result[j]] = [result[j], result[i]]; } return result; };
     const blocks: MissionBlock[] = [];
     for (const [kind, count] of [['pollution', pollution], ['neutralizer', neutralizers]] as const) {
       const colors = kind === 'pollution' ? Object.keys(BLOCK_COLORS).filter(color=>color!=='mystery') as BlockColor[] : NEUTRALIZER_COLORS;
-      for (const slot of shuffle(this.slots(kind)).slice(0,count)) blocks.push(this.make(kind, colors[Math.floor(random() * colors.length)], slot));
+      const seenZones=new Set<string>();
+      const slots=shuffle(this.slots(kind)).filter(slot=>{
+        if(kind!=='pollution')return true;
+        const zone=this.board.cityZones?.find(z=>z.sites.some(s=>s.id===slot.id))?.id;
+        if(!zone||seenZones.has(zone))return false;seenZones.add(zone);return true;
+      });
+      for (const slot of slots.slice(0,count)) blocks.push(this.make(kind, colors[Math.floor(random() * colors.length)], slot));
     }
     this.blocks = blocks; this.commitLayout();
   }
@@ -127,9 +137,9 @@ export class MissionWorld {
   setGripper(left: number, right: number, pose: Pose, motorLeft = 0, motorRight = 0) {
     const angle = pose.heading * RAD, speed = (motorLeft + motorRight) / 2;
     this.velocity = { x: speed * Math.cos(angle), y: speed * Math.sin(angle), omega: (motorLeft - motorRight) / LEANBOT_GEOMETRY.wheelBase };
-    const wasClosed = this.gripper.left >= 55 && this.gripper.right >= 55;
+    const wasClosed = gripperOpening(this.gripper.left,this.gripper.right) <= BLOCK_SIZE.width + 2;
     this.gripper = { left, right };
-    const closed = left >= 55 && right >= 55;
+    const closed = gripperOpening(left,right) <= BLOCK_SIZE.width + 2;
     if (this.heldBlock && !closed) {
       const block = this.heldBlock, point = this.graspPoint(pose);
       block.held = false;
@@ -196,7 +206,10 @@ export class MissionWorld {
         b.x += hit.nx*(hit.depth+0.01); b.y += hit.ny*(hit.depth+0.01); b.slotId = undefined;
         const rvx = this.velocity.x - omega*(b.y-pose.y), rvy = this.velocity.y + omega*(b.x-pose.x);
         const closing = Math.max(0,(rvx-b.vx)*hit.nx + (rvy-b.vy)*hit.ny);
-        b.vx += hit.nx*closing*(1+this.restitution); b.vy += hit.ny*closing*(1+this.restitution);
+        // Finite 400 g driven chassis transfers impulse to the 25 g block.
+        // Wheel control still prescribes chassis speed; this is not full 3D dynamics.
+        const impulse=closing*(1+this.restitution)/(1/LEANBOT_GEOMETRY.mass+1/b.mass);
+        b.vx += hit.nx*impulse/b.mass; b.vy += hit.ny*impulse/b.mass;
         // Off-centre contacts apply a yaw impulse around the block's centre.
         const localX=(b.x-box.x)*Math.cos(angle)+(b.y-box.y)*Math.sin(angle);
         const localY=-(b.x-box.x)*Math.sin(angle)+(b.y-box.y)*Math.cos(angle);
@@ -204,9 +217,9 @@ export class MissionWorld {
         const rx=box.x+cx*Math.cos(angle)-cy*Math.sin(angle)-b.x;
         const ry=box.y+cx*Math.sin(angle)+cy*Math.cos(angle)-b.y;
         const footprint=blockFootprint(b),inertia=b.mass*(footprint.length**2+footprint.width**2)/12;
-        b.spin=clamp(b.spin+(rx*hit.ny-ry*hit.nx)*b.mass*closing*(1+this.restitution)/inertia/RAD,-720,720);
+        b.spin=clamp(b.spin+(rx*hit.ny-ry*hit.nx)*impulse/inertia/RAD,-720,720);
         // Contact force × centre-of-mass height exceeds the restoring gravity torque.
-        if (closing/dt > GRAVITY*(BLOCK_SIZE.length/2)/(BLOCK_SIZE.height*0.65)) this.tip(b,Math.atan2(hit.ny,hit.nx)/RAD);
+        if (impulse/b.mass/dt > GRAVITY*(BLOCK_SIZE.length/2)/(BLOCK_SIZE.height*0.65)) this.tip(b,Math.atan2(hit.ny,hit.nx)/RAD);
       }
     }
     // Oriented block/block contacts, equal-and-opposite impulses, including carried blocks.
@@ -240,12 +253,15 @@ export class MissionWorld {
   load(text: string) {
     const value = JSON.parse(text);
     if (value.version !== 1 || !Array.isArray(value.blocks) || value.blocks.length > 38 || !Number.isFinite(value.friction) || value.friction < 0 || value.friction > 1) throw new Error('Invalid mission layout.');
-    const seen = new Set<string>();
+    const seen = new Set<string>(),seenZones=new Set<string>();
     const next = value.blocks.map((input: MissionBlock) => {
       if (!['pollution','neutralizer'].includes(input.kind)) throw new Error('Invalid block type.');
       const slot = this.slots(input.kind).find(s=>s.id===input.slotId);
       if (!slot || seen.has(slot.id)) throw new Error('Invalid or occupied mission site.');
-      seen.add(slot.id); return this.make(input.kind,input.color,slot);
+      seen.add(slot.id);
+      const block=this.make(input.kind,input.color,slot);
+      if(block.originZone) { if(seenZones.has(block.originZone))throw new Error('V6: chỉ một pollution mỗi thành phố.');seenZones.add(block.originZone); }
+      return block;
     });
     this.blocks=next; this.friction=value.friction; this.commitLayout();
   }

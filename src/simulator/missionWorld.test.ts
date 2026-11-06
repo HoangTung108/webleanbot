@@ -10,16 +10,16 @@ function oneBlock() {
 }
 describe('mission layout', () => {
   it('places all requested blocks at unique legal sites with type-specific colors', () => {
-    const world = new MissionWorld(SYNAPSE_CITY); world.randomize(32,6,123);
-    expect(world.blocks).toHaveLength(38);
-    expect(new Set(world.blocks.map(b=>b.slotId)).size).toBe(38);
+    const world = new MissionWorld(SYNAPSE_CITY); world.randomize(8,6,123);
+    expect(world.blocks).toHaveLength(14);
+    expect(new Set(world.blocks.map(b=>b.slotId)).size).toBe(14);
     for(const b of world.blocks) {
       expect(world.slots(b.kind).some(s=>s.id===b.slotId)).toBe(true);
       if(b.kind==='neutralizer')expect(NEUTRALIZER_COLORS).toContain(b.color);
     }
     expect(BLOCK_SIZE).toEqual({length:15,width:25,height:75});
     const layout=world.blocks.map(({id,...b})=>b);
-    world.randomize(32,6,123);expect(world.blocks.map(({id,...b})=>b)).toEqual(layout);
+    world.randomize(8,6,123);expect(world.blocks.map(({id,...b})=>b)).toEqual(layout);
   });
   it('rejects invalid counts, occupied sites and neutralizers outside Storage', () => {
     const {world,block}=oneBlock(); const snapshot=world.serialize();

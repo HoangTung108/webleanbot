@@ -19,16 +19,16 @@ nội dung editor hay dữ liệu trình duyệt.
 
 - Một cạnh ô thành phố, đo giữa tâm giao lộ, dài 350 mm.
 - Đã hiệu chỉnh theo số đo: `runLR(2000, 2000)` đi 350 mm trong 5 giây (70 mm/s).
-  Tốc độ trung gian được nội suy tuyến tính; khoảng cách hai bánh ước lượng 84 mm, dùng chung cho vật lý và encoder C++.
+  Tốc độ trung gian được nội suy tuyến tính; khoảng cách hai bánh ước lượng 100 mm, dùng chung cho vật lý và encoder C++.
 - Robot vẽ theo ảnh Leanbot: PCB đỏ dài, Nano xanh, hai bánh đen, cảm biến siêu âm đôi và càng màu be.
-  Tổng hình khoảng 180 × 100 mm, vùng chặn biên bảo thủ bán kính 100 mm; đây là tỷ lệ
+  Tổng hình khoảng 180 × 120 mm, bán kính chọn/chặn tường bảo thủ 110 mm; đây là tỷ lệ
   ước lượng từ ảnh, chưa phải số đo robot thực. Hướng +X luôn là phía càng.
 - Mỗi thành phố A–H có 4 vị trí: 1 trên trái, 2 trên phải, 3 dưới trái, 4 dưới phải.
   Ô 1/4 xoay +45°, ô 2/3 xoay −45° để đối xứng.
 - S1/S3/S5 nằm ở mép dưới; S2/S4/S6 ở mép phải.
 - Góc đường bao tại CRL (dưới phải) là góc vuông; ba góc còn lại giữ bo tròn.
 - CRL là khu xuất phát/kết thúc. Vị trí đánh dấu không phải vật cản.
-- Khối nhiệm vụ 15 × 25 × 75 mm: kéo thả vào ô, random theo số lượng/seed, gắp–mang–thả, va chạm, ma sát và đổ nằm ngang. Chưa có luật tính điểm.
+- Khối nhiệm vụ 15 × 25 × 75 mm: kéo thả vào ô, random theo số lượng/seed, gắp–mang–thả, va chạm, ma sát và đổ nằm ngang. Chấm điểm mô phỏng theo Rulebook V6.
 
 `public/simulator/synapse-city.svg` là bản dựng lại theo ảnh được cung cấp,
 không phải artwork in gốc. Tọa độ đường dò và hình dùng cùng đơn vị mm.
@@ -81,9 +81,8 @@ Vật lý khối là mô hình 2.5D định tính với khối lượng 25 g ư�
 - Mốc cố định: sa bàn 4 ft = 1219,2 mm mỗi chiều; cạnh thành phố 350 mm;
   khối 15 × 25 × 75 mm. Khối đứng hiển thị mặt đáy 15 × 25 mm với phần gợi chiều cao;
   khi đổ, chiều dài chiếm mặt sàn tiến tới 75 mm.
-- Ước lượng robot từ ảnh phối cảnh: dài khoảng 180 mm, rộng qua bánh khoảng 100 mm,
-  khoảng cách tâm bánh 84 mm. Đây không phải kích thước đo chính thức; ảnh không đủ
-  để khẳng định độ chính xác tuyệt đối. Đo trực tiếp để chốt thông số.
+- Ước lượng robot từ ảnh phối cảnh: 180 × 120 × 70 mm, khối lượng 400 g do người dùng cung cấp sau khi đối chiếu video;
+  khoảng cách tâm bánh 100 mm là ước lượng nội bộ theo bề rộng lốp 20 mm. Kích thước tổng thể dùng làm chuẩn; khoảng cách tâm bánh và khớp càng vẫn cần đo trực tiếp để chốt.
 - `robotGeometry.ts` là nguồn chung cho kích thước robot, điểm gắp cách trục 75 mm,
   khung va chạm, khoảng cách hai bánh của hình vẽ, vật lý và encoder C++.
 - Tua 1×/2×/5×/10× nhân **thời gian đưa vào C++**. Các bước vật lý, cảm biến,
@@ -102,3 +101,39 @@ Vật lý khối là mô hình 2.5D định tính với khối lượng 25 g ư�
   và rơi với gia tốc 9810 mm/s². Chiều cao bàn giả định 750 mm; chưa mô phỏng đầy đủ
   quay lật 3D hay lực va đập xuống sàn. Trạng thái rơi dùng cùng đồng hồ mô phỏng ở mọi mức tua.
 - Sau khi rơi, dùng Đặt lại hoặc kéo robot về vị trí được đỡ trước khi chạy lại.
+
+## Chấm điểm theo Rulebook V6 (17/09/2026)
+
+Nguồn: https://drive.google.com/file/d/1KBwprFcB4-8hPliPkTJlqjujqLcO3FP_/view
+Xem đối chiếu chi tiết tại `docs/SYNAPSE_SCORING_V6.md`.
+
+- V6 §9: chỉ cần khối tiếp xúc một phần mặt vùng hợp lệ; còn chạm robot không mất điểm.
+  Simulator giữ khối đang gắp ở mặt sàn trừ khi `elevation > 0`.
+- Containment đúng thành phố xuất phát: 45/khối. Cặp cùng màu có cả pollution và
+  neutralizer chạm cùng containment được tổng 160 theo ma trận §10.1, không cộng thêm 45.
+- §9.3 cho phép pollution bất kỳ đưa về CRL: 100/khối thường; Mystery Master 150 thay
+  cho 100. CRL là ô nền màu 300 × 300 mm tại (959,6;959,6), không gồm line đen.
+- Return 40/robot bắt đầu và kết thúc trong CRL, không bị rơi. Bản này theo dõi 1 robot.
+- Một pollution mỗi thành phố, tối đa 8. Metadata `originZone` luôn giữ nguyên khi robot
+  di chuyển khối; thay vị trí bố trí trước lượt chạy sẽ cập nhật thành phố xuất phát.
+- Chốt điểm khi gọi STOP, C++ kết thúc, hoặc hết 120 giây mô phỏng. Sau STOP khối thả
+  được chạy vật lý thêm tối đa 5 giây để về vị trí nghỉ trước khi ghi kết quả.
+- Normalized Score = Raw / trung bình Top 5 cùng vòng/cấu hình × 1000; không giới hạn 1000.
+- Đặt lại là mở lượt tập mới; chưa có Reset/Tries giữ nguyên đồng hồ trong cùng lượt thi,
+  xếp hạng hai vòng, chữ ký trọng tài hay cơ chế giấu/lộ màu theo các giai đoạn thi.
+
+## Robot theo video Leanbot look
+
+Tham chiếu: https://youtu.be/p64iZY-Bba4 (28 giây, các góc trước/ngang/sau/trên).
+Dựng bằng canvas theo khung đỏ hai tầng, Nano phía sau, motor/bánh cao su hai bên,
+sonar phía trước, cặp servo xanh và càng màu kem có rãnh. Không dùng ảnh bitmap cho robot.
+
+Thông số người dùng xác nhận: L × W × H = 180 × 120 × 70 mm, khối lượng 0,400 kg.
+Tâm hai bánh 100 mm là suy ra từ bề rộng tổng 120 mm và lốp ước lượng 20 mm;
+không tuyên bố đây là số đo chính thức. Điểm gắp vẫn cách trục bánh 75 mm.
+
+Cùng polygon càng được dùng để vẽ và tính khoảng hở: khoảng 69 mm khi mở,
+25,5 mm khi đóng ở 90°. Khối chỉ giữ được khi hai càng khép đủ, không dùng ngưỡng
+55° cũ. Điều kiện khó gắp khối nằm vẫn áp dụng. Khối lượng robot tham gia xung lực
+đẩy khối; vận tốc bánh vẫn do bộ điều khiển đặt để giữ hiệu chuẩn 35 cm / 5 giây.
+Độ cao là metadata của mô hình nhìn từ trên; chưa phải mesh/mô phỏng 3D đầy đủ.

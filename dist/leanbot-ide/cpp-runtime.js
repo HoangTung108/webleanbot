@@ -31,16 +31,38 @@ var LeanbotCpp = (() => {
   // src/simulator/robotGeometry.ts
   var LEANBOT_GEOMETRY = {
     length: 180,
-    width: 100,
-    collisionRadius: 100,
-    wheelBase: 84,
+    width: 120,
+    height: 70,
+    mass: 0.4,
+    collisionRadius: 110,
+    // conservative editing/wall hit radius, not the body width
+    wheelBase: 100,
+    // estimated axle track: 120 mm overall minus 20 mm tyre width
     graspOffset: 75,
-    body: { x: -27, y: 0, length: 130, width: 64 },
-    wheel: { length: 28, width: 16 }
+    body: { x: -27, y: 0, length: 130, width: 70 },
+    wheel: { length: 32.5, width: 20 },
+    gripper: { pivotX: 53, pivotY: 35, openAngle: 0.2, closedAngle: -0.75 }
   };
+  var FINGER = [[0, -5], [21, -5], [32, -1], [33, 4], [26, 9], [19, 3], [15, 3], [22, 14], [18, 18], [9, 13], [1, 4]];
+  function gripperJaw(side, degrees) {
+    const g = LEANBOT_GEOMETRY.gripper;
+    const t = Math.max(0, Math.min(90, degrees)) / 90, a = g.openAngle + (g.closedAngle - g.openAngle) * t;
+    return FINGER.map(([x, y]) => ({ x: g.pivotX + x * Math.cos(a) - y * Math.sin(a), y: side * (g.pivotY + x * Math.sin(a) + y * Math.cos(a)) }));
+  }
+  function gripperOpening(left, right) {
+    const at = (side, degrees) => {
+      const p = gripperJaw(side, degrees), ys = [];
+      for (let i = 0; i < p.length; i++) {
+        const a = p[i], b = p[(i + 1) % p.length], x = LEANBOT_GEOMETRY.graspOffset;
+        if (Math.abs(b.x - a.x) > 1e-9 && x >= Math.min(a.x, b.x) && x <= Math.max(a.x, b.x)) ys.push(a.y + (x - a.x) / (b.x - a.x) * (b.y - a.y));
+      }
+      return ys.length ? side === 1 ? Math.min(...ys) : Math.max(...ys) : side * 100;
+    };
+    return Math.max(0, at(1, right) - at(-1, left));
+  }
 
   // src/simulator/missionWorld.ts
-  var BLOCK_COLORS = { green: "#83a73e", blue: "#278fa9", purple: "#795272", red: "#bd3d2f", yellow: "#d8b721" };
+  var BLOCK_COLORS = { green: "#83a73e", blue: "#278fa9", purple: "#795272", red: "#bd3d2f", yellow: "#d8b721", mystery: "#cbd0d5" };
   var BLOCK_SIZE = { length: 15, width: 25, height: 75 };
   var NEUTRALIZER_COLORS = ["green", "blue", "purple"];
   var RAD = Math.PI / 180;
@@ -111,10 +133,13 @@ var LeanbotCpp = (() => {
     }
     make(kind, color, slot) {
       if (!Object.hasOwn(BLOCK_COLORS, color) || kind === "neutralizer" && !NEUTRALIZER_COLORS.includes(color)) throw new Error("Invalid color for this block type.");
-      return { id: `block-${++this.serial}`, kind, color, x: slot.x, y: slot.y, rotation: slot.rotation, slotId: slot.id, vx: 0, vy: 0, spin: 0, tilt: 0, tipSpeed: 0, state: "standing", held: false, mass: 0.025 };
+      return { id: `block-${++this.serial}`, kind, color, originZone: kind === "pollution" ? this.board.cityZones?.find((z) => z.sites.some((s) => s.id === slot.id))?.id : void 0, elevation: 0, x: slot.x, y: slot.y, rotation: slot.rotation, slotId: slot.id, vx: 0, vy: 0, spin: 0, tilt: 0, tipSpeed: 0, state: "standing", held: false, mass: 0.025 };
     }
     available(kind, except) {
-      return this.slots(kind).filter((s) => ![...this.blocks, ...this.initial].some((b) => b.id !== except && b.slotId === s.id));
+      return this.slots(kind).filter((s) => {
+        const zone = this.board.cityZones?.find((z) => z.sites.some((site) => site.id === s.id))?.id;
+        return ![...this.blocks, ...this.initial].some((b) => b.id !== except && (b.slotId === s.id || kind === "pollution" && b.kind === "pollution" && b.originZone === zone));
+      });
     }
     place(kind, color, x, y, id) {
       const slots = this.available(kind, id).sort((a, b) => Math.hypot(a.x - x, a.y - y) - Math.hypot(b.x - x, b.y - y));
@@ -142,7 +167,7 @@ var LeanbotCpp = (() => {
       this.commitLayout();
     }
     randomize(pollution, neutralizers, seed = Date.now()) {
-      if (!Number.isInteger(pollution) || !Number.isInteger(neutralizers) || pollution < 0 || pollution > this.slots("pollution").length || neutralizers < 0 || neutralizers > this.slots("neutralizer").length) throw new Error("Choose 0\u201332 pollution blocks and 0\u20136 neutralizers.");
+      if (!Number.isInteger(pollution) || !Number.isInteger(neutralizers) || pollution < 0 || pollution > (this.board.cityZones?.length ?? 0) || neutralizers < 0 || neutralizers > this.slots("neutralizer").length) throw new Error("Choose 0\u20138 pollution blocks (one per city) and 0\u20136 neutralizers.");
       if (!Number.isFinite(seed)) throw new Error("Seed must be a finite number.");
       const random = seededRandom(seed);
       const shuffle = (slots) => {
@@ -155,8 +180,16 @@ var LeanbotCpp = (() => {
       };
       const blocks = [];
       for (const [kind, count] of [["pollution", pollution], ["neutralizer", neutralizers]]) {
-        const colors = kind === "pollution" ? Object.keys(BLOCK_COLORS) : NEUTRALIZER_COLORS;
-        for (const slot of shuffle(this.slots(kind)).slice(0, count)) blocks.push(this.make(kind, colors[Math.floor(random() * colors.length)], slot));
+        const colors = kind === "pollution" ? Object.keys(BLOCK_COLORS).filter((color) => color !== "mystery") : NEUTRALIZER_COLORS;
+        const seenZones = /* @__PURE__ */ new Set();
+        const slots = shuffle(this.slots(kind)).filter((slot) => {
+          if (kind !== "pollution") return true;
+          const zone = this.board.cityZones?.find((z) => z.sites.some((s) => s.id === slot.id))?.id;
+          if (!zone || seenZones.has(zone)) return false;
+          seenZones.add(zone);
+          return true;
+        });
+        for (const slot of slots.slice(0, count)) blocks.push(this.make(kind, colors[Math.floor(random() * colors.length)], slot));
       }
       this.blocks = blocks;
       this.commitLayout();
@@ -220,9 +253,9 @@ var LeanbotCpp = (() => {
     setGripper(left, right, pose, motorLeft = 0, motorRight = 0) {
       const angle = pose.heading * RAD, speed = (motorLeft + motorRight) / 2;
       this.velocity = { x: speed * Math.cos(angle), y: speed * Math.sin(angle), omega: (motorLeft - motorRight) / LEANBOT_GEOMETRY.wheelBase };
-      const wasClosed = this.gripper.left >= 55 && this.gripper.right >= 55;
+      const wasClosed = gripperOpening(this.gripper.left, this.gripper.right) <= BLOCK_SIZE.width + 2;
       this.gripper = { left, right };
-      const closed = left >= 55 && right >= 55;
+      const closed = gripperOpening(left, right) <= BLOCK_SIZE.width + 2;
       if (this.heldBlock && !closed) {
         const block = this.heldBlock, point = this.graspPoint(pose);
         block.held = false;
@@ -315,16 +348,17 @@ var LeanbotCpp = (() => {
           b.slotId = void 0;
           const rvx = this.velocity.x - omega * (b.y - pose.y), rvy = this.velocity.y + omega * (b.x - pose.x);
           const closing = Math.max(0, (rvx - b.vx) * hit.nx + (rvy - b.vy) * hit.ny);
-          b.vx += hit.nx * closing * (1 + this.restitution);
-          b.vy += hit.ny * closing * (1 + this.restitution);
+          const impulse = closing * (1 + this.restitution) / (1 / LEANBOT_GEOMETRY.mass + 1 / b.mass);
+          b.vx += hit.nx * impulse / b.mass;
+          b.vy += hit.ny * impulse / b.mass;
           const localX = (b.x - box.x) * Math.cos(angle) + (b.y - box.y) * Math.sin(angle);
           const localY = -(b.x - box.x) * Math.sin(angle) + (b.y - box.y) * Math.cos(angle);
           const cx = clamp(localX, -box.length / 2, box.length / 2), cy = clamp(localY, -box.width / 2, box.width / 2);
           const rx = box.x + cx * Math.cos(angle) - cy * Math.sin(angle) - b.x;
           const ry = box.y + cx * Math.sin(angle) + cy * Math.cos(angle) - b.y;
           const footprint = blockFootprint(b), inertia = b.mass * (footprint.length ** 2 + footprint.width ** 2) / 12;
-          b.spin = clamp(b.spin + (rx * hit.ny - ry * hit.nx) * b.mass * closing * (1 + this.restitution) / inertia / RAD, -720, 720);
-          if (closing / dt > GRAVITY * (BLOCK_SIZE.length / 2) / (BLOCK_SIZE.height * 0.65)) this.tip(b, Math.atan2(hit.ny, hit.nx) / RAD);
+          b.spin = clamp(b.spin + (rx * hit.ny - ry * hit.nx) * impulse / inertia / RAD, -720, 720);
+          if (impulse / b.mass / dt > GRAVITY * (BLOCK_SIZE.length / 2) / (BLOCK_SIZE.height * 0.65)) this.tip(b, Math.atan2(hit.ny, hit.nx) / RAD);
         }
       }
       for (let i = 0; i < this.blocks.length; i++) for (let j = i + 1; j < this.blocks.length; j++) {
@@ -369,13 +403,18 @@ var LeanbotCpp = (() => {
     load(text) {
       const value = JSON.parse(text);
       if (value.version !== 1 || !Array.isArray(value.blocks) || value.blocks.length > 38 || !Number.isFinite(value.friction) || value.friction < 0 || value.friction > 1) throw new Error("Invalid mission layout.");
-      const seen = /* @__PURE__ */ new Set();
+      const seen = /* @__PURE__ */ new Set(), seenZones = /* @__PURE__ */ new Set();
       const next = value.blocks.map((input) => {
         if (!["pollution", "neutralizer"].includes(input.kind)) throw new Error("Invalid block type.");
         const slot = this.slots(input.kind).find((s) => s.id === input.slotId);
         if (!slot || seen.has(slot.id)) throw new Error("Invalid or occupied mission site.");
         seen.add(slot.id);
-        return this.make(input.kind, input.color, slot);
+        const block = this.make(input.kind, input.color, slot);
+        if (block.originZone) {
+          if (seenZones.has(block.originZone)) throw new Error("V6: ch\u1EC9 m\u1ED9t pollution m\u1ED7i th\xE0nh ph\u1ED1.");
+          seenZones.add(block.originZone);
+        }
+        return block;
       });
       this.blocks = next;
       this.friction = value.friction;
@@ -397,6 +436,12 @@ var LeanbotCpp = (() => {
       ctx.strokeRect(-shape.length / 2, -shape.width / 2 - h, shape.length, shape.width + h);
       ctx.fillStyle = "rgba(255,255,255,.2)";
       ctx.fillRect(-shape.length / 2, -shape.width / 2 - h, shape.length, Math.min(5, shape.width));
+      if (b.color === "mystery") {
+        ctx.fillStyle = "#344357";
+        ctx.font = "bold 14px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("?", 0, 4);
+      }
       if (b.kind === "neutralizer") {
         ctx.fillStyle = "#f3efe0";
         if (b.tilt > Math.PI / 4) ctx.fillRect(-7.5, -shape.width / 2, 15, shape.width);
@@ -415,8 +460,8 @@ var LeanbotCpp = (() => {
     <p>Drag a color to a site, or select it and click the mat. Drag placed blocks to move them.</p>
     <strong>Pollution \u2014 solid color</strong><div class="mission-palette" data-palette="pollution"></div>
     <strong>Neutralizer \u2014 white stripe</strong><div class="mission-palette" data-palette="neutralizer"></div>
-    <small>15 \xD7 25 \xD7 75 mm. Pollution: city sites 1\u20134. Neutralizers: Storage S1\u2013S6.</small>
-    <div class="mission-counts"><label>Pollution <input data-count="pollution" aria-label="Pollution count" type="number" min="0" max="32" value="8"></label><label>Neutralizers <input data-count="neutralizer" aria-label="Neutralizer count" type="number" min="0" max="6" value="3"></label><label>Seed <input data-seed aria-label="Mission seed" type="number" step="1" placeholder="random"></label></div>
+    <small>15 \xD7 25 \xD7 75 mm. Pollution: one per city, sites 1\u20134. Neutralizers: Storage S1\u2013S6.</small>
+    <div class="mission-counts"><label>Pollution <input data-count="pollution" aria-label="Pollution count" type="number" min="0" max="8" value="8"></label><label>Neutralizers <input data-count="neutralizer" aria-label="Neutralizer count" type="number" min="0" max="6" value="3"></label><label>Seed <input data-seed aria-label="Mission seed" type="number" step="1" placeholder="random"></label></div>
     <div class="mission-tools"><button type="button" data-action="random">Randomize layout</button><button type="button" data-action="clear">Clear blocks</button></div>
     <label>Friction <input data-friction aria-label="Block friction" type="range" min="0" max="1" step="0.05" value="${world.friction}"><output data-friction-value>${world.friction.toFixed(2)}</output></label>
     <div class="mission-tools"><button type="button" data-action="save">Download mission</button><button type="button" data-action="open">Open mission</button></div>
@@ -678,127 +723,183 @@ var LeanbotCpp = (() => {
   function drawLeanbot(ctx, leftGrip = 0, rightGrip = 0) {
     ctx.save();
     ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+    ctx.fillStyle = "rgba(17,24,30,.18)";
+    ctx.fillRect(-90, -34, 134, 70);
+    ctx.fillStyle = "#8b1525";
+    ctx.fillRect(-92, -35, 132, 70);
+    ctx.fillStyle = "#bc2030";
+    ctx.fillRect(-92, -35, 132, 4);
+    ctx.fillRect(-92, 31, 132, 4);
+    ctx.fillStyle = "#202b30";
+    ctx.fillRect(-87, -29, 118, 58);
     for (const side of [-1, 1]) {
       const y = side * LEANBOT_GEOMETRY.wheelBase / 2;
-      ctx.fillStyle = "#111916";
-      ctx.fillRect(-14, y - 8, 28, 16);
-      ctx.strokeStyle = "#344238";
-      ctx.lineWidth = 2;
-      for (let x = -11; x <= 11; x += 5) {
+      ctx.fillStyle = "#d2d8cd";
+      ctx.fillRect(-14, side < 0 ? -43 : 31, 28, 12);
+      ctx.strokeStyle = "#8b9891";
+      ctx.lineWidth = 0.8;
+      ctx.strokeRect(-14, side < 0 ? -43 : 31, 28, 12);
+      ctx.fillStyle = "#162322";
+      ctx.fillRect(-16.25, y - 10, 32.5, 20);
+      ctx.fillStyle = "#283733";
+      ctx.fillRect(-15, y - 8, 30, 2);
+      ctx.fillRect(-15, y + 6, 30, 2);
+      ctx.strokeStyle = "#45524a";
+      ctx.lineWidth = 1.8;
+      for (let x = -13; x <= 13; x += 4.5) {
         ctx.beginPath();
-        ctx.moveTo(x, y - 7);
-        ctx.lineTo(x + 1, y + 7);
+        ctx.moveTo(x, y - 9);
+        ctx.lineTo(x + 2, y - 3);
+        ctx.moveTo(x, y + 3);
+        ctx.lineTo(x + 2, y + 9);
         ctx.stroke();
       }
-      ctx.fillStyle = "#d3d5c4";
-      ctx.fillRect(-10, y - 6.5, 20, 13);
-      ctx.fillStyle = "#e2b52d";
-      ctx.fillRect(-6, y - 3, 12, 6);
+      ctx.fillStyle = "#b6c0b2";
+      ctx.fillRect(-8, y - 4, 16, 8);
+      ctx.fillStyle = "#7d8d83";
+      ctx.fillRect(-3, y - 3, 6, 6);
     }
-    ctx.fillStyle = "#d71924";
-    ctx.strokeStyle = "#961520";
-    ctx.lineWidth = 1.2;
-    ctx.fillRect(-92, -32, 130, 64);
-    ctx.strokeRect(-92, -32, 130, 64);
-    ctx.fillStyle = "#f52f35";
-    ctx.fillRect(-89, -30, 122, 1.5);
-    ctx.fillStyle = "#ead7a0";
-    for (let x = -87; x < -10; x += 4) for (const y of [-28, 28]) ctx.fillRect(x, y, 1.5, 1.5);
-    ctx.fillStyle = "#164d77";
-    ctx.fillRect(-91, -17, 17, 34);
-    ctx.fillStyle = "#e2b126";
-    ctx.fillRect(-75, -20, 62, 40);
-    ctx.fillStyle = "#143d68";
-    ctx.fillRect(-74, -18, 59, 36);
-    ctx.fillStyle = "#0c172a";
-    ctx.fillRect(-53, -10, 20, 20);
-    ctx.strokeStyle = "#b7c7c4";
-    ctx.lineWidth = 0.8;
-    for (let x = -70; x <= -20; x += 4) {
+    ctx.fillStyle = "#e02738";
+    ctx.fillRect(-92, -31, 130, 62);
+    ctx.strokeStyle = "#aa1d2c";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(-92, -31, 130, 62);
+    ctx.fillStyle = "#f46b65";
+    ctx.fillRect(-90, -30, 126, 1);
+    ctx.strokeStyle = "#f1a0a0";
+    ctx.lineWidth = 0.35;
+    for (let i = 0; i < 9; i++) {
+      const y = -23 + i * 5.7;
       ctx.beginPath();
-      ctx.moveTo(x, -17);
-      ctx.lineTo(x, -13);
-      ctx.moveTo(x, 13);
-      ctx.lineTo(x, 17);
+      ctx.moveTo(-81, y);
+      ctx.lineTo(-9, y);
+      ctx.lineTo(5, y * 0.7);
       ctx.stroke();
     }
-    ctx.fillStyle = "#b6c0ba";
-    ctx.fillRect(-26, -7, 10, 14);
-    ctx.fillStyle = "#f5e8d1";
-    ctx.fillRect(-66, -4, 7, 8);
+    for (const x of [-75, 23]) for (const y of [-27, 27]) {
+      ctx.fillStyle = "#e1ba4a";
+      ctx.beginPath();
+      ctx.arc(x, y, 4.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#8d2030";
+      ctx.beginPath();
+      ctx.arc(x, y, 2.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "#e0d6ba";
+      ctx.lineWidth = 0.7;
+      ctx.beginPath();
+      ctx.moveTo(x - 1, y);
+      ctx.lineTo(x + 1, y);
+      ctx.stroke();
+    }
+    ctx.fillStyle = "#20232b";
+    ctx.fillRect(-76, -14, 61, 28);
+    ctx.fillStyle = "#174d6b";
+    ctx.fillRect(-73, -10, 55, 20);
+    for (let x = -70; x < -20; x += 3.2) for (const y of [-11, 10]) {
+      ctx.fillStyle = "#d5b66e";
+      ctx.fillRect(x, y, 1.1, 2);
+    }
+    ctx.fillStyle = "#14242d";
+    ctx.fillRect(-55, -7, 14, 14);
+    ctx.strokeStyle = "#8ca6aa";
+    ctx.lineWidth = 0.6;
+    for (let v = -5; v <= 5; v += 2) {
+      ctx.beginPath();
+      ctx.moveTo(-57, v);
+      ctx.lineTo(-55, v);
+      ctx.moveTo(-41, v);
+      ctx.lineTo(-39, v);
+      ctx.stroke();
+    }
+    ctx.fillStyle = "#c6cdd0";
+    ctx.fillRect(-26, -6, 10, 12);
+    ctx.fillStyle = "#647983";
+    ctx.fillRect(-22, -4, 6, 8);
+    ctx.fillStyle = "#c0bfa3";
+    ctx.fillRect(-67, -3, 5, 6);
+    ctx.fillStyle = "#87b6ae";
+    for (let x = -68; x < -28; x += 8) ctx.fillRect(x, 6, 3, 1);
+    ctx.fillStyle = "#f3efe4";
+    ctx.font = "bold 4.2px sans-serif";
+    ctx.fillText("NANO", -65, -5);
     for (const side of [-1, 1]) {
-      ctx.fillStyle = "#f4f0d7";
-      ctx.fillRect(2, side < 0 ? -28 : 17, 13, 11);
-      ctx.strokeStyle = "#f8da38";
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(-63, side * 31, 6, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(20, side * 31, 6, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.fillStyle = "#1152aa";
-      ctx.fillRect(38, side * 35 - 7, 22, 14);
-      ctx.fillStyle = "#2f80ce";
-      ctx.fillRect(41, side * 35 - 6, 11, 12);
-      for (const [colour, offset] of [["#f5b92c", 0], ["#f07122", 3], ["#243d98", 6]]) {
+      ctx.fillStyle = "#eee8d5";
+      ctx.fillRect(-4, side < 0 ? -25 : 16, 13, 9);
+      ctx.fillStyle = "#968e7b";
+      for (let x = -2; x < 7; x += 3) ctx.fillRect(x, side < 0 ? -24 : 17, 1, 6);
+      for (const [colour, offset] of [["#e9b22d", 0], ["#d64b2e", 2.4], ["#35466a", 4.8]]) {
         ctx.strokeStyle = colour;
-        ctx.lineWidth = 1.2;
+        ctx.lineWidth = 1.3;
         ctx.beginPath();
-        ctx.moveTo(7, side * (24 + offset));
-        ctx.lineTo(24, side * (39 + offset));
-        ctx.lineTo(43, side * 35);
+        ctx.moveTo(1, side * 21);
+        ctx.bezierCurveTo(-8, side * (39 + offset), 19, side * (47 + offset), 33, side * 34);
         ctx.stroke();
       }
-    }
-    ctx.fillStyle = "#fff2e0";
-    ctx.font = "bold 6px sans-serif";
-    ctx.fillText("LEANBOT", -62, 27);
-    ctx.fillStyle = "#a1bdb3";
-    ctx.fillRect(20, -31, 24, 62);
-    for (const y of [-18, 18]) {
-      ctx.fillStyle = "#dce6dd";
-      ctx.fillRect(24, y - 10, 18, 20);
-      ctx.fillStyle = "#718b87";
+      ctx.fillStyle = "#b91d2d";
+      ctx.fillRect(34, side * 35 - 11, 28, 22);
+      ctx.fillStyle = "#164790";
+      ctx.fillRect(37, side * 35 - 9, 22, 18);
+      ctx.fillStyle = "#2d77b4";
+      ctx.fillRect(39, side * 35 - 8, 13, 16);
+      ctx.strokeStyle = "#8cb4d6";
+      ctx.lineWidth = 0.7;
+      ctx.strokeRect(37, side * 35 - 9, 22, 18);
+      ctx.fillStyle = "#a7c7db";
+      ctx.fillRect(40, side * 35 - 6, 3, 12);
+      ctx.fillStyle = "#df629b";
+      ctx.fillRect(54, side * 35 - 10, 3, 4);
+      ctx.fillStyle = "#ece9d6";
       ctx.beginPath();
-      ctx.arc(39, y, 9, 0, Math.PI * 2);
+      ctx.arc(53, side * 35, 4, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = "#273e3f";
-      ctx.beginPath();
-      ctx.arc(41, y, 6, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = "#d8e3dc";
-      ctx.fillRect(24, y - 8, 3, 16);
     }
-    ctx.fillStyle = "#b90f20";
-    ctx.fillRect(42, -30, 3, 60);
+    ctx.fillStyle = "#397f6e";
+    ctx.fillRect(19, -27, 25, 54);
+    ctx.strokeStyle = "#bdd0be";
+    ctx.lineWidth = 0.8;
+    ctx.strokeRect(19, -27, 25, 54);
+    for (const y of [-15, 15]) {
+      ctx.fillStyle = "#7c9794";
+      ctx.fillRect(25, y - 9, 19, 18);
+      ctx.fillStyle = "#cedbd6";
+      ctx.fillRect(27, y - 8, 15, 16);
+      ctx.fillStyle = "#f0f2e9";
+      ctx.fillRect(28, y - 7, 4, 14);
+      ctx.fillStyle = "#263d40";
+      ctx.beginPath();
+      ctx.ellipse(43, y, 3, 8, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "#d5e2d9";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+    ctx.fillStyle = "#f4e9c8";
+    ctx.fillRect(22, -4, 9, 8);
     for (const [side, degrees] of [[-1, leftGrip], [1, rightGrip]]) {
-      const close = Math.max(0, Math.min(90, degrees)) / 90;
-      ctx.save();
-      ctx.translate(55, side * 35);
-      ctx.scale(1, side);
-      ctx.rotate(0.2 - close * 0.85);
-      ctx.fillStyle = "#dfc293";
-      ctx.strokeStyle = "#ad946e";
-      ctx.lineWidth = 1.2;
+      const jaw = gripperJaw(side, degrees);
+      ctx.fillStyle = "#eee0c3";
+      ctx.strokeStyle = "#b9a886";
+      ctx.lineWidth = 0.8;
       ctx.beginPath();
-      ctx.moveTo(0, -6);
-      ctx.lineTo(24, -6);
-      ctx.lineTo(31, 1);
-      ctx.lineTo(28, 7);
-      ctx.lineTo(14, 1);
-      ctx.lineTo(20, 15);
-      ctx.lineTo(14, 18);
-      ctx.lineTo(2, 4);
+      ctx.moveTo(jaw[0].x, jaw[0].y);
+      for (const p of jaw.slice(1)) ctx.lineTo(p.x, p.y);
       ctx.closePath();
       ctx.fill();
       ctx.stroke();
-      ctx.fillStyle = "#d9e0dd";
+      ctx.fillStyle = "#dce1dc";
       ctx.beginPath();
-      ctx.arc(1, 0, 3, 0, Math.PI * 2);
+      ctx.arc(53, side * 35, 2.4, 0, Math.PI * 2);
       ctx.fill();
-      ctx.restore();
+      ctx.fillStyle = "#657d86";
+      ctx.beginPath();
+      ctx.arc(53, side * 35, 1, 0, Math.PI * 2);
+      ctx.fill();
     }
+    ctx.fillStyle = "#f9e6d6";
+    ctx.font = "bold 5px sans-serif";
+    ctx.fillText("LEANBOT", -59, 24);
     ctx.restore();
   }
 

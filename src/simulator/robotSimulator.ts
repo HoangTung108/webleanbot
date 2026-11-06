@@ -90,6 +90,8 @@ export class RobotSimulator {
     this.state.isPaused = false;
     this.lastUpdateTime = Date.now();
     this.simulationTime = 0;
+    this.state.currentTime = 0;
+    this.state.history = [];
   }
 
   /**

@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen, cleanup } from '@testing-library/react';
+import { act, fireEvent, render, screen, cleanup } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
 
@@ -24,7 +24,7 @@ describe('IDE to simulator source connection', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Simulator' }));
     fireEvent.click(screen.getByText('Chương trình C++'));
     expect(screen.getByText(source, { selector: 'pre' })).toBeTruthy();
-    expect(screen.queryByRole('combobox')).toBeNull();
+    expect(screen.queryByRole('combobox', {name:/sa bàn/i})).toBeNull();
     expect(screen.getByText('Synapse City · 4 ft × 4 ft')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Chạy' }));
     expect((screen.getByRole('button', { name: 'Chạy' }) as HTMLButtonElement).disabled).toBe(true);
@@ -39,6 +39,35 @@ describe('IDE to simulator source connection', () => {
     expect(screen.getByRole('log').textContent).toContain('Chưa có code C++');
     fireEvent.click(screen.getByRole('button', { name: 'Xóa nhật ký' }));
     expect(screen.getByRole('log').textContent).toContain('Chưa có hoạt động');
+  });
+
+  it('creates category missions and records V6 raw score on completion, clearing it on reset', () => {
+    render(<App />);
+    fireEvent.change(screen.getByLabelText('Editor C++'), {target:{value:'void loop(){ LbMission.end(); }'}});
+    fireEvent.click(screen.getByRole('button',{name:'Simulator'}));
+    fireEvent.change(screen.getByLabelText('Hạng mục thi đấu'),{target:{value:'master'}});
+    fireEvent.click(screen.getByRole('button',{name:'Tạo nhiệm vụ Master'}));
+    expect(screen.getByText('7 pollution · 3 neutralizers')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button',{name:'Chạy'}));
+    const callback=vi.mocked(requestAnimationFrame).mock.calls.at(-1)![0];
+    act(()=>callback(0));
+    expect(screen.getByLabelText('Raw Score').textContent).toBe('40');
+    expect(screen.getByText('C++ đã kết thúc',{exact:true})).toBeTruthy();
+    fireEvent.click(screen.getByText('Normalized Score',{exact:true}));
+    fireEvent.change(screen.getByLabelText('Top 5 Raw Score'),{target:{value:'535, 530, 390, 140, 125'}});
+    expect(screen.getByLabelText('Normalized Score').textContent).toBe('116.3');
+    fireEvent.click(screen.getByRole('button',{name:'Đặt lại mô phỏng'}));
+    expect(screen.getByLabelText('Raw Score').textContent).toBe('—');
+  });
+
+  it('treats the Stop button as STOP and records the final score', () => {
+    render(<App />);
+    fireEvent.change(screen.getByLabelText('Editor C++'),{target:{value:'void loop(){ LbDelay(1000000); }'}});
+    fireEvent.click(screen.getByRole('button',{name:'Simulator'}));
+    fireEvent.click(screen.getByRole('button',{name:'Chạy'}));
+    fireEvent.click(screen.getByRole('button',{name:'Dừng'}));
+    expect(screen.getByLabelText('Raw Score').textContent).toBe('40');
+    expect(screen.getByText('STOP · kết thúc lượt',{exact:true})).toBeTruthy();
   });
 
 });

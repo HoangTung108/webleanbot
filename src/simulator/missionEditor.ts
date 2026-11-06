@@ -13,8 +13,8 @@ export function mountMissionEditor(host: HTMLElement, world: MissionWorld, optio
     <p>Drag a color to a site, or select it and click the mat. Drag placed blocks to move them.</p>
     <strong>Pollution — solid color</strong><div class="mission-palette" data-palette="pollution"></div>
     <strong>Neutralizer — white stripe</strong><div class="mission-palette" data-palette="neutralizer"></div>
-    <small>15 × 25 × 75 mm. Pollution: city sites 1–4. Neutralizers: Storage S1–S6.</small>
-    <div class="mission-counts"><label>Pollution <input data-count="pollution" aria-label="Pollution count" type="number" min="0" max="32" value="8"></label><label>Neutralizers <input data-count="neutralizer" aria-label="Neutralizer count" type="number" min="0" max="6" value="3"></label><label>Seed <input data-seed aria-label="Mission seed" type="number" step="1" placeholder="random"></label></div>
+    <small>15 × 25 × 75 mm. Pollution: one per city, sites 1–4. Neutralizers: Storage S1–S6.</small>
+    <div class="mission-counts"><label>Pollution <input data-count="pollution" aria-label="Pollution count" type="number" min="0" max="8" value="8"></label><label>Neutralizers <input data-count="neutralizer" aria-label="Neutralizer count" type="number" min="0" max="6" value="3"></label><label>Seed <input data-seed aria-label="Mission seed" type="number" step="1" placeholder="random"></label></div>
     <div class="mission-tools"><button type="button" data-action="random">Randomize layout</button><button type="button" data-action="clear">Clear blocks</button></div>
     <label>Friction <input data-friction aria-label="Block friction" type="range" min="0" max="1" step="0.05" value="${world.friction}"><output data-friction-value>${world.friction.toFixed(2)}</output></label>
     <div class="mission-tools"><button type="button" data-action="save">Download mission</button><button type="button" data-action="open">Open mission</button></div>

@@ -1,5 +1,7 @@
+import { LEANBOT_GEOMETRY } from './robotGeometry';
 import { ScorePanel } from './ScorePanel';
-import { calculateScore, createScoringMission, type ScoreCategory, type ScoreResult } from './scoring';
+import type { Pose } from './types';
+import { calculateScore, createScoringMission, ROUND_LIMIT_MS, type ScoreCategory, type ScoreResult } from './scoring';
 import { mountMissionEditor } from './missionEditor';
 /**
  * Complete Simulator Demo Component
@@ -23,6 +25,7 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
   const bridgeRef = useRef<CppSimulatorBridge | null>(null);
   const animationRef = useRef<number | null>(null);
 
+  const scoringStartPose = useRef<Pose|undefined>(undefined);
   const [scoreCategory, setScoreCategory] = useState<ScoreCategory>('explorer');
   const [scoreResult, setScoreResult] = useState<ScoreResult|null>(null);
   const [scoreReason, setScoreReason] = useState('');
@@ -86,7 +89,7 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
       pose: () => simulator.getRobotPose(), render: () => renderer.render(),
     }) : () => {};
     const detachScoring = simulator.mission.subscribe(() => setScoreResult(null));
-    const detachPlacement = renderer.enablePlacement(pose => { setRobotHeading(pose.heading); setStats(prev => ({...prev,posX:pose.x,posY:pose.y,heading:pose.heading})); });
+    const detachPlacement = renderer.enablePlacement(pose => { setScoreResult(null); setRobotHeading(pose.heading); setStats(prev => ({...prev,posX:pose.x,posY:pose.y,heading:pose.heading})); });
     const resize = () => {
       const rect = canvasRef.current?.getBoundingClientRect();
       if (rect && rect.width > 0 && rect.height > 0) { renderer.resizeCanvas(rect.width, rect.height); renderer.render(); }
@@ -128,7 +131,7 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
       if (bridge) {
         try {
           bridge.executeStep(performance.now());
-          if (!bridge.isExecuting()) { sim.stop(); setIsRunning(false); finishScore('C++ đã kết thúc'); addLog('[OK] Chương trình kết thúc'); }
+          if (!bridge.isExecuting()) { sim.stop(); setIsRunning(false); finishScore(bridge.getCompletionReason()==='time-limit'?'Hết 2 phút · STOP':'C++ đã kết thúc'); addLog(bridge.getCompletionReason()==='time-limit'?'[OK] Hết 2 phút, đã dừng robot':'[OK] Chương trình kết thúc'); }
         } catch (error) {
           sim.stop(); setIsRunning(false);
           if (sim.getFallState().status === 'fallen') finishScore('Robot bị rơi · điểm hiện trạng');
@@ -175,9 +178,12 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
   const finishScore = (reason: string) => {
     const sim=simulatorRef.current;
     if (!sim) return;
-    const result=calculateScore(SYNAPSE_CITY,sim.mission.blocks,scoreCategory,[{pose:sim.getRobotPose(),fallen:sim.getFallState().status!=='supported'}]);
+    // V6 §11.4 scores final resting positions; let released models coast/settle.
+    for(let i=0;i<1000&&sim.mission.hasMotion;i++)sim.mission.step(.005,sim.getRobotPose(),0,0);
+    rendererRef.current?.render();
+    const result=calculateScore(SYNAPSE_CITY,sim.mission.blocks,scoreCategory,[{pose:sim.getRobotPose(),startPose:scoringStartPose.current,fallen:sim.getFallState().status!=='supported'}]);
     setScoreResult(result);setScoreReason(reason);
-    addLog(`Điểm tạm tính: ${result.total} · ${reason} · chờ đối chiếu luật chi tiết`);
+    addLog(`Raw Score V6: ${result.total} · ${reason}`);
   };
 
   const handleStart = () => {
@@ -195,6 +201,7 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
     }
 
     setScoreResult(null);
+    scoringStartPose.current=simulatorRef.current.getRobotPose();
     simulatorRef.current.start();
     simulatorRef.current.setMotorSpeeds(0, 0);
     bridgeRef.current.startExecution();
@@ -211,6 +218,7 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
     setIsRunning(false);
     setIsPaused(false);
     setStats(prev => ({...prev,speedL:0,speedR:0}));
+    finishScore('STOP · kết thúc lượt');
     addLog('Đã dừng mô phỏng');
   };
 
@@ -230,7 +238,7 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
 
   const handleReset = () => {
     if (!simulatorRef.current || !rendererRef.current) return;
-    setScoreResult(null);
+    setScoreResult(null);scoringStartPose.current=undefined;
     simulatorRef.current.reset();
     simulatorRef.current.setSpeedMultiplier(1);
     setRobotHeading(simulatorRef.current.getRobotPose().heading);
@@ -251,7 +259,7 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
     if (isRunning && !isPaused) {
       try {
         bridgeRef.current?.executeStep(performance.now());
-        if (!bridgeRef.current?.isExecuting()) { simulatorRef.current.stop(); setIsRunning(false); finishScore('C++ đã kết thúc'); }
+        if (!bridgeRef.current?.isExecuting()) { simulatorRef.current.stop(); setIsRunning(false); finishScore(bridgeRef.current?.getCompletionReason()==='time-limit'?'Hết 2 phút · STOP':'C++ đã kết thúc'); }
       } catch (error) {
         handleStop();
         addLog(`[ERROR] ${error instanceof Error ? error.message : String(error)}`);
@@ -282,13 +290,14 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
         </div>
         <label className="sim-heading-input">Hướng robot <input aria-label="Góc robot" type="number" min="0" max="359" value={robotHeading} disabled={isRunning} onChange={e => {
           if (e.target.value === '') return;
+          setScoreResult(null);
           simulatorRef.current?.setHeading(Number(e.target.value));
           const heading = simulatorRef.current?.getRobotPose().heading ?? 0;
           setRobotHeading(heading);
           setStats(prev => ({...prev,heading}));
           rendererRef.current?.render();
         }} /><span>°</span></label>
-        <span className="sim-toolbar-note">C++ từ tệp đang mở</span>
+        <span className="sim-toolbar-note">Còn {Math.ceil(Math.max(0,ROUND_LIMIT_MS/1000-stats.time))} s / 120 s</span>
       </div>
       <div className="sim-layout">
         <div className="sim-main">
@@ -305,14 +314,14 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
           </section>
         </div>
         <aside className="sim-inspector" aria-label="Thiết lập mô phỏng">
-          <ScorePanel category={scoreCategory} result={scoreResult} reason={scoreReason} running={isRunning} onCategory={value=>{setScoreCategory(value);setScoreResult(null)}} onCalculate={()=>finishScore('Chấm hiện trạng thủ công')} onGenerate={()=>{
+          <ScorePanel key={scoreCategory} category={scoreCategory} result={scoreResult} reason={scoreReason} running={isRunning} onCategory={value=>{setScoreCategory(value);setScoreResult(null)}} onCalculate={()=>finishScore('Chấm hiện trạng thủ công')} onGenerate={()=>{
             const sim=simulatorRef.current;if(!sim)return;
-            sim.reset();createScoringMission(sim.mission,scoreCategory,Math.floor(Math.random()*4294967296));
+            handleReset();createScoringMission(sim.mission,scoreCategory,Math.floor(Math.random()*4294967296));
             setScoreResult(null);rendererRef.current?.render();addLog(`Đã tạo nhiệm vụ ${scoreCategory}`);
           }}/>
 
           <section className="sim-telemetry"><div className="sim-section-heading"><div><Gauge size={15} /><strong>Trạng thái robot</strong></div><span>Trực tiếp</span></div>
-            <dl className="sim-metrics"><div><dt>Thời gian</dt><dd>{stats.time.toFixed(1)}<small>s</small></dd></div><div><dt>Hướng</dt><dd>{stats.heading.toFixed(0)}<small>°</small></dd></div><div><dt>Vị trí X / Y</dt><dd>{stats.posX.toFixed(0)} / {stats.posY.toFixed(0)}<small>mm</small></dd></div><div><dt>Tốc độ trái / phải</dt><dd>{stats.speedL.toFixed(0)} / {stats.speedR.toFixed(0)}<small>mm/s</small></dd></div></dl>
+            <p className="sim-robot-specs">{LEANBOT_GEOMETRY.length} × {LEANBOT_GEOMETRY.width} × {LEANBOT_GEOMETRY.height} mm · {LEANBOT_GEOMETRY.mass*1000} g</p><dl className="sim-metrics"><div><dt>Thời gian</dt><dd>{stats.time.toFixed(1)}<small>s</small></dd></div><div><dt>Hướng</dt><dd>{stats.heading.toFixed(0)}<small>°</small></dd></div><div><dt>Vị trí X / Y</dt><dd>{stats.posX.toFixed(0)} / {stats.posY.toFixed(0)}<small>mm</small></dd></div><div><dt>Tốc độ trái / phải</dt><dd>{stats.speedL.toFixed(0)} / {stats.speedR.toFixed(0)}<small>mm/s</small></dd></div></dl>
           </section>
           <details className="sim-settings" open><summary><Settings2 size={15} />Hiển thị sa bàn</summary><div className="sim-options"><label><input type="checkbox" checked={showGrid} onChange={e => setShowGrid(e.target.checked)} />Lưới tọa độ</label><label><input type="checkbox" checked={showTrajectory} onChange={e => setShowTrajectory(e.target.checked)} />Đường di chuyển</label><label><input type="checkbox" checked={showSensorDebug} onChange={e => setShowSensorDebug(e.target.checked)} />Cảm biến</label></div></details>
           <details className="sim-settings" open><summary><MapPin size={15} />Khối nhiệm vụ</summary><div ref={missionHostRef} /></details>
