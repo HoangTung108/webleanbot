@@ -27,6 +27,7 @@ export const SimulatorPanel: React.FC<SimulatorPanelProps> = ({
   const [showGrid, setShowGrid] = useState(true);
   const [robotHeading, setRobotHeading] = useState(0);
   const [elapsedTime, setElapsedTime] = useState(0);
+  const [speedMultiplier, setSpeedMultiplier] = useState(1);
   const animationFrameRef = useRef<number | null>(null);
 
   // Initialize simulator
@@ -49,6 +50,8 @@ export const SimulatorPanel: React.FC<SimulatorPanelProps> = ({
     setRobotHeading(newSimulator.getRobotPose().heading);
     newRenderer.render();
     bridgeRef.current = new CppSimulatorBridge(newSimulator);
+    newSimulator.setSpeedMultiplier(1); // Reset speed to 1x on initialization
+    setSpeedMultiplier(1);
     setSimulator(newSimulator);
     setRenderer(newRenderer);
     const detachPlacement = newRenderer.enablePlacement(pose => setRobotHeading(pose.heading));
@@ -203,10 +206,12 @@ export const SimulatorPanel: React.FC<SimulatorPanelProps> = ({
     if (simulator) {
       bridgeRef.current?.reset();
       simulator.reset();
+      simulator.setSpeedMultiplier(1); // Reset speed to 1x
       setRobotHeading(simulator.getRobotPose().heading);
       setIsRunning(false);
       setIsPaused(false);
       setElapsedTime(0);
+      setSpeedMultiplier(1);
       if (renderer) {
         renderer.render();
       }
@@ -226,6 +231,12 @@ export const SimulatorPanel: React.FC<SimulatorPanelProps> = ({
     simulator.setHeading(heading);
     setRobotHeading(simulator.getRobotPose().heading);
     renderer?.render();
+  };
+
+  const handleSpeedChange = (multiplier: number) => {
+    if (!simulator) return;
+    simulator.setSpeedMultiplier(multiplier);
+    setSpeedMultiplier(multiplier);
   };
 
 
@@ -330,7 +341,36 @@ export const SimulatorPanel: React.FC<SimulatorPanelProps> = ({
 
         <div style={{ flex: 1 }} />
 
-        <span>Synapse City · 4 ft × 4 ft</span>
+        {/* Speed multiplier controls */}
+        <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+          <span style={{ fontSize: '12px', fontWeight: 'bold' }}>Tua:</span>
+          {[1, 2, 5, 10].map(speed => (
+            <button
+              key={speed}
+              onClick={() => handleSpeedChange(speed)}
+              disabled={!isRunning}
+              style={{
+                padding: '4px 8px',
+                backgroundColor: speedMultiplier === speed && isRunning ? '#007acc' : '#444',
+                color: 'white',
+                border: 'none',
+                borderRadius: '3px',
+                cursor: isRunning ? 'pointer' : 'default',
+                opacity: isRunning ? 1 : 0.5,
+                fontSize: '11px',
+                fontWeight: speedMultiplier === speed ? 'bold' : 'normal',
+                minWidth: '35px',
+              }}
+            >
+              x{speed}
+            </button>
+          ))}
+          <span style={{ fontSize: '11px', marginLeft: '4px', color: 'var(--vscode-foreground)' }}>
+            [{speedMultiplier}x]
+          </span>
+        </div>
+
+        <span style={{ marginLeft: '12px' }}>Synapse City · 4 ft × 4 ft</span>
 
       </div>
 

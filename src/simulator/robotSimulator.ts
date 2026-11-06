@@ -44,6 +44,7 @@ export class RobotSimulator {
   private timestep: number = 10; // ms
   private simulationTime: number = 0;
   private lastUpdateTime: number = 0;
+  private speedMultiplier: number = 1; // 1x, 2x, 5x, 10x
 
   constructor(robotConfig?: RobotConfig) {
     this.robotConfig = robotConfig || DEFAULT_ROBOT_CONFIG;
@@ -201,6 +202,20 @@ export class RobotSimulator {
   }
 
   /**
+   * Set speed multiplier for fast-forward (1x, 2x, 5x, 10x)
+   */
+  setSpeedMultiplier(multiplier: number): void {
+    this.speedMultiplier = Math.max(0.1, Math.min(10, multiplier)); // clamp between 0.1x and 10x
+  }
+
+  /**
+   * Get current speed multiplier
+   */
+  getSpeedMultiplier(): number {
+    return this.speedMultiplier;
+  }
+
+  /**
    * Update simulation step
    */
   update(deltaMilliseconds?: number): void {
@@ -209,7 +224,7 @@ export class RobotSimulator {
     }
 
     const now = Date.now();
-    const deltaTime = deltaMilliseconds === undefined ? (now - this.lastUpdateTime) / 1000 : deltaMilliseconds / 1000; // convert to seconds
+    const deltaTime = (deltaMilliseconds === undefined ? (now - this.lastUpdateTime) / 1000 : deltaMilliseconds / 1000) * this.speedMultiplier; // convert to seconds, apply speed multiplier
     this.lastUpdateTime = now;
     this.simulationTime += deltaTime * 1000; // convert back to ms for tracking
 
