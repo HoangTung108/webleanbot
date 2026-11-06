@@ -22,14 +22,14 @@ import {
 
 const DEFAULT_ROBOT_CONFIG: RobotConfig = {
   wheelRadius: 16.25, // mm
-  wheelBase: 75, // mm - distance between wheels
+  wheelBase: 100, // mm - distance between wheels (updated from 75 to match LEANBOT_APPEARANCE)
   maxSpeed: 500, // mm/s
   maxAcceleration: 2000, // mm/s²
   sensorOffsets: {
-    irLineLeft: { x: 37.5, y: -20 },
-    irLineCenter: { x: 37.5, y: 0 },
-    irLineRight: { x: 37.5, y: 20 },
-    irFront: { x: 40, y: 0 },
+    irLineLeft: { x: 50, y: -30 },    // Updated from 37.5, -20
+    irLineCenter: { x: 50, y: 0 },    // Updated from 37.5, 0
+    irLineRight: { x: 50, y: 30 },    // Updated from 37.5, 20
+    irFront: { x: 55, y: 0 },         // Updated from 40, 0
   },
 };
 

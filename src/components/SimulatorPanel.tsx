@@ -341,36 +341,7 @@ export const SimulatorPanel: React.FC<SimulatorPanelProps> = ({
 
         <div style={{ flex: 1 }} />
 
-        {/* Speed multiplier controls */}
-        <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-          <span style={{ fontSize: '12px', fontWeight: 'bold' }}>Tua:</span>
-          {[1, 2, 5, 10].map(speed => (
-            <button
-              key={speed}
-              onClick={() => handleSpeedChange(speed)}
-              disabled={!isRunning}
-              style={{
-                padding: '4px 8px',
-                backgroundColor: speedMultiplier === speed && isRunning ? '#007acc' : '#444',
-                color: 'white',
-                border: 'none',
-                borderRadius: '3px',
-                cursor: isRunning ? 'pointer' : 'default',
-                opacity: isRunning ? 1 : 0.5,
-                fontSize: '11px',
-                fontWeight: speedMultiplier === speed ? 'bold' : 'normal',
-                minWidth: '35px',
-              }}
-            >
-              x{speed}
-            </button>
-          ))}
-          <span style={{ fontSize: '11px', marginLeft: '4px', color: 'var(--vscode-foreground)' }}>
-            [{speedMultiplier}x]
-          </span>
-        </div>
-
-        <span style={{ marginLeft: '12px' }}>Synapse City · 4 ft × 4 ft</span>
+        <span>Synapse City · 4 ft × 4 ft</span>
 
       </div>
 
@@ -420,6 +391,37 @@ export const SimulatorPanel: React.FC<SimulatorPanelProps> = ({
           <span>0° [R] · 90° v · 180° [L] · 270° ^</span>
         </div>
         <div>Tốc độ do code C++ điều khiển · lệnh 2000: 70 mm/s (35 cm / 5 giây).</div>
+
+        {/* Speed multiplier controls */}
+        <div style={{ display: 'flex', gap: '6px', alignItems: 'center', padding: '6px 8px', backgroundColor: 'rgba(0,122,204,0.1)', borderRadius: '3px' }}>
+          <span style={{ fontSize: '12px', fontWeight: 'bold' }}>Tua Nhanh:</span>
+          {[1, 2, 5, 10].map(speed => (
+            <button
+              key={speed}
+              onClick={() => handleSpeedChange(speed)}
+              disabled={!isRunning}
+              style={{
+                padding: '4px 10px',
+                backgroundColor: speedMultiplier === speed && isRunning ? '#007acc' : '#444',
+                color: 'white',
+                border: '1px solid ' + (speedMultiplier === speed ? '#0e639c' : '#555'),
+                borderRadius: '3px',
+                cursor: isRunning ? 'pointer' : 'not-allowed',
+                opacity: isRunning ? 1 : 0.6,
+                fontSize: '12px',
+                fontWeight: speedMultiplier === speed ? 'bold' : 'normal',
+                minWidth: '40px',
+                transition: 'all 0.2s',
+              }}
+              title={isRunning ? `Tua ${speed}x nhanh` : 'Chạy simulation để kích hoạt'}
+            >
+              ×{speed}
+            </button>
+          ))}
+          <span style={{ fontSize: '11px', marginLeft: '8px', color: '#0e639c', fontWeight: 'bold' }}>
+            [{speedMultiplier}x]
+          </span>
+        </div>
 
         {/* Checkboxes */}
         <div style={{ display: 'flex', gap: '16px' }}>

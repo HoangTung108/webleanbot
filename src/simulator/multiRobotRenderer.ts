@@ -87,7 +87,7 @@ export class MultiRobotRenderer {
     const y = this.worldToCanvasY(pose.y);
     const heading = (pose.heading * Math.PI) / 180;
 
-    const robotSize = 75; // mm - approximate robot size based on collisionRadius
+    const robotSize = 100; // mm - collision radius (updated from 75 to match LEANBOT_APPEARANCE)
     const canvasRadius = robotSize * this.scale;
 
     // Draw robot body
