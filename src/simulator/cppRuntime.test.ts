@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { LEANBOT_GEOMETRY } from './robotGeometry';
 import { CppRuntime } from './cppRuntime';
 
 const custom = readFileSync(new URL('./fixtures/custom-mission.ino', import.meta.url), 'utf8');
@@ -8,7 +9,7 @@ function run(code: string, frame = 16) {
   let path = 0, angle = 0;
   const runtime = new CppRuntime(code, {
     motors: (l, r) => motors.push([l, r]),
-    advance: dt => { path += (runtime.left + runtime.right) / 2 * dt; angle += (runtime.left - runtime.right) / 75 * 180 / Math.PI * dt; },
+    advance: dt => { path += (runtime.left + runtime.right) / 2 * dt; angle += (runtime.left - runtime.right) / LEANBOT_GEOMETRY.wheelBase * 180 / Math.PI * dt; },
     gripper: (l, r) => hands.push([l, r]),
   });
   runtime.start();

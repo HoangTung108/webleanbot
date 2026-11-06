@@ -1,3 +1,4 @@
+import { LEANBOT_GEOMETRY } from './robotGeometry';
 export { MissionWorld, drawMissionBlocks } from './missionWorld';
 export { mountMissionEditor } from './missionEditor';
 export { drawLeanbot, LEANBOT_APPEARANCE } from './robotAppearance';
@@ -202,7 +203,7 @@ export class CppRuntime {
         yield { ms: speed ? Math.abs(a) / speed * 1000 : 0 }; return null;
       }
       case 'LbMotion.waitRotationDeg': {
-        const speed = Math.abs((this.left - this.right) / 75 * 180 / Math.PI); if (!speed && a) throw new Error('Không thể chờ góc quay khi hai bánh chạy cùng tốc độ');
+        const speed = Math.abs((this.left - this.right) / LEANBOT_GEOMETRY.wheelBase * 180 / Math.PI); if (!speed && a) throw new Error('Không thể chờ góc quay khi hai bánh chạy cùng tốc độ');
         yield { ms: speed ? Math.abs(a) / speed * 1000 : 0 }; return null;
       }
       case 'isfinite': return Number.isFinite(a);
@@ -278,7 +279,7 @@ export class CppRuntime {
           const dt = Math.min(this.pending, remaining, 5);
           this.host.advance(dt / 1000); this.time += dt;
           this.distance += (this.left + this.right) / 2 * dt / 1000;
-          this.rotation += (this.left - this.right) / 75 * 180 / Math.PI * dt / 1000;
+          this.rotation += (this.left - this.right) / LEANBOT_GEOMETRY.wheelBase * 180 / Math.PI * dt / 1000;
           this.pending -= dt; remaining -= dt;
         } else {
           const next = this.iterator.next();

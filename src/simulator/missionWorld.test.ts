@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { LEANBOT_GEOMETRY } from './robotGeometry';
 import { SYNAPSE_CITY } from './boardConfigs';
 import { BLOCK_SIZE, MissionWorld, NEUTRALIZER_COLORS, blockFootprint } from './missionWorld';
 const pose = { x: 600, y: 900, heading: 0 };
@@ -40,17 +41,34 @@ describe('mission layout', () => {
 });
 describe('gripping and block physics', () => {
   it('requires a nearby block, carries only one, rotates it and releases at the carried position', () => {
-    const {world,block}=oneBlock();block.x=pose.x+51;block.y=pose.y;block.rotation=0;
+    const {world,block}=oneBlock();block.x=pose.x+LEANBOT_GEOMETRY.graspOffset;block.y=pose.y;block.rotation=0;
     world.setGripper(90,90,{...pose,y:pose.y+100});expect(world.heldBlock).toBeUndefined();
     world.setGripper(0,0,pose);world.setGripper(90,90,pose);expect(world.heldBlock?.id).toBe(block.id);
     world.step(.01,{...pose,x:650,heading:90});
-    expect(block.x).toBeCloseTo(650);expect(block.y).toBeCloseTo(951);expect(block.rotation).toBe(90);
+    expect(block.x).toBeCloseTo(650);expect(block.y).toBeCloseTo(pose.y+LEANBOT_GEOMETRY.graspOffset);expect(block.rotation).toBe(90);
     world.setGripper(0,0,{...pose,x:650,heading:90});
     expect(block.held).toBe(false);expect(block.state).toBe('standing');
-    expect(block.x).toBeCloseTo(650);expect(block.y).toBeCloseTo(951);
+    expect(block.x).toBeCloseTo(650);expect(block.y).toBeCloseTo(pose.y+LEANBOT_GEOMETRY.graspOffset);
+  });
+  it('requires a much tighter, settled and aligned grip for a low fallen block', () => {
+    const {world,block}=oneBlock();
+    Object.assign(block,{x:pose.x+LEANBOT_GEOMETRY.graspOffset+10,y:pose.y,rotation:0});
+    world.setGripper(90,90,pose);expect(block.held).toBe(true);
+    world.setGripper(0,0,pose);
+    Object.assign(block,{state:'fallen',tilt:Math.PI/2,x:pose.x+LEANBOT_GEOMETRY.graspOffset+10});
+    world.setGripper(90,90,pose);expect(block.held).toBe(false);
+    world.setGripper(0,0,pose);block.x=pose.x+LEANBOT_GEOMETRY.graspOffset;block.rotation=90;
+    world.setGripper(90,90,pose);expect(block.held).toBe(false);
+    world.setGripper(0,0,pose);block.rotation=0;
+    world.setGripper(90,90,pose,70,70);expect(block.held).toBe(false);
+    world.setGripper(0,0,pose);block.vx=20;
+    world.setGripper(90,90,pose);expect(block.held).toBe(false);
+    world.setGripper(0,0,pose);block.vx=0;
+    world.setGripper(90,90,pose);expect(block.held).toBe(true);
+    expect(block.state).toBe('fallen');
   });
   it('applies Coulomb friction and settles a released moving block horizontally', () => {
-    const {world,block}=oneBlock();block.x=651;block.y=900;world.setGripper(90,90,pose);
+    const {world,block}=oneBlock();block.x=pose.x+LEANBOT_GEOMETRY.graspOffset;block.y=900;world.setGripper(90,90,pose);
     world.setGripper(0,0,pose,70,70);expect(block.state).toBe('falling');
     const initialSpeed=Math.hypot(block.vx,block.vy);expect(initialSpeed).toBeCloseTo(70);
     world.step(.005,{x:900,y:500,heading:0});expect(Math.hypot(block.vx,block.vy)).toBeLessThan(initialSpeed);

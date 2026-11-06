@@ -19,9 +19,9 @@ nội dung editor hay dữ liệu trình duyệt.
 
 - Một cạnh ô thành phố, đo giữa tâm giao lộ, dài 350 mm.
 - Đã hiệu chỉnh theo số đo: `runLR(2000, 2000)` đi 350 mm trong 5 giây (70 mm/s).
-  Tốc độ trung gian được nội suy tuyến tính; khoảng cách hai bánh vẫn ước lượng 75 mm.
+  Tốc độ trung gian được nội suy tuyến tính; khoảng cách hai bánh ước lượng 84 mm, dùng chung cho vật lý và encoder C++.
 - Robot vẽ theo ảnh Leanbot: PCB đỏ dài, Nano xanh, hai bánh đen, cảm biến siêu âm đôi và càng màu be.
-  Tổng hình khoảng 128 × 86 mm, vùng chặn biên bán kính 75 mm; đây là tỷ lệ
+  Tổng hình khoảng 180 × 100 mm, vùng chặn biên bảo thủ bán kính 100 mm; đây là tỷ lệ
   ước lượng từ ảnh, chưa phải số đo robot thực. Hướng +X luôn là phía càng.
 - Mỗi thành phố A–H có 4 vị trí: 1 trên trái, 2 trên phải, 3 dưới trái, 4 dưới phải.
   Ô 1/4 xoay +45°, ô 2/3 xoay −45° để đối xứng.
@@ -75,3 +75,30 @@ Reset phục hồi bố trí xuất phát; vị trí sau khi chạy không tự 
 Vật lý khối là mô hình 2.5D định tính với khối lượng 25 g ước lượng, ma sát 0.35
 (có thể chỉnh), trọng lực và va chạm oriented rectangles. Robot vẫn dùng chuyển
 động kinematic đã hiệu chỉnh. Xem [mô tả cơ chế](../../docs/MISSION_BLOCKS.md).
+
+## Hiệu chỉnh từ ảnh ngày 06/11/2026
+
+- Mốc cố định: sa bàn 4 ft = 1219,2 mm mỗi chiều; cạnh thành phố 350 mm;
+  khối 15 × 25 × 75 mm. Khối đứng hiển thị mặt đáy 15 × 25 mm với phần gợi chiều cao;
+  khi đổ, chiều dài chiếm mặt sàn tiến tới 75 mm.
+- Ước lượng robot từ ảnh phối cảnh: dài khoảng 180 mm, rộng qua bánh khoảng 100 mm,
+  khoảng cách tâm bánh 84 mm. Đây không phải kích thước đo chính thức; ảnh không đủ
+  để khẳng định độ chính xác tuyệt đối. Đo trực tiếp để chốt thông số.
+- `robotGeometry.ts` là nguồn chung cho kích thước robot, điểm gắp cách trục 75 mm,
+  khung va chạm, khoảng cách hai bánh của hình vẽ, vật lý và encoder C++.
+- Tua 1×/2×/5×/10× nhân **thời gian đưa vào C++**. Các bước vật lý, cảm biến,
+  encoder, `millis()` và `LbDelay()` dùng cùng thời gian mô phỏng. Không nhân thêm
+  tốc độ lần nữa trong `advanceSimulatedTime()`. Thay tốc độ không sửa mã nguồn,
+  không reset chương trình hoặc làm thay đổi đích quãng đường/góc.
+
+## Khối thấp và mép sa bàn
+
+- Khối đứng có vùng gắp rộng. Khối nằm (cao khoảng 15 mm) chỉ tiếp xúc mép dưới càng:
+  yêu cầu tâm khối cách điểm gắp không quá 6 mm, lệch ngang không quá 4 mm, trục dài
+  gần song song hướng tiếp cận; robot gần đứng yên và khối đã ổn định. Không gắp khối
+  đang lật. Các ngưỡng này là mô hình tiếp xúc ước lượng, không phải đo lực càng thực.
+- Không chặn tọa độ robot bằng biên hình chữ nhật sa bàn. Khi trọng tâm ước lượng
+  (sau trục bánh 20 mm) mất đỡ, robot thả khối, ngừng thực thi C++, giữ quán tính ngang
+  và rơi với gia tốc 9810 mm/s². Chiều cao bàn giả định 750 mm; chưa mô phỏng đầy đủ
+  quay lật 3D hay lực va đập xuống sàn. Trạng thái rơi dùng cùng đồng hồ mô phỏng ở mọi mức tua.
+- Sau khi rơi, dùng Đặt lại hoặc kéo robot về vị trí được đỡ trước khi chạy lại.

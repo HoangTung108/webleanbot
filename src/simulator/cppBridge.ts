@@ -44,7 +44,10 @@ export class CppSimulatorBridge {
     try {
       this.runtime = new CppRuntime(code, {
         motors: (left, right) => this.simulator.setMotorSpeeds(left, right),
-        advance: seconds => this.simulator.update(seconds * 1000),
+        advance: seconds => {
+          this.simulator.advanceSimulatedTime(seconds * 1000);
+          if (this.simulator.getFallState().status !== 'supported') this.runtime?.stop();
+        },
         gripper: (left, right) => this.simulator.setGripper(left, right),
         sensors: () => this.simulator.getSensorReadings(),
         log: message => this.logs.push(message),
@@ -59,17 +62,22 @@ export class CppSimulatorBridge {
   }
 
   executeStep(currentTime: number): void {
-    if (!this.runtime?.running) return;
+    if (!this.isExecuting()) return;
     if (this.simulator.getSimulationState().isPaused) { this.lastTick = currentTime; return; }
     const delta = this.lastTick === undefined ? 0 : currentTime - this.lastTick;
     this.lastTick = currentTime;
-    this.runtime.tick(delta);
-    this.commandQueue.isExecuting = this.runtime.running;
+    if (this.simulator.getFallState().status === 'falling') this.simulator.advanceSimulatedTime(delta * this.simulator.getSpeedMultiplier());
+    else this.runtime?.tick(delta * this.simulator.getSpeedMultiplier());
+    if (this.simulator.getFallState().status === 'fallen') {
+      this.stopExecution();
+      throw new Error('Robot đã rơi khỏi sa bàn. Đặt lại mô phỏng hoặc kéo robot trở lại trước khi chạy.');
+    }
+    this.commandQueue.isExecuting = this.isExecuting();
   }
 
   resetClock(): void { this.lastTick = undefined; }
 
-  isExecuting(): boolean { return this.runtime?.running ?? false; }
+  isExecuting(): boolean { return (this.runtime?.running ?? false) || (this.simulator.getFallState().status === 'falling' && this.simulator.getSimulationState().isRunning); }
 
   /**
    * Start executing command queue

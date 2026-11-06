@@ -1,8 +1,9 @@
+import { LEANBOT_GEOMETRY } from './robotGeometry';
 import type { BoardConfig, Pose } from './types';
 
 export type BlockKind = 'pollution' | 'neutralizer';
-export type BlockColor = 'green' | 'blue' | 'purple' | 'red' | 'yellow';
-export const BLOCK_COLORS: Record<BlockColor, string> = { green: '#83a73e', blue: '#278fa9', purple: '#795272', red: '#bd3d2f', yellow: '#d8b721' };
+export type BlockColor = 'green' | 'blue' | 'purple' | 'red' | 'yellow' | 'mystery';
+export const BLOCK_COLORS: Record<BlockColor, string> = { green: '#83a73e', blue: '#278fa9', purple: '#795272', red: '#bd3d2f', yellow: '#d8b721', mystery: '#cbd0d5' };
 export const BLOCK_SIZE = { length: 15, width: 25, height: 75 } as const;
 export const NEUTRALIZER_COLORS: BlockColor[] = ['green', 'blue', 'purple'];
 export interface MissionBlock {
@@ -85,7 +86,7 @@ export class MissionWorld {
     const shuffle = (slots: Slot[]) => { const result = [...slots]; for (let i = result.length - 1; i > 0; i--) { const j = Math.floor(random() * (i+1)); [result[i], result[j]] = [result[j], result[i]]; } return result; };
     const blocks: MissionBlock[] = [];
     for (const [kind, count] of [['pollution', pollution], ['neutralizer', neutralizers]] as const) {
-      const colors = kind === 'pollution' ? Object.keys(BLOCK_COLORS) as BlockColor[] : NEUTRALIZER_COLORS;
+      const colors = kind === 'pollution' ? Object.keys(BLOCK_COLORS).filter(color=>color!=='mystery') as BlockColor[] : NEUTRALIZER_COLORS;
       for (const slot of shuffle(this.slots(kind)).slice(0,count)) blocks.push(this.make(kind, colors[Math.floor(random() * colors.length)], slot));
     }
     this.blocks = blocks; this.commitLayout();
@@ -122,10 +123,10 @@ export class MissionWorld {
     }
     return nearest;
   }
-  private graspPoint(pose: Pose) { const a = pose.heading * RAD; return { x: pose.x + 51*Math.cos(a), y: pose.y + 51*Math.sin(a) }; }
+  private graspPoint(pose: Pose) { const a = pose.heading * RAD; return { x: pose.x + LEANBOT_GEOMETRY.graspOffset*Math.cos(a), y: pose.y + LEANBOT_GEOMETRY.graspOffset*Math.sin(a) }; }
   setGripper(left: number, right: number, pose: Pose, motorLeft = 0, motorRight = 0) {
     const angle = pose.heading * RAD, speed = (motorLeft + motorRight) / 2;
-    this.velocity = { x: speed * Math.cos(angle), y: speed * Math.sin(angle), omega: (motorLeft - motorRight) / 75 };
+    this.velocity = { x: speed * Math.cos(angle), y: speed * Math.sin(angle), omega: (motorLeft - motorRight) / LEANBOT_GEOMETRY.wheelBase };
     const wasClosed = this.gripper.left >= 55 && this.gripper.right >= 55;
     this.gripper = { left, right };
     const closed = left >= 55 && right >= 55;
@@ -140,7 +141,17 @@ export class MissionWorld {
       const point = this.graspPoint(pose), a = pose.heading * RAD;
       const candidates = this.blocks.filter(b => {
         const dx = b.x-pose.x, dy = b.y-pose.y;
-        return !b.held && b.state !== 'falling' && dx*Math.cos(a)+dy*Math.sin(a) >= 35 && Math.abs(-dx*Math.sin(a)+dy*Math.cos(a)) <= 17 && Math.hypot(b.x-point.x,b.y-point.y) <= 23;
+        if (b.held || b.state === 'falling') return false;
+        const height = BLOCK_SIZE.height*Math.cos(b.tilt)+BLOCK_SIZE.length*Math.sin(b.tilt);
+        // Low fingers only overlap a fallen block by a few millimetres. Require
+        // precise, lengthwise alignment and a settled robot/block, not chance.
+        const low = height < 30;
+        if (height < 12) return false;
+        if (low && (Math.abs(Math.cos((b.rotation-pose.heading)*RAD)) < 0.96 ||
+          Math.hypot(b.vx,b.vy) > 5 || Math.abs(b.spin) > 5 || Math.max(Math.abs(motorLeft),Math.abs(motorRight)) > 10)) return false;
+        return dx*Math.cos(a)+dy*Math.sin(a) >= LEANBOT_GEOMETRY.graspOffset - (low ? 6 : 16) &&
+          Math.abs(-dx*Math.sin(a)+dy*Math.cos(a)) <= (low ? 4 : 17) &&
+          Math.hypot(b.x-point.x,b.y-point.y) <= (low ? 6 : 23);
       }).sort((a,b) => Math.hypot(a.x-point.x,a.y-point.y) - Math.hypot(b.x-point.x,b.y-point.y));
       if (candidates[0]) {
         const block = candidates[0]; block.held = true; block.slotId = undefined; block.vx = block.vy = block.spin = 0;
@@ -159,7 +170,7 @@ export class MissionWorld {
     this.lastPose = { ...pose };
   }
   private substep(dt: number, pose: Pose, left: number, right: number) {
-    const angle = pose.heading*RAD, speed = (left+right)/2, omega = (left-right)/75;
+    const angle = pose.heading*RAD, speed = (left+right)/2, omega = (left-right)/LEANBOT_GEOMETRY.wheelBase;
     this.velocity = { x: speed*Math.cos(angle), y: speed*Math.sin(angle), omega };
     const held = this.heldBlock;
     if (held) { const p = this.graspPoint(pose); held.x = p.x; held.y = p.y; held.rotation = pose.heading + this.heldOffset; }
@@ -177,7 +188,7 @@ export class MissionWorld {
         b.x += Math.cos(b.rotation*RAD)*shift; b.y += Math.sin(b.rotation*RAD)*shift;
         if (b.tilt === Math.PI/2) { b.state = 'fallen'; b.tipSpeed = 0; this.changed(); }
       }
-      const robotShapes = [{ x: -17, y: 0, length: 98, width: 49 }, { x: 0, y: -37.5, length: 20, width: 11 }, { x: 0, y: 37.5, length: 20, width: 11 }];
+      const robotShapes = [LEANBOT_GEOMETRY.body, ...[-1,1].map(side => ({x:0,y:side*LEANBOT_GEOMETRY.wheelBase/2,...LEANBOT_GEOMETRY.wheel}))];
       for (const shape of robotShapes) {
         const box = { ...shape, x: pose.x+shape.x*Math.cos(angle)-shape.y*Math.sin(angle), y: pose.y+shape.x*Math.sin(angle)+shape.y*Math.cos(angle), rotation: pose.heading };
         const hit = contact(box,{ ...b,...blockFootprint(b) });
@@ -249,6 +260,7 @@ export function drawMissionBlocks(ctx: CanvasRenderingContext2D, world: MissionW
     ctx.fillRect(-shape.length/2,-shape.width/2-h,shape.length,shape.width+h);
     ctx.strokeRect(-shape.length/2,-shape.width/2-h,shape.length,shape.width+h);
     ctx.fillStyle='rgba(255,255,255,.2)'; ctx.fillRect(-shape.length/2,-shape.width/2-h,shape.length,Math.min(5,shape.width));
+    if (b.color==='mystery') { ctx.fillStyle='#344357';ctx.font='bold 14px sans-serif';ctx.textAlign='center';ctx.fillText('?',0,4); }
     if (b.kind==='neutralizer') { ctx.fillStyle='#f3efe0'; if(b.tilt>Math.PI/4)ctx.fillRect(-7.5,-shape.width/2,15,shape.width);else ctx.fillRect(-shape.length/2,-4-h/2,shape.length,8); }
     ctx.restore();
   }

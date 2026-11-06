@@ -28,6 +28,17 @@ var LeanbotCpp = (() => {
     mountMissionEditor: () => mountMissionEditor
   });
 
+  // src/simulator/robotGeometry.ts
+  var LEANBOT_GEOMETRY = {
+    length: 180,
+    width: 100,
+    collisionRadius: 100,
+    wheelBase: 84,
+    graspOffset: 75,
+    body: { x: -27, y: 0, length: 130, width: 64 },
+    wheel: { length: 28, width: 16 }
+  };
+
   // src/simulator/missionWorld.ts
   var BLOCK_COLORS = { green: "#83a73e", blue: "#278fa9", purple: "#795272", red: "#bd3d2f", yellow: "#d8b721" };
   var BLOCK_SIZE = { length: 15, width: 25, height: 75 };
@@ -204,11 +215,11 @@ var LeanbotCpp = (() => {
     }
     graspPoint(pose) {
       const a = pose.heading * RAD;
-      return { x: pose.x + 51 * Math.cos(a), y: pose.y + 51 * Math.sin(a) };
+      return { x: pose.x + LEANBOT_GEOMETRY.graspOffset * Math.cos(a), y: pose.y + LEANBOT_GEOMETRY.graspOffset * Math.sin(a) };
     }
     setGripper(left, right, pose, motorLeft = 0, motorRight = 0) {
       const angle = pose.heading * RAD, speed = (motorLeft + motorRight) / 2;
-      this.velocity = { x: speed * Math.cos(angle), y: speed * Math.sin(angle), omega: (motorLeft - motorRight) / 75 };
+      this.velocity = { x: speed * Math.cos(angle), y: speed * Math.sin(angle), omega: (motorLeft - motorRight) / LEANBOT_GEOMETRY.wheelBase };
       const wasClosed = this.gripper.left >= 55 && this.gripper.right >= 55;
       this.gripper = { left, right };
       const closed = left >= 55 && right >= 55;
@@ -223,7 +234,12 @@ var LeanbotCpp = (() => {
         const point = this.graspPoint(pose), a = pose.heading * RAD;
         const candidates = this.blocks.filter((b) => {
           const dx = b.x - pose.x, dy = b.y - pose.y;
-          return !b.held && b.state !== "falling" && dx * Math.cos(a) + dy * Math.sin(a) >= 35 && Math.abs(-dx * Math.sin(a) + dy * Math.cos(a)) <= 17 && Math.hypot(b.x - point.x, b.y - point.y) <= 23;
+          if (b.held || b.state === "falling") return false;
+          const height = BLOCK_SIZE.height * Math.cos(b.tilt) + BLOCK_SIZE.length * Math.sin(b.tilt);
+          const low = height < 30;
+          if (height < 12) return false;
+          if (low && (Math.abs(Math.cos((b.rotation - pose.heading) * RAD)) < 0.96 || Math.hypot(b.vx, b.vy) > 5 || Math.abs(b.spin) > 5 || Math.max(Math.abs(motorLeft), Math.abs(motorRight)) > 10)) return false;
+          return dx * Math.cos(a) + dy * Math.sin(a) >= LEANBOT_GEOMETRY.graspOffset - (low ? 6 : 16) && Math.abs(-dx * Math.sin(a) + dy * Math.cos(a)) <= (low ? 4 : 17) && Math.hypot(b.x - point.x, b.y - point.y) <= (low ? 6 : 23);
         }).sort((a2, b) => Math.hypot(a2.x - point.x, a2.y - point.y) - Math.hypot(b.x - point.x, b.y - point.y));
         if (candidates[0]) {
           const block = candidates[0];
@@ -256,7 +272,7 @@ var LeanbotCpp = (() => {
       this.lastPose = { ...pose };
     }
     substep(dt, pose, left, right) {
-      const angle = pose.heading * RAD, speed = (left + right) / 2, omega = (left - right) / 75;
+      const angle = pose.heading * RAD, speed = (left + right) / 2, omega = (left - right) / LEANBOT_GEOMETRY.wheelBase;
       this.velocity = { x: speed * Math.cos(angle), y: speed * Math.sin(angle), omega };
       const held = this.heldBlock;
       if (held) {
@@ -289,7 +305,7 @@ var LeanbotCpp = (() => {
             this.changed();
           }
         }
-        const robotShapes = [{ x: -17, y: 0, length: 98, width: 49 }, { x: 0, y: -37.5, length: 20, width: 11 }, { x: 0, y: 37.5, length: 20, width: 11 }];
+        const robotShapes = [LEANBOT_GEOMETRY.body, ...[-1, 1].map((side) => ({ x: 0, y: side * LEANBOT_GEOMETRY.wheelBase / 2, ...LEANBOT_GEOMETRY.wheel }))];
         for (const shape of robotShapes) {
           const box = { ...shape, x: pose.x + shape.x * Math.cos(angle) - shape.y * Math.sin(angle), y: pose.y + shape.x * Math.sin(angle) + shape.y * Math.cos(angle), rotation: pose.heading };
           const hit = contact(box, { ...b, ...blockFootprint(b) });
@@ -658,133 +674,128 @@ var LeanbotCpp = (() => {
   }
 
   // src/simulator/robotAppearance.ts
-  var LEANBOT_APPEARANCE = {
-    length: 128,
-    width: 86,
-    collisionRadius: 75,
-    wheelBase: 75
-  };
+  var LEANBOT_APPEARANCE = LEANBOT_GEOMETRY;
   function drawLeanbot(ctx, leftGrip = 0, rightGrip = 0) {
     ctx.save();
     ctx.lineJoin = "round";
     for (const side of [-1, 1]) {
-      const y = side * 37.5;
+      const y = side * LEANBOT_GEOMETRY.wheelBase / 2;
       ctx.fillStyle = "#111916";
-      ctx.fillRect(-10, y - 5.5, 20, 11);
+      ctx.fillRect(-14, y - 8, 28, 16);
       ctx.strokeStyle = "#344238";
-      ctx.lineWidth = 1.4;
-      for (let x = -8; x <= 8; x += 4) {
+      ctx.lineWidth = 2;
+      for (let x = -11; x <= 11; x += 5) {
         ctx.beginPath();
-        ctx.moveTo(x, y - 5);
-        ctx.lineTo(x + 1, y + 5);
+        ctx.moveTo(x, y - 7);
+        ctx.lineTo(x + 1, y + 7);
         ctx.stroke();
       }
       ctx.fillStyle = "#d3d5c4";
-      ctx.fillRect(-7, side < 0 ? -32 : 23, 14, 9);
+      ctx.fillRect(-10, y - 6.5, 20, 13);
       ctx.fillStyle = "#e2b52d";
-      ctx.fillRect(-4, side < 0 ? -27 : 23, 8, 4);
+      ctx.fillRect(-6, y - 3, 12, 6);
     }
     ctx.fillStyle = "#d71924";
     ctx.strokeStyle = "#961520";
-    ctx.lineWidth = 0.8;
-    ctx.fillRect(-66, -23, 92, 46);
-    ctx.strokeRect(-66, -23, 92, 46);
+    ctx.lineWidth = 1.2;
+    ctx.fillRect(-92, -32, 130, 64);
+    ctx.strokeRect(-92, -32, 130, 64);
     ctx.fillStyle = "#f52f35";
-    ctx.fillRect(-64, -21, 87, 1);
+    ctx.fillRect(-89, -30, 122, 1.5);
     ctx.fillStyle = "#ead7a0";
-    for (let x = -62; x < -3; x += 3) for (const y of [-20, 20]) ctx.fillRect(x, y, 1, 1);
+    for (let x = -87; x < -10; x += 4) for (const y of [-28, 28]) ctx.fillRect(x, y, 1.5, 1.5);
     ctx.fillStyle = "#164d77";
-    ctx.fillRect(-65, -12, 12, 24);
+    ctx.fillRect(-91, -17, 17, 34);
     ctx.fillStyle = "#e2b126";
-    ctx.fillRect(-54, -14, 44, 28);
+    ctx.fillRect(-75, -20, 62, 40);
     ctx.fillStyle = "#143d68";
-    ctx.fillRect(-53, -13, 42, 26);
+    ctx.fillRect(-74, -18, 59, 36);
     ctx.fillStyle = "#0c172a";
-    ctx.fillRect(-38, -7, 14, 14);
+    ctx.fillRect(-53, -10, 20, 20);
     ctx.strokeStyle = "#b7c7c4";
-    ctx.lineWidth = 0.6;
-    for (let x = -49; x <= -15; x += 3) {
+    ctx.lineWidth = 0.8;
+    for (let x = -70; x <= -20; x += 4) {
       ctx.beginPath();
-      ctx.moveTo(x, -12);
-      ctx.lineTo(x, -9);
-      ctx.moveTo(x, 9);
-      ctx.lineTo(x, 12);
+      ctx.moveTo(x, -17);
+      ctx.lineTo(x, -13);
+      ctx.moveTo(x, 13);
+      ctx.lineTo(x, 17);
       ctx.stroke();
     }
     ctx.fillStyle = "#b6c0ba";
-    ctx.fillRect(-19, -5, 7, 10);
+    ctx.fillRect(-26, -7, 10, 14);
     ctx.fillStyle = "#f5e8d1";
-    ctx.fillRect(-47, -3, 5, 6);
+    ctx.fillRect(-66, -4, 7, 8);
     for (const side of [-1, 1]) {
       ctx.fillStyle = "#f4f0d7";
-      ctx.fillRect(1, side < 0 ? -20 : 12, 9, 8);
+      ctx.fillRect(2, side < 0 ? -28 : 17, 13, 11);
       ctx.strokeStyle = "#f8da38";
-      ctx.lineWidth = 1.5;
+      ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.arc(-45, side * 22, 4, 0, Math.PI * 2);
+      ctx.arc(-63, side * 31, 6, 0, Math.PI * 2);
       ctx.stroke();
       ctx.beginPath();
-      ctx.arc(14, side * 22, 4, 0, Math.PI * 2);
+      ctx.arc(20, side * 31, 6, 0, Math.PI * 2);
       ctx.stroke();
       ctx.fillStyle = "#1152aa";
-      ctx.fillRect(27, side * 25 - 5, 16, 10);
+      ctx.fillRect(38, side * 35 - 7, 22, 14);
       ctx.fillStyle = "#2f80ce";
-      ctx.fillRect(29, side * 25 - 4, 8, 8);
-      for (const [colour, offset] of [["#f5b92c", 0], ["#f07122", 2], ["#243d98", 4]]) {
+      ctx.fillRect(41, side * 35 - 6, 11, 12);
+      for (const [colour, offset] of [["#f5b92c", 0], ["#f07122", 3], ["#243d98", 6]]) {
         ctx.strokeStyle = colour;
-        ctx.lineWidth = 1;
+        ctx.lineWidth = 1.2;
         ctx.beginPath();
-        ctx.moveTo(5, side * (17 + offset));
-        ctx.lineTo(17, side * (28 + offset));
-        ctx.lineTo(31, side * 25);
+        ctx.moveTo(7, side * (24 + offset));
+        ctx.lineTo(24, side * (39 + offset));
+        ctx.lineTo(43, side * 35);
         ctx.stroke();
       }
     }
     ctx.fillStyle = "#fff2e0";
-    ctx.font = "bold 4px sans-serif";
-    ctx.fillText("LEANBOT", -44, 19);
+    ctx.font = "bold 6px sans-serif";
+    ctx.fillText("LEANBOT", -62, 27);
     ctx.fillStyle = "#a1bdb3";
-    ctx.fillRect(14, -22, 17, 44);
-    for (const y of [-13, 13]) {
+    ctx.fillRect(20, -31, 24, 62);
+    for (const y of [-18, 18]) {
       ctx.fillStyle = "#dce6dd";
-      ctx.fillRect(17, y - 7, 13, 14);
+      ctx.fillRect(24, y - 10, 18, 20);
       ctx.fillStyle = "#718b87";
       ctx.beginPath();
-      ctx.arc(28, y, 6.4, 0, Math.PI * 2);
+      ctx.arc(39, y, 9, 0, Math.PI * 2);
       ctx.fill();
       ctx.fillStyle = "#273e3f";
       ctx.beginPath();
-      ctx.arc(29, y, 4.2, 0, Math.PI * 2);
+      ctx.arc(41, y, 6, 0, Math.PI * 2);
       ctx.fill();
       ctx.fillStyle = "#d8e3dc";
-      ctx.fillRect(17, y - 6, 2, 12);
+      ctx.fillRect(24, y - 8, 3, 16);
     }
     ctx.fillStyle = "#b90f20";
-    ctx.fillRect(30, -21, 2, 42);
+    ctx.fillRect(42, -30, 3, 60);
     for (const [side, degrees] of [[-1, leftGrip], [1, rightGrip]]) {
       const close = Math.max(0, Math.min(90, degrees)) / 90;
       ctx.save();
-      ctx.translate(39, side * 25);
+      ctx.translate(55, side * 35);
       ctx.scale(1, side);
       ctx.rotate(0.2 - close * 0.85);
       ctx.fillStyle = "#dfc293";
       ctx.strokeStyle = "#ad946e";
-      ctx.lineWidth = 0.8;
+      ctx.lineWidth = 1.2;
       ctx.beginPath();
-      ctx.moveTo(0, -4);
-      ctx.lineTo(17, -4);
-      ctx.lineTo(22, 1);
-      ctx.lineTo(20, 5);
-      ctx.lineTo(10, 1);
-      ctx.lineTo(14, 11);
-      ctx.lineTo(10, 13);
-      ctx.lineTo(1, 3);
+      ctx.moveTo(0, -6);
+      ctx.lineTo(24, -6);
+      ctx.lineTo(31, 1);
+      ctx.lineTo(28, 7);
+      ctx.lineTo(14, 1);
+      ctx.lineTo(20, 15);
+      ctx.lineTo(14, 18);
+      ctx.lineTo(2, 4);
       ctx.closePath();
       ctx.fill();
       ctx.stroke();
       ctx.fillStyle = "#d9e0dd";
       ctx.beginPath();
-      ctx.arc(1, 0, 2, 0, Math.PI * 2);
+      ctx.arc(1, 0, 3, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
     }
@@ -1257,7 +1268,7 @@ var LeanbotCpp = (() => {
           return null;
         }
         case "LbMotion.waitRotationDeg": {
-          const speed = Math.abs((this.left - this.right) / 75 * 180 / Math.PI);
+          const speed = Math.abs((this.left - this.right) / LEANBOT_GEOMETRY.wheelBase * 180 / Math.PI);
           if (!speed && a) throw new Error("Kh\xF4ng th\u1EC3 ch\u1EDD g\xF3c quay khi hai b\xE1nh ch\u1EA1y c\xF9ng t\u1ED1c \u0111\u1ED9");
           yield { ms: speed ? Math.abs(a) / speed * 1e3 : 0 };
           return null;
@@ -1414,7 +1425,7 @@ var LeanbotCpp = (() => {
             this.host.advance(dt / 1e3);
             this.time += dt;
             this.distance += (this.left + this.right) / 2 * dt / 1e3;
-            this.rotation += (this.left - this.right) / 75 * 180 / Math.PI * dt / 1e3;
+            this.rotation += (this.left - this.right) / LEANBOT_GEOMETRY.wheelBase * 180 / Math.PI * dt / 1e3;
             this.pending -= dt;
             remaining -= dt;
           } else {

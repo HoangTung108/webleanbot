@@ -1,3 +1,5 @@
+import { ScorePanel } from './ScorePanel';
+import { calculateScore, createScoringMission, type ScoreCategory, type ScoreResult } from './scoring';
 import { mountMissionEditor } from './missionEditor';
 /**
  * Complete Simulator Demo Component
@@ -21,6 +23,9 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
   const bridgeRef = useRef<CppSimulatorBridge | null>(null);
   const animationRef = useRef<number | null>(null);
 
+  const [scoreCategory, setScoreCategory] = useState<ScoreCategory>('explorer');
+  const [scoreResult, setScoreResult] = useState<ScoreResult|null>(null);
+  const [scoreReason, setScoreReason] = useState('');
   const [robotHeading, setRobotHeading] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
@@ -80,6 +85,7 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
       locked: () => simulator.getSimulationState().isRunning,
       pose: () => simulator.getRobotPose(), render: () => renderer.render(),
     }) : () => {};
+    const detachScoring = simulator.mission.subscribe(() => setScoreResult(null));
     const detachPlacement = renderer.enablePlacement(pose => { setRobotHeading(pose.heading); setStats(prev => ({...prev,posX:pose.x,posY:pose.y,heading:pose.heading})); });
     const resize = () => {
       const rect = canvasRef.current?.getBoundingClientRect();
@@ -91,7 +97,7 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
     resize();
     renderer.render();
     addLog(`Đã tải sa bàn: ${board.name}`);
-    return () => { detachMission(); detachPlacement(); observer?.disconnect(); window.removeEventListener('resize', resize); bridge.stopExecution(); simulator.stop(); };
+    return () => { detachScoring(); detachMission(); detachPlacement(); observer?.disconnect(); window.removeEventListener('resize', resize); bridge.stopExecution(); simulator.stop(); };
   }, []);
 
   useEffect(() => {
@@ -122,9 +128,10 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
       if (bridge) {
         try {
           bridge.executeStep(performance.now());
-          if (!bridge.isExecuting()) { sim.stop(); setIsRunning(false); addLog('[OK] Chương trình kết thúc'); }
+          if (!bridge.isExecuting()) { sim.stop(); setIsRunning(false); finishScore('C++ đã kết thúc'); addLog('[OK] Chương trình kết thúc'); }
         } catch (error) {
           sim.stop(); setIsRunning(false);
+          if (sim.getFallState().status === 'fallen') finishScore('Robot bị rơi · điểm hiện trạng');
           addLog(`[ERROR] ${error instanceof Error ? error.message : String(error)}`);
         }
       }
@@ -165,9 +172,18 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
     setLogs(prev => message.startsWith('Đã tải sa bàn:') && prev.some(log => log.message === text) ? prev : [...prev.slice(-199), { time: new Date().toLocaleTimeString('vi-VN', { hour12: false }), message: text, level }]);
   };
 
+  const finishScore = (reason: string) => {
+    const sim=simulatorRef.current;
+    if (!sim) return;
+    const result=calculateScore(SYNAPSE_CITY,sim.mission.blocks,scoreCategory,[{pose:sim.getRobotPose(),fallen:sim.getFallState().status!=='supported'}]);
+    setScoreResult(result);setScoreReason(reason);
+    addLog(`Điểm tạm tính: ${result.total} · ${reason} · chờ đối chiếu luật chi tiết`);
+  };
+
   const handleStart = () => {
     if (!simulatorRef.current || !bridgeRef.current) return;
 
+    if (simulatorRef.current.getFallState().status !== 'supported') { addLog('[ERROR] Đặt lại hoặc kéo robot về sa bàn trước khi chạy.'); return; }
     // Load and compile code
     const code = cppCode ?? '';
     if (!code.trim()) { addLog('Chưa có code C++. Hãy mở hoặc viết code trong IDE.'); return; }
@@ -178,6 +194,7 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
       return;
     }
 
+    setScoreResult(null);
     simulatorRef.current.start();
     simulatorRef.current.setMotorSpeeds(0, 0);
     bridgeRef.current.startExecution();
@@ -213,6 +230,7 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
 
   const handleReset = () => {
     if (!simulatorRef.current || !rendererRef.current) return;
+    setScoreResult(null);
     simulatorRef.current.reset();
     simulatorRef.current.setSpeedMultiplier(1);
     setRobotHeading(simulatorRef.current.getRobotPose().heading);
@@ -230,17 +248,28 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
 
   const handleSpeedChange = (multiplier: number) => {
     if (!simulatorRef.current) return;
+    if (isRunning && !isPaused) {
+      try {
+        bridgeRef.current?.executeStep(performance.now());
+        if (!bridgeRef.current?.isExecuting()) { simulatorRef.current.stop(); setIsRunning(false); finishScore('C++ đã kết thúc'); }
+      } catch (error) {
+        handleStop();
+        addLog(`[ERROR] ${error instanceof Error ? error.message : String(error)}`);
+        return;
+      }
+    }
     simulatorRef.current.setSpeedMultiplier(multiplier);
     setSpeedMultiplier(multiplier);
   };
 
 
-  const status = isPaused ? 'Tạm dừng' : isRunning ? 'Đang chạy' : 'Sẵn sàng';
+  const fallStatus = simulatorRef.current?.getFallState().status;
+  const status = fallStatus === 'falling' ? 'Đang rơi' : fallStatus === 'fallen' ? 'Đã rơi' : isPaused ? 'Tạm dừng' : isRunning ? 'Đang chạy' : 'Sẵn sàng';
   return (
     <div className="simulator-shell sim-studio">
       <header className="sim-heading">
         <div><span className="sim-eyebrow">KHÔNG GIAN THỬ NGHIỆM</span><h1>Giả lập Leanbot</h1></div>
-        <span className={`sim-status ${isRunning && !isPaused ? 'running' : ''}`}><span />{status}</span>
+        <span className={`sim-status ${fallStatus && fallStatus !== 'supported' ? 'fallen' : isRunning && !isPaused ? 'running' : ''}`}><span />{status}</span>
       </header>
       <div className="sim-toolbar" role="toolbar" aria-label="Điều khiển mô phỏng">
         <div className="sim-playback">
@@ -249,35 +278,7 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
           <button className="sim-button stop" onClick={handleStop} disabled={!isRunning}><Square size={14} />Dừng</button>
           <button className="sim-button icon-only" onClick={handleReset} title="Đặt lại mô phỏng" aria-label="Đặt lại mô phỏng"><RotateCcw size={16} /></button>
           {/* Speed multiplier controls */}
-          <div style={{ display: 'flex', gap: '4px', alignItems: 'center', marginLeft: '8px', paddingLeft: '8px', borderLeft: '1px solid var(--vscode-panel-border)' }}>
-            <span style={{ fontSize: '12px', fontWeight: 'bold', marginRight: '4px' }}>Tua:</span>
-            {[1, 2, 5, 10].map(speed => (
-              <button
-                key={speed}
-                onClick={() => handleSpeedChange(speed)}
-                disabled={!isRunning}
-                style={{
-                  padding: '4px 8px',
-                  backgroundColor: speedMultiplier === speed && isRunning ? '#007acc' : '#444',
-                  color: 'white',
-                  border: '1px solid ' + (speedMultiplier === speed ? '#0e639c' : '#555'),
-                  borderRadius: '3px',
-                  cursor: isRunning ? 'pointer' : 'not-allowed',
-                  opacity: isRunning ? 1 : 0.6,
-                  fontSize: '11px',
-                  fontWeight: speedMultiplier === speed ? 'bold' : 'normal',
-                  minWidth: '36px',
-                  transition: 'all 0.2s',
-                }}
-                title={isRunning ? `Tua ${speed}x` : 'Chạy simulation để kích hoạt'}
-              >
-                ×{speed}
-              </button>
-            ))}
-            <span style={{ fontSize: '10px', marginLeft: '6px', color: '#0e639c', fontWeight: 'bold' }}>
-              [{speedMultiplier}x]
-            </span>
-          </div>
+          <div className="sim-speed" role="group" aria-label="Tốc độ mô phỏng"><span>Tua</span>{[1,2,5,10].map(speed => <button key={speed} className="sim-button" aria-pressed={speedMultiplier === speed} onClick={() => handleSpeedChange(speed)} title={`Tốc độ ${speed} lần`}>{speed}×</button>)}</div>
         </div>
         <label className="sim-heading-input">Hướng robot <input aria-label="Góc robot" type="number" min="0" max="359" value={robotHeading} disabled={isRunning} onChange={e => {
           if (e.target.value === '') return;
@@ -294,7 +295,7 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
           <section className="sim-field" ref={fieldRef} aria-label="Sa bàn Synapse City">
             <div className="sim-section-heading"><div><MapPin size={15} /><strong>Synapse City · 4 ft × 4 ft</strong></div><button className="sim-button icon-only" title="Toàn màn hình sa bàn" aria-label="Toàn màn hình sa bàn" onClick={() => { void fieldRef.current?.requestFullscreen?.().catch(() => addLog('[ERROR] Không mở được toàn màn hình.')); }}><Maximize2 size={15} /></button></div>
             <div className="sim-canvas-wrap"><canvas ref={canvasRef} aria-label="Sa bàn và robot" /></div>
-            <div className="sim-field-caption"><MousePointer2 size={13} /><span>Kéo robot để đặt vị trí trước khi chạy</span><span>2000 = 35 cm / 5 giây</span></div>
+            <div className="sim-field-caption"><MousePointer2 size={13} /><span>Kéo để đặt robot · Đi qua mép sa bàn có thể rơi</span><span>2000 = 35 cm / 5 giây</span></div>
           </section>
           <section className="sim-log-panel" aria-label="Nhật ký mô phỏng">
             <div className="sim-section-heading"><div><Terminal size={15} /><strong>Nhật ký</strong><span className="sim-count">{logs.length}</span></div><div><label className="sim-follow"><input type="checkbox" checked={followLogs} onChange={e => setFollowLogs(e.target.checked)} />Theo dõi</label><button className="sim-button icon-only" aria-label="Xóa nhật ký" title="Xóa nhật ký" disabled={!logs.length} onClick={() => setLogs([])}><Trash2 size={14} /></button></div></div>
@@ -304,6 +305,12 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
           </section>
         </div>
         <aside className="sim-inspector" aria-label="Thiết lập mô phỏng">
+          <ScorePanel category={scoreCategory} result={scoreResult} reason={scoreReason} running={isRunning} onCategory={value=>{setScoreCategory(value);setScoreResult(null)}} onCalculate={()=>finishScore('Chấm hiện trạng thủ công')} onGenerate={()=>{
+            const sim=simulatorRef.current;if(!sim)return;
+            sim.reset();createScoringMission(sim.mission,scoreCategory,Math.floor(Math.random()*4294967296));
+            setScoreResult(null);rendererRef.current?.render();addLog(`Đã tạo nhiệm vụ ${scoreCategory}`);
+          }}/>
+
           <section className="sim-telemetry"><div className="sim-section-heading"><div><Gauge size={15} /><strong>Trạng thái robot</strong></div><span>Trực tiếp</span></div>
             <dl className="sim-metrics"><div><dt>Thời gian</dt><dd>{stats.time.toFixed(1)}<small>s</small></dd></div><div><dt>Hướng</dt><dd>{stats.heading.toFixed(0)}<small>°</small></dd></div><div><dt>Vị trí X / Y</dt><dd>{stats.posX.toFixed(0)} / {stats.posY.toFixed(0)}<small>mm</small></dd></div><div><dt>Tốc độ trái / phải</dt><dd>{stats.speedL.toFixed(0)} / {stats.speedR.toFixed(0)}<small>mm/s</small></dd></div></dl>
           </section>

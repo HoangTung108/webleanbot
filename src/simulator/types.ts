@@ -75,6 +75,7 @@ export interface BoardConfig {
   height: number; // mm
   backgroundImage?: string;
   initialPose?: Pose;
+  analysisArea?: { x:number; y:number; width:number; height:number; rotation:number };
   cityZones?: CityZone[];
   storageSites?: StorageSite[];
   obstacles: Obstacle[];

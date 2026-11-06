@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { LEANBOT_GEOMETRY } from './robotGeometry';
 import { RobotSimulator } from './robotSimulator';
 import { SimulatorRenderer } from './renderer';
 
@@ -48,11 +49,11 @@ describe('robot placement', () => {
       expect(renderer.clientToBoard(210,170).y).toBeCloseTo(500);
     } finally { vi.unstubAllGlobals(); }
   });
-  it('clamps the full robot footprint inside the mat and rejects invalid positions', () => {
+  it('allows placement outside the mat but rejects invalid coordinates', () => {
     const robot = new RobotSimulator();
     robot.setPose({ x: -10, y: 99999, heading: -15 });
-    expect(robot.getRobotPose()).toEqual({ x: 75, y: 1144.2, heading: 345 });
+    expect(robot.getRobotPose()).toEqual({ x: -10, y: 99999, heading: 345 });
     robot.setPose({ x: NaN, y: 100, heading: 0 });
-    expect(robot.getRobotPose()).toEqual({ x: 75, y: 1144.2, heading: 345 });
+    expect(robot.getRobotPose()).toEqual({ x: -10, y: 99999, heading: 345 });
   });
 });

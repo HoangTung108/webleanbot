@@ -22,7 +22,7 @@ import {
 
 const DEFAULT_ROBOT_CONFIG: RobotConfig = {
   wheelRadius: 16.25, // mm
-  wheelBase: 100, // mm - distance between wheels (updated from 75 to match LEANBOT_APPEARANCE)
+  wheelBase: LEANBOT_APPEARANCE.wheelBase, // mm, shared with drawing and encoders
   maxSpeed: 500, // mm/s
   maxAcceleration: 2000, // mm/s²
   sensorOffsets: {
@@ -44,6 +44,9 @@ export class RobotSimulator {
   private timestep: number = 10; // ms
   private simulationTime: number = 0;
   private lastUpdateTime: number = 0;
+  private fall = { status: 'supported' as 'supported' | 'falling' | 'fallen', drop: 0, velocityZ: 0, vx: 0, vy: 0 };
+  getFallState() { return { ...this.fall }; }
+
   private speedMultiplier: number = 1; // 1x, 2x, 5x, 10x
 
   constructor(robotConfig?: RobotConfig) {
@@ -82,6 +85,7 @@ export class RobotSimulator {
    * Start simulation
    */
   start(): void {
+    if (this.fall.status !== 'supported') return;
     this.state.isRunning = true;
     this.state.isPaused = false;
     this.lastUpdateTime = Date.now();
@@ -120,6 +124,7 @@ export class RobotSimulator {
    */
   reset(initialPose?: Pose): void {
     this.stop();
+    this.fall = {status:'supported',drop:0,velocityZ:0,vx:0,vy:0};
     this.state.robotState.pose = initialPose || this.board.initialPose || {
       x: 100,
       y: 100,
@@ -140,6 +145,7 @@ export class RobotSimulator {
    * Set motor speeds (mm/s or in terms of steps per second)
    */
   setMotorSpeeds(leftSpeed: number, rightSpeed: number): void {
+    if (this.fall.status !== 'supported') { this.state.robotState.velocityLeft = this.state.robotState.velocityRight = 0; return; }
     // Clamp speeds to max
     const maxSpeed = this.robotConfig.maxSpeed;
     this.state.robotState.velocityLeft = Math.max(
@@ -158,9 +164,10 @@ export class RobotSimulator {
   /** Set the starting direction while stopped; preserve position and history. */
   setPose(pose: Pose): void {
     if (this.state.isRunning || ![pose.x, pose.y, pose.heading].every(Number.isFinite)) return;
+    this.fall = {status:'supported',drop:0,velocityZ:0,vx:0,vy:0};
     this.state.robotState.pose = {
-      x: Math.max(LEANBOT_APPEARANCE.collisionRadius, Math.min(this.board.width - LEANBOT_APPEARANCE.collisionRadius, pose.x)),
-      y: Math.max(LEANBOT_APPEARANCE.collisionRadius, Math.min(this.board.height - LEANBOT_APPEARANCE.collisionRadius, pose.y)),
+      x: pose.x,
+      y: pose.y,
       heading: ((pose.heading % 360) + 360) % 360,
     };
     this.state.history = [];
@@ -219,20 +226,41 @@ export class RobotSimulator {
    * Update simulation step
    */
   update(deltaMilliseconds?: number): void {
-    if (!this.state.isRunning || this.state.isPaused) {
-      return;
-    }
-
+    if (!this.state.isRunning || this.state.isPaused) return;
     const now = Date.now();
-    const deltaTime = (deltaMilliseconds === undefined ? (now - this.lastUpdateTime) / 1000 : deltaMilliseconds / 1000) * this.speedMultiplier; // convert to seconds, apply speed multiplier
+    const elapsed = deltaMilliseconds ?? now - this.lastUpdateTime;
     this.lastUpdateTime = now;
-    this.simulationTime += deltaTime * 1000; // convert back to ms for tracking
+    this.advanceSimulatedTime(elapsed * this.speedMultiplier);
+  }
 
-    // Update robot kinematics
-    this.updateRobotKinematics(deltaTime);
+  /** Advance an already-scaled simulation clock (used by the C++ runtime). */
+  advanceSimulatedTime(deltaMilliseconds: number): void {
+    if (!this.state.isRunning || this.state.isPaused || !Number.isFinite(deltaMilliseconds) || deltaMilliseconds <= 0) return;
+    const deltaTime = deltaMilliseconds / 1000;
+    this.simulationTime += deltaMilliseconds;
+
+    // Once unsupported, motors no longer drive the chassis across the mat.
+    if (this.fall.status === 'supported') this.updateRobotKinematics(deltaTime);
 
     // Check collisions
-    this.checkCollisions();
+    if (this.fall.status === 'supported') this.checkCollisions();
+    const pose = this.state.robotState.pose;
+    // Approximate centre of mass lies behind the drive axle, inside the PCB.
+    const angle = pose.heading*Math.PI/180;
+    const cx = pose.x - 20*Math.cos(angle), cy = pose.y - 20*Math.sin(angle);
+    if (this.fall.status === 'supported' && (cx < 0 || cy < 0 || cx > this.board.width || cy > this.board.height)) {
+      const speed = (this.state.robotState.velocityLeft + this.state.robotState.velocityRight)/2;
+      this.fall.status = 'falling'; this.fall.vx = speed*Math.cos(angle); this.fall.vy = speed*Math.sin(angle);
+      this.setGripper(0,0);
+      this.state.robotState.velocityLeft = this.state.robotState.velocityRight = 0;
+    }
+    if (this.fall.status === 'falling') {
+      pose.x += this.fall.vx*deltaTime; pose.y += this.fall.vy*deltaTime;
+      this.fall.drop += this.fall.velocityZ*deltaTime + 0.5*9810*deltaTime*deltaTime;
+      this.fall.velocityZ += 9810*deltaTime;
+      // Assumed tabletop drop: 750 mm. A 2.5D fall, not a rigid-body solver.
+      if (this.fall.drop >= 750) { this.fall.drop = 750; this.fall.status = 'fallen'; this.state.isRunning = false; }
+    }
 
     this.mission.step(deltaTime, this.getRobotPose(), this.state.robotState.velocityLeft, this.state.robotState.velocityRight);
 
@@ -266,7 +294,7 @@ export class RobotSimulator {
 
     // Differential drive kinematics
     const v = (vL + vR) / 2; // linear velocity (mm/s)
-    const w = (vR - vL) / wheelBase; // angular velocity (rad/s), note: positive = left turn
+    const w = (vL - vR) / wheelBase; // Screen coordinates: positive heading is clockwise, matching C++ encoders.
 
     const theta = (pose.heading * Math.PI) / 180; // current heading in radians
 
@@ -326,9 +354,7 @@ export class RobotSimulator {
       }
     }
 
-    // Keep robot within bounds
-    pose.x = Math.max(robotRadius, Math.min(this.board.width - robotRadius, pose.x));
-    pose.y = Math.max(robotRadius, Math.min(this.board.height - robotRadius, pose.y));
+    // The mat perimeter is an unsupported edge, not an invisible wall.
   }
 
   /**

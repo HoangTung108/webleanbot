@@ -1,6 +1,7 @@
 import { BoardConfig } from './types';
 
 export const SYNAPSE_CITY: BoardConfig = {
+  analysisArea: {x:959.6,y:959.6,width:300,height:300,rotation:0},
   "name": "Synapse City — 4 ft × 4 ft",
   "width": 1219.2,
   "height": 1219.2,

@@ -196,7 +196,6 @@ export class SimulatorRenderer {
     const down = (event: PointerEvent) => {
       if (event.button !== 0 || this.simulator.getSimulationState().isRunning) return;
       const point = this.clientToBoard(event.clientX, event.clientY);
-      if (point.x < 0 || point.y < 0 || point.x > this.board.width || point.y > this.board.height) return;
       const pose = this.simulator.getRobotPose();
       const onRobot = Math.hypot(point.x - pose.x, point.y - pose.y) < LEANBOT_APPEARANCE.collisionRadius;
       dx = onRobot ? point.x - pose.x : 0; dy = onRobot ? point.y - pose.y : 0;
@@ -385,12 +384,21 @@ export class SimulatorRenderer {
 
     const ctx = this.context;
     ctx.save();
-    ctx.translate(center.x, center.y);
+    const fall = this.simulator.getFallState();
+    const progress = fall.drop / 750;
+    ctx.globalAlpha = 1 - progress * 0.7;
+    ctx.translate(center.x, center.y + progress * 25);
+    ctx.scale(1-progress*0.35, 1-progress*0.35);
     ctx.rotate(pose.heading * Math.PI / 180);
     ctx.scale(this.scale, this.scale);
     const grip = this.simulator.getGripper();
     drawLeanbot(ctx, grip.left, grip.right);
     ctx.restore();
+    if (fall.status !== 'supported') {
+      ctx.save(); ctx.fillStyle = '#b44740'; ctx.font = '600 11px system-ui';
+      ctx.fillText(fall.status === 'fallen' ? 'Robot đã rơi khỏi sa bàn' : 'Robot đang rơi', Math.max(12,Math.min(this.viewportWidth-180,center.x)), Math.max(20,Math.min(this.viewportHeight-12,center.y)));
+      ctx.restore();
+    }
   }
 
   /**

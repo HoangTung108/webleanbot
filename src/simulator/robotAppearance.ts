@@ -1,29 +1,22 @@
 /** Photo-inspired top view. Local +X is the gripper/front, units are mm. */
-export const LEANBOT_APPEARANCE = {
-  length: 210,    // Increased from 128mm to better match real robot ~210mm
-  width: 120,     // Increased from 86mm to better match real robot ~120mm
-  collisionRadius: 100,  // Increased from 75mm for larger robot
-  wheelBase: 100, // Increased from 75mm to match new width
-} as const;
+import { LEANBOT_GEOMETRY } from './robotGeometry';
+export const LEANBOT_APPEARANCE = LEANBOT_GEOMETRY;
 
 export function drawLeanbot(ctx: CanvasRenderingContext2D, leftGrip = 0, rightGrip = 0): void {
   ctx.save();
   ctx.lineJoin = 'round';
   
-  // Scale factor to adjust drawing for new robot size (210x120 from 128x86)
-  const scale = 1.4; // Approximate scale for width adjustment
-  
   // Black rubber tyres, centred on the differential-drive axle.
   for (const side of [-1, 1]) {
-    const y = side * 50; // wheelBase/2 = 100/2 = 50
+    const y = side * LEANBOT_GEOMETRY.wheelBase / 2;
     ctx.fillStyle = '#111916';
     ctx.fillRect(-14, y - 8, 28, 16);
     ctx.strokeStyle = '#344238'; ctx.lineWidth = 2;
     for (let x = -11; x <= 11; x += 5) {
       ctx.beginPath(); ctx.moveTo(x, y - 7); ctx.lineTo(x + 1, y + 7); ctx.stroke();
     }
-    ctx.fillStyle = '#d3d5c4'; ctx.fillRect(-10, side < 0 ? -45 : 32, 20, 13);
-    ctx.fillStyle = '#e2b52d'; ctx.fillRect(-6, side < 0 ? -39 : 32, 12, 6);
+    ctx.fillStyle = '#d3d5c4'; ctx.fillRect(-10, y - 6.5, 20, 13);
+    ctx.fillStyle = '#e2b52d'; ctx.fillRect(-6, y - 3, 12, 6);
   }
   
   // The long red PCB extends behind the wheels
