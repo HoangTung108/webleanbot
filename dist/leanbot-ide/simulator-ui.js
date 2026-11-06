@@ -292,7 +292,8 @@ class LeanbotSimulator2D {
     ctx.translate(pixelX, pixelY);
     ctx.rotate(headingRad);
     ctx.scale(this.pixelsPerMM, this.pixelsPerMM);
-    LeanbotCpp.drawLeanbot(ctx, this.gripperLeft || 0, this.gripperRight || 0);
+    const grip = this.mission.getGripperAngles({x:this.robotX,y:this.robotY,heading:this.robotHeading});
+    LeanbotCpp.drawLeanbot(ctx, grip.left, grip.right);
     ctx.restore();
   }
 

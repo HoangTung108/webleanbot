@@ -24,7 +24,7 @@ function within(points:{x:number;y:number}[],rect:Rect) {
   const a=-rect.rotation*Math.PI/180;
   return points.every(p=>Math.abs((p.x-rect.x)*Math.cos(a)-(p.y-rect.y)*Math.sin(a))<=rect.width/2+1e-6 && Math.abs((p.x-rect.x)*Math.sin(a)+(p.y-rect.y)*Math.cos(a))<=rect.height/2+1e-6);
 }
-const grounded=(b:MissionBlock)=>(b.elevation??0)<=1e-6;
+const grounded=(b:MissionBlock)=>!b.offBoard&&Math.abs(b.elevation??0)<=1e-6;
 const footprint=(b:MissionBlock)=>{const size=blockFootprint(b);return corners(b.x,b.y,size.length,size.width,b.rotation)};
 function touches(points:{x:number;y:number}[],rect:Rect,strict=false) {
   const target=corners(rect.x,rect.y,rect.width,rect.height,rect.rotation);

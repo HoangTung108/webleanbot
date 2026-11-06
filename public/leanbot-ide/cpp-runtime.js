@@ -41,24 +41,13 @@ var LeanbotCpp = (() => {
     graspOffset: 75,
     body: { x: -27, y: 0, length: 130, width: 70 },
     wheel: { length: 32.5, width: 20 },
-    gripper: { pivotX: 53, pivotY: 35, openAngle: 0.75, closedAngle: -0.61 }
+    gripper: { pivotX: 53, pivotY: 35, openAngle: 0.75, closedAngle: -0.98 }
   };
   var FINGER = [[0, 5], [21, 5], [32, 1], [33, -4], [26, -9], [19, -3], [15, -3], [22, -14], [18, -18], [9, -13], [1, -4]];
   function gripperJaw(side, degrees) {
     const g = LEANBOT_GEOMETRY.gripper;
     const t = Math.max(0, Math.min(90, degrees)) / 90, a = g.openAngle + (g.closedAngle - g.openAngle) * t;
     return FINGER.map(([x, y]) => ({ x: g.pivotX + x * Math.cos(a) - y * Math.sin(a), y: side * (g.pivotY + x * Math.sin(a) + y * Math.cos(a)) }));
-  }
-  function gripperOpening(left, right) {
-    const at = (side, degrees) => {
-      const p = gripperJaw(side, degrees), ys = [];
-      for (let i = 0; i < p.length; i++) {
-        const a = p[i], b = p[(i + 1) % p.length], x = LEANBOT_GEOMETRY.graspOffset;
-        if (Math.abs(b.x - a.x) > 1e-9 && x >= Math.min(a.x, b.x) && x <= Math.max(a.x, b.x)) ys.push(a.y + (x - a.x) / (b.x - a.x) * (b.y - a.y));
-      }
-      return ys.length ? side === 1 ? Math.min(...ys) : Math.max(...ys) : side * 100;
-    };
-    return Math.max(0, at(1, right) - at(-1, left));
   }
   function intersects(a, b) {
     const inside = (p, poly) => {
@@ -80,34 +69,30 @@ var LeanbotCpp = (() => {
   function fitGripperToBlock(left, right, width, shape) {
     const l = Math.max(0, Math.min(90, left)), r = Math.max(0, Math.min(90, right));
     if (!Number.isFinite(width) || width <= 0) return { left: l, right: r };
-    let rectangle = [];
-    if (shape) {
-      const a = shape.rotation * Math.PI / 180;
-      rectangle = [[-1, -1], [-1, 1], [1, 1], [1, -1]].map(([x, y]) => ({ x: LEANBOT_GEOMETRY.graspOffset + x * (shape.length + 1) / 2 * Math.cos(a) - y * (shape.width + 1) / 2 * Math.sin(a), y: x * (shape.length + 1) / 2 * Math.sin(a) + y * (shape.width + 1) / 2 * Math.cos(a) }));
-    }
-    const safe = (t2, side) => shape ? !intersects(gripperJaw(side, t2), rectangle) : gripperOpening(l * t2, r * t2) >= width + 0.5;
+    const target = shape ?? { length: 15, width, rotation: 0 };
+    const a = target.rotation * Math.PI / 180;
+    const rectangle = [[-1, -1], [-1, 1], [1, 1], [1, -1]].map(([x, y]) => ({ x: (target.x ?? LEANBOT_GEOMETRY.graspOffset) + x * (target.length + 1) / 2 * Math.cos(a) - y * (target.width + 1) / 2 * Math.sin(a), y: (target.y ?? 0) + x * (target.length + 1) / 2 * Math.sin(a) + y * (target.width + 1) / 2 * Math.cos(a) }));
+    const safe = (t, side) => !intersects(gripperJaw(side, t), rectangle);
     const firstContact = (max, side) => {
       let lo = 0, hi = max, found = false;
       for (let step = 1; step <= 180; step++) {
-        const t2 = max * step / 180;
-        if (!safe(t2, side)) {
+        const t = max * step / 180;
+        if (!safe(t, side)) {
           lo = max * (step - 1) / 180;
-          hi = t2;
+          hi = t;
           found = true;
           break;
         }
       }
       if (!found) return max;
       for (let i = 0; i < 28; i++) {
-        const t2 = (lo + hi) / 2;
-        if (safe(t2, side)) lo = t2;
-        else hi = t2;
+        const t = (lo + hi) / 2;
+        if (safe(t, side)) lo = t;
+        else hi = t;
       }
       return lo;
     };
-    if (shape) return { left: firstContact(l, -1), right: firstContact(r, 1) };
-    const t = firstContact(1);
-    return { left: l * t, right: r * t };
+    return { left: firstContact(l, -1), right: firstContact(r, 1) };
   }
 
   // src/simulator/missionWorld.ts
@@ -158,10 +143,11 @@ var LeanbotCpp = (() => {
     initial = [];
     listeners = /* @__PURE__ */ new Set();
     serial = 0;
-    heldOffset = 0;
+    heldAnchor = { x: LEANBOT_GEOMETRY.graspOffset, y: 0, rotation: 0 };
     gripper = { left: 0, right: 0 };
     velocity = { x: 0, y: 0, omega: 0 };
     lastPose;
+    regripBlocked = /* @__PURE__ */ new Set();
     subscribe(fn) {
       this.listeners.add(fn);
       return () => {
@@ -175,7 +161,7 @@ var LeanbotCpp = (() => {
       return this.blocks.find((b) => b.held);
     }
     get hasMotion() {
-      return this.blocks.some((b) => !b.held && (Math.hypot(b.vx, b.vy) > 0.01 || Math.abs(b.spin) > 0.01 || b.state === "falling"));
+      return this.blocks.some((b) => !b.held && (Math.hypot(b.vx, b.vy) > 0.01 || Math.abs(b.spin) > 0.01 || b.state === "falling" || !!b.offBoard && (b.elevation ?? 0) > -750));
     }
     slots(kind) {
       return kind === "pollution" ? (this.board.cityZones ?? []).flatMap((z) => z.sites) : this.board.storageSites ?? [];
@@ -251,6 +237,7 @@ var LeanbotCpp = (() => {
       this.blocks = copy(this.initial);
       this.gripper = { left: 0, right: 0 };
       this.lastPose = void 0;
+      this.regripBlocked.clear();
       this.velocity = { x: 0, y: 0, omega: 0 };
       this.changed();
     }
@@ -261,19 +248,14 @@ var LeanbotCpp = (() => {
       });
     }
     syncPose(pose) {
-      const block = this.heldBlock;
-      if (block) {
-        const point = this.graspPoint(pose);
-        block.x = point.x;
-        block.y = point.y;
-        block.rotation = pose.heading + this.heldOffset;
-      }
+      this.syncHeld(pose);
+      this.lastPose = { ...pose };
     }
     distance(pose, maxDistance = 300) {
       const angle = pose.heading * RAD, sx = pose.x + 40 * Math.cos(angle), sy = pose.y + 40 * Math.sin(angle);
       let nearest = maxDistance;
       for (const block of this.blocks) {
-        if (block.held || BLOCK_SIZE.height * Math.cos(block.tilt) + BLOCK_SIZE.length * Math.sin(block.tilt) < 35) continue;
+        if (block.held || block.offBoard || BLOCK_SIZE.height * Math.cos(block.tilt) + BLOCK_SIZE.length * Math.sin(block.tilt) < 35) continue;
         const a = -block.rotation * RAD, dx = sx - block.x, dy = sy - block.y, shape = blockFootprint(block);
         const origin = [dx * Math.cos(a) - dy * Math.sin(a), dx * Math.sin(a) + dy * Math.cos(a)];
         const direction = [Math.cos(angle + a), Math.sin(angle + a)];
@@ -299,46 +281,90 @@ var LeanbotCpp = (() => {
       const a = pose.heading * RAD;
       return { x: pose.x + LEANBOT_GEOMETRY.graspOffset * Math.cos(a), y: pose.y + LEANBOT_GEOMETRY.graspOffset * Math.sin(a) };
     }
+    local(block, pose) {
+      const a = pose.heading * RAD, dx = block.x - pose.x, dy = block.y - pose.y;
+      return { x: dx * Math.cos(a) + dy * Math.sin(a), y: -dx * Math.sin(a) + dy * Math.cos(a), rotation: block.rotation - pose.heading };
+    }
+    fingerContact(block, pose) {
+      const shape = blockFootprint(block), local = this.local(block, pose);
+      return fitGripperToBlock(this.gripper.left, this.gripper.right, shape.width, { ...shape, ...local });
+    }
+    /** Visible servo angles include obstructions, even when no block is held. */
+    getGripperAngles(pose) {
+      let left = this.gripper.left, right = this.gripper.right;
+      for (const block of this.blocks) {
+        if (block.offBoard || (block.elevation ?? 0) > 0 || Math.hypot(block.x - pose.x, block.y - pose.y) > 150) continue;
+        const actual = this.fingerContact(block, pose);
+        left = Math.min(left, actual.left);
+        right = Math.min(right, actual.right);
+      }
+      return { left, right };
+    }
+    syncHeld(pose) {
+      const b = this.heldBlock;
+      if (!b) return;
+      const a = pose.heading * RAD;
+      b.x = pose.x + this.heldAnchor.x * Math.cos(a) - this.heldAnchor.y * Math.sin(a);
+      b.y = pose.y + this.heldAnchor.x * Math.sin(a) + this.heldAnchor.y * Math.cos(a);
+      b.rotation = pose.heading + this.heldAnchor.rotation;
+    }
+    pointVelocity(block, pose) {
+      return { x: this.velocity.x - this.velocity.omega * (block.y - pose.y), y: this.velocity.y + this.velocity.omega * (block.x - pose.x) };
+    }
+    release(pose, inhibitRegrip = true) {
+      const block = this.heldBlock;
+      if (!block) return;
+      this.syncHeld(pose);
+      if (inhibitRegrip) this.regripBlocked.add(block.id);
+      const v = this.pointVelocity(block, pose);
+      block.held = false;
+      block.vx = v.x;
+      block.vy = v.y;
+      block.spin = this.velocity.omega / RAD;
+      const speed = Math.hypot(v.x, v.y), a = Math.atan2(v.y, v.x) - block.rotation * RAD;
+      const base = (Math.abs(Math.cos(a)) * BLOCK_SIZE.length + Math.abs(Math.sin(a)) * BLOCK_SIZE.width) / 2, h = BLOCK_SIZE.height / 2;
+      if (this.friction * h > base && speed * speed > 2 * GRAVITY * (Math.hypot(h, base) - h)) this.tip(block, Math.atan2(v.y, v.x) / RAD);
+      this.changed();
+    }
     setGripper(left, right, pose, motorLeft = 0, motorRight = 0) {
+      if (![left, right, pose.x, pose.y, pose.heading, motorLeft, motorRight].every(Number.isFinite)) throw new Error("Th\xF4ng s\u1ED1 tay g\u1EAFp kh\xF4ng h\u1EE3p l\u1EC7");
       const angle = pose.heading * RAD, speed = (motorLeft + motorRight) / 2;
       this.velocity = { x: speed * Math.cos(angle), y: speed * Math.sin(angle), omega: (motorLeft - motorRight) / LEANBOT_GEOMETRY.wheelBase };
-      this.gripper = { left, right };
-      const closed = gripperOpening(left, right) <= BLOCK_SIZE.width + 2;
-      const hasContact = (block) => {
-        const shape = blockFootprint(block), rotation = block.rotation - pose.heading, a = rotation * RAD;
-        const width = Math.abs(Math.sin(a)) * shape.length + Math.abs(Math.cos(a)) * shape.width;
-        const actual = fitGripperToBlock(left, right, width, { ...shape, rotation });
-        return actual.left < left - 1e-4 && actual.right < right - 1e-4;
+      this.syncHeld(pose);
+      const opening = left < this.gripper.left - 1e-6 || right < this.gripper.right - 1e-6;
+      if (opening) this.regripBlocked.clear();
+      this.gripper = { left: clamp(left, 0, 90), right: clamp(right, 0, 90) };
+      const stops = this.getGripperAngles(pose);
+      const touchesBoth = (b) => {
+        const c = this.fingerContact(b, pose);
+        return c.left < this.gripper.left - 1e-4 && c.right < this.gripper.right - 1e-4 && c.left <= stops.left + 0.05 && c.right <= stops.right + 0.05;
       };
-      if (this.heldBlock && !hasContact(this.heldBlock)) {
-        const block = this.heldBlock, point = this.graspPoint(pose);
-        block.held = false;
-        block.vx = this.velocity.x - this.velocity.omega * (point.y - pose.y);
-        block.vy = this.velocity.y + this.velocity.omega * (point.x - pose.x);
-        if (Math.hypot(block.vx, block.vy) > 20) this.tip(block, Math.atan2(block.vy, block.vx) / RAD);
-        this.changed();
-      } else if (closed && !this.heldBlock) {
-        const point = this.graspPoint(pose), a = pose.heading * RAD;
-        const candidates = this.blocks.filter((b) => {
-          const dx = b.x - pose.x, dy = b.y - pose.y;
-          if (b.held || b.state === "falling") return false;
-          const height = BLOCK_SIZE.height * Math.cos(b.tilt) + BLOCK_SIZE.length * Math.sin(b.tilt);
-          const low = height < 30;
-          if (height < 12) return false;
-          if (low && (Math.abs(Math.cos((b.rotation - pose.heading) * RAD)) < 0.96 || Math.hypot(b.vx, b.vy) > 5 || Math.abs(b.spin) > 5 || Math.max(Math.abs(motorLeft), Math.abs(motorRight)) > 10)) return false;
-          return dx * Math.cos(a) + dy * Math.sin(a) >= LEANBOT_GEOMETRY.graspOffset - (low ? 6 : 16) && Math.abs(-dx * Math.sin(a) + dy * Math.cos(a)) <= (low ? 4 : 8) && Math.hypot(b.x - point.x, b.y - point.y) <= (low ? 6 : 12) && hasContact(b);
-        }).sort((a2, b) => Math.hypot(a2.x - point.x, a2.y - point.y) - Math.hypot(b.x - point.x, b.y - point.y));
-        if (candidates[0]) {
-          const block = candidates[0];
-          block.held = true;
-          block.slotId = void 0;
-          block.vx = block.vy = block.spin = 0;
-          this.heldOffset = block.rotation - pose.heading;
-          block.x = point.x;
-          block.y = point.y;
-          this.changed();
-        }
+      if (this.heldBlock) {
+        if (!touchesBoth(this.heldBlock)) this.release(pose, !opening);
+        return;
       }
+      const point = this.graspPoint(pose);
+      const candidates = this.blocks.filter((b) => {
+        if (b.held || b.offBoard || this.regripBlocked.has(b.id) || b.state === "falling" || (b.elevation ?? 0) > 0) return false;
+        const local = this.local(b, pose), height = BLOCK_SIZE.height * Math.cos(b.tilt) + BLOCK_SIZE.length * Math.sin(b.tilt), low = height < 30;
+        if (height < 12 || Math.hypot(b.x - point.x, b.y - point.y) > (low ? 6 : 12) || Math.abs(local.y) > (low ? 4 : 8)) return false;
+        if (low && (Math.abs(Math.cos(local.rotation * RAD)) < 0.96 || Math.hypot(b.vx, b.vy) > 5 || Math.abs(b.spin) > 5 || Math.max(Math.abs(motorLeft), Math.abs(motorRight)) > 10)) return false;
+        const body = LEANBOT_GEOMETRY.body, a = pose.heading * RAD;
+        const hit = contact({ ...body, x: pose.x + body.x * Math.cos(a), y: pose.y + body.x * Math.sin(a), rotation: pose.heading }, { ...b, ...blockFootprint(b) });
+        if (hit && hit.depth > 1) return false;
+        return touchesBoth(b);
+      }).sort((a, b) => Math.hypot(a.x - point.x, a.y - point.y) - Math.hypot(b.x - point.x, b.y - point.y));
+      const block = candidates[0];
+      if (!block) return;
+      this.heldAnchor = this.local(block, pose);
+      block.held = true;
+      block.slotId = void 0;
+      const v = this.pointVelocity(block, pose);
+      block.vx = v.x;
+      block.vy = v.y;
+      block.spin = this.velocity.omega / RAD;
+      this.lastPose = { ...pose };
+      this.changed();
     }
     tip(block, rotation) {
       if (block.state !== "standing" || block.held) return;
@@ -349,36 +375,86 @@ var LeanbotCpp = (() => {
       this.changed();
     }
     step(seconds, pose, left = 0, right = 0) {
-      if (!Number.isFinite(seconds) || seconds <= 0) return;
-      let remaining = seconds;
-      while (remaining > 1e-9) {
-        const dt = Math.min(5e-3, remaining);
-        this.substep(dt, pose, left, right);
-        remaining -= dt;
+      if (!Number.isFinite(seconds) || seconds <= 0 || ![pose.x, pose.y, pose.heading, left, right].every(Number.isFinite)) return;
+      const start = this.lastPose ?? pose, dh = ((pose.heading - start.heading + 180) % 360 + 360) % 360 - 180;
+      const moved = Math.hypot(pose.x - start.x, pose.y - start.y) > 1e-8 || Math.abs(dh) > 1e-8;
+      const a = pose.heading * RAD, speed = (left + right) / 2;
+      const velocity = moved ? { x: (pose.x - start.x) / seconds, y: (pose.y - start.y) / seconds, omega: dh * RAD / seconds } : { x: speed * Math.cos(a), y: speed * Math.sin(a), omega: (left - right) / LEANBOT_GEOMETRY.wheelBase };
+      let elapsed = 0;
+      while (elapsed < seconds - 1e-9) {
+        const dt = Math.min(5e-3, seconds - elapsed);
+        elapsed += dt;
+        const t = elapsed / seconds;
+        this.substep(dt, { x: start.x + (pose.x - start.x) * t, y: start.y + (pose.y - start.y) * t, heading: start.heading + dh * t }, velocity);
       }
       this.lastPose = { ...pose };
     }
-    substep(dt, pose, left, right) {
-      const angle = pose.heading * RAD, speed = (left + right) / 2, omega = (left - right) / LEANBOT_GEOMETRY.wheelBase;
-      this.velocity = { x: speed * Math.cos(angle), y: speed * Math.sin(angle), omega };
+    gripLimit(block) {
+      const height = BLOCK_SIZE.height * Math.cos(block.tilt) + BLOCK_SIZE.length * Math.sin(block.tilt);
+      return 1.5 * clamp((height - 12) / 30, 0.1, 1);
+    }
+    substep(dt, pose, velocity) {
+      const angle = pose.heading * RAD, omega = velocity.omega;
+      this.velocity = velocity;
+      if (!this.heldBlock && this.gripper.left > 10 && this.gripper.right > 10) {
+        const v = velocity.x * Math.cos(angle) + velocity.y * Math.sin(angle);
+        this.setGripper(this.gripper.left, this.gripper.right, pose, v + omega * LEANBOT_GEOMETRY.wheelBase / 2, v - omega * LEANBOT_GEOMETRY.wheelBase / 2);
+        this.velocity = velocity;
+      }
       const held = this.heldBlock;
       if (held) {
-        const p = this.graspPoint(pose);
-        held.x = p.x;
-        held.y = p.y;
-        held.rotation = pose.heading + this.heldOffset;
+        this.syncHeld(pose);
+        const v = this.pointVelocity(held, pose), accel = Math.hypot(v.x - held.vx, v.y - held.vy) / dt;
+        const force = held.mass * (accel / 1e3 + (Math.hypot(v.x, v.y) > 0.1 ? this.friction * 9.81 : 0));
+        if (force > this.gripLimit(held)) this.release(pose);
+        else {
+          held.vx = v.x;
+          held.vy = v.y;
+          held.spin = omega / RAD;
+        }
       }
       for (const b of this.blocks) {
         if (b.held) continue;
-        const speed2 = Math.hypot(b.vx, b.vy), next = Math.max(0, speed2 - this.friction * GRAVITY * dt);
-        if (speed2 > 0) {
-          b.vx *= next / speed2;
-          b.vy *= next / speed2;
+        if (!b.offBoard && (b.x < 0 || b.y < 0 || b.x > this.board.width || b.y > this.board.height)) {
+          b.offBoard = true;
+          b.elevation = 0;
+          b.verticalVelocity = 0;
+          b.slotId = void 0;
+          this.changed();
+        }
+        if (b.offBoard) {
+          if ((b.elevation ?? 0) > -750) {
+            b.x += b.vx * dt;
+            b.y += b.vy * dt;
+            b.rotation += b.spin * dt;
+            b.elevation = Math.max(-750, (b.elevation ?? 0) - (b.verticalVelocity ?? 0) * dt - 0.5 * GRAVITY * dt * dt);
+            b.verticalVelocity = (b.verticalVelocity ?? 0) + GRAVITY * dt;
+            if (b.elevation <= -750) {
+              b.vx = b.vy = b.spin = b.verticalVelocity = b.tipSpeed = 0;
+              b.state = "fallen";
+              b.tilt = Math.PI / 2;
+              this.changed();
+            }
+          }
+          continue;
+        }
+        const speed = Math.hypot(b.vx, b.vy), next = Math.max(0, speed - this.friction * GRAVITY * dt);
+        if (speed > 0) {
+          b.vx *= next / speed;
+          b.vy *= next / speed;
         }
         b.spin *= Math.max(0, 1 - this.friction * 30 * dt);
         b.x += b.vx * dt;
         b.y += b.vy * dt;
         b.rotation += b.spin * dt;
+        if (b.x < 0 || b.y < 0 || b.x > this.board.width || b.y > this.board.height) {
+          b.offBoard = true;
+          b.elevation = 0;
+          b.verticalVelocity = 0;
+          b.slotId = void 0;
+          this.changed();
+          continue;
+        }
         if (b.state === "falling") {
           const before = Math.sin(b.tilt);
           b.tipSpeed += GRAVITY / (BLOCK_SIZE.height * 0.65) * Math.sin(Math.max(0.08, b.tilt)) * dt;
@@ -416,17 +492,20 @@ var LeanbotCpp = (() => {
         }
       }
       for (let i = 0; i < this.blocks.length; i++) for (let j = i + 1; j < this.blocks.length; j++) {
-        const a = this.blocks[i], b = this.blocks[j], hit = contact({ ...a, ...blockFootprint(a) }, { ...b, ...blockFootprint(b) });
+        const a = this.blocks[i], b = this.blocks[j];
+        if (a.offBoard || b.offBoard) continue;
+        const hit = contact({ ...a, ...blockFootprint(a) }, { ...b, ...blockFootprint(b) });
         if (!hit) continue;
+        let closing = (b.vx - a.vx) * hit.nx + (b.vy - a.vy) * hit.ny;
+        const carried = a.held ? a : b.held ? b : void 0, free = a.held ? b : a;
+        if (carried && closing < 0 && free.mass * -closing * (1 + this.restitution) / dt / 1e3 > this.gripLimit(carried)) this.release(pose);
         const ia = a.held ? 0 : 1 / a.mass, ib = b.held ? 0 : 1 / b.mass, total = ia + ib;
         if (!total) continue;
         a.x -= hit.nx * hit.depth * ia / total;
         a.y -= hit.ny * hit.depth * ia / total;
         b.x += hit.nx * hit.depth * ib / total;
         b.y += hit.ny * hit.depth * ib / total;
-        const avx = a.held ? this.velocity.x : a.vx, avy = a.held ? this.velocity.y : a.vy;
-        const bvx = b.held ? this.velocity.x : b.vx, bvy = b.held ? this.velocity.y : b.vy;
-        const closing = (bvx - avx) * hit.nx + (bvy - avy) * hit.ny;
+        closing = (b.vx - a.vx) * hit.nx + (b.vy - a.vy) * hit.ny;
         if (closing < 0) {
           const impulse = -(1 + this.restitution) * closing / total;
           a.vx -= impulse * ia * hit.nx;
@@ -439,17 +518,7 @@ var LeanbotCpp = (() => {
           }
         }
       }
-      for (const b of this.blocks) {
-        if (b.held) continue;
-        const shape = blockFootprint(b), a = b.rotation * RAD;
-        const rx = Math.abs(Math.cos(a)) * shape.length / 2 + Math.abs(Math.sin(a)) * shape.width / 2;
-        const ry = Math.abs(Math.sin(a)) * shape.length / 2 + Math.abs(Math.cos(a)) * shape.width / 2;
-        if (b.x < rx || b.x > this.board.width - rx) b.vx *= -this.restitution;
-        if (b.y < ry || b.y > this.board.height - ry) b.vy *= -this.restitution;
-        b.x = clamp(b.x, rx, this.board.width - rx);
-        b.y = clamp(b.y, ry, this.board.height - ry);
-        if (Math.hypot(b.vx, b.vy) > 0.1) b.slotId = void 0;
-      }
+      for (const b of this.blocks) if (!b.held && !b.offBoard && Math.hypot(b.vx, b.vy) > 0.1) b.slotId = void 0;
     }
     serialize() {
       return JSON.stringify({ version: 1, friction: this.friction, blocks: this.initial });
@@ -477,19 +546,24 @@ var LeanbotCpp = (() => {
   };
   function drawMissionBlocks(ctx, world) {
     for (const b of world.blocks) {
-      const shape = blockFootprint(b), h = BLOCK_SIZE.height * Math.cos(b.tilt) * 0.18;
+      const shape = blockFootprint(b);
       ctx.save();
       ctx.translate(b.x, b.y);
+      if (b.offBoard) {
+        const t = Math.min(1, -(b.elevation ?? 0) / 750);
+        ctx.globalAlpha = 1 - 0.85 * t;
+        ctx.scale(1 - 0.4 * t, 1 - 0.4 * t);
+      }
       ctx.rotate(b.rotation * RAD);
       ctx.fillStyle = "rgba(0,0,0,.22)";
       ctx.fillRect(-shape.length / 2 + 3, -shape.width / 2 + 4, shape.length, shape.width);
       ctx.fillStyle = BLOCK_COLORS[b.color];
       ctx.strokeStyle = b.held ? "#fff" : "#26333a";
       ctx.lineWidth = b.held ? 2 : 0.8;
-      ctx.fillRect(-shape.length / 2, -shape.width / 2 - h, shape.length, shape.width + h);
-      ctx.strokeRect(-shape.length / 2, -shape.width / 2 - h, shape.length, shape.width + h);
+      ctx.fillRect(-shape.length / 2, -shape.width / 2, shape.length, shape.width);
+      ctx.strokeRect(-shape.length / 2, -shape.width / 2, shape.length, shape.width);
       ctx.fillStyle = "rgba(255,255,255,.2)";
-      ctx.fillRect(-shape.length / 2, -shape.width / 2 - h, shape.length, Math.min(5, shape.width));
+      ctx.fillRect(-shape.length / 2, -shape.width / 2, shape.length, Math.min(3, shape.width));
       if (b.color === "mystery") {
         ctx.fillStyle = "#344357";
         ctx.font = "bold 14px sans-serif";
@@ -498,8 +572,8 @@ var LeanbotCpp = (() => {
       }
       if (b.kind === "neutralizer") {
         ctx.fillStyle = "#f3efe0";
-        if (b.tilt > Math.PI / 4) ctx.fillRect(-7.5, -shape.width / 2, 15, shape.width);
-        else ctx.fillRect(-shape.length / 2, -4 - h / 2, shape.length, 8);
+        if (b.tilt > Math.PI / 4) ctx.fillRect(-shape.length / 6, -shape.width / 2, shape.length / 3, shape.width);
+        else ctx.fillRect(-shape.length / 2, -shape.width / 6, shape.length, shape.width / 3);
       }
       ctx.restore();
     }

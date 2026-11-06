@@ -1,5 +1,5 @@
 import {describe,expect,it} from 'vitest';
-import {fitGripperToBlock,gripperJaw,gripperOpening,LEANBOT_GEOMETRY} from './robotGeometry';
+import {fitGripperToBlock,gripperJaw,LEANBOT_GEOMETRY} from './robotGeometry';
 import {RobotSimulator} from './robotSimulator';
 import {MissionWorld} from './missionWorld';
 import {SYNAPSE_CITY} from './boardConfigs';
@@ -17,9 +17,8 @@ describe('video-referenced Leanbot geometry',()=>{
         expect(p.x).toBeLessThanOrEqual(88);expect(Math.abs(p.y)).toBeLessThanOrEqual(60);
       });
     }
-    expect(gripperOpening(0,0)).toBeGreaterThan(65);
-    expect(gripperOpening(90,90)).toBeCloseTo(25.5,0);
-    expect(gripperOpening(90,0)).toBeGreaterThan(40);
+    const normal=fitGripperToBlock(90,90,25,{length:15,width:25,rotation:0});
+    expect(normal.left).toBeLessThan(90);expect(normal.right).toBeLessThan(90);
   });
   it('requires actual jaw closure rather than capturing a block at 55 degrees',()=>{
     const world=new MissionWorld(SYNAPSE_CITY),site=world.slots('pollution')[0];
@@ -28,18 +27,17 @@ describe('video-referenced Leanbot geometry',()=>{
     world.setGripper(90,0,pose);expect(block.held).toBe(false);
     world.setGripper(90,90,pose);expect(block.held).toBe(true);
     world.setGripper(55,55,pose);expect(block.held).toBe(false);
-    block.rotation=90;world.setGripper(90,90,pose);expect(block.held).toBe(false); // neither jaw reaches the narrow face
+    block.rotation=90;world.setGripper(90,90,pose);expect(block.held).toBe(true); // deeper closure reaches both sides of the narrow face
   });
   it('stops both fingers at contact with a rotated/wider block',()=>{
     const fitted=fitGripperToBlock(90,90,28.3);
-    expect(fitted.left).toBeLessThan(90);expect(fitted.left).toBeGreaterThan(80);
-    expect(gripperOpening(fitted.left,fitted.right)).toBeCloseTo(28.8,5);
+    expect(fitted.left).toBeLessThan(90);expect(fitted.left).toBeGreaterThan(0);
     const angled=fitGripperToBlock(90,90,28.3,{length:15,width:25,rotation:45});
     expect(angled.left).toBeLessThan(90);expect(angled.right).toBeLessThan(90);
     expect(Math.abs(angled.left-angled.right)).toBeGreaterThan(.1);
     const wide=fitGripperToBlock(90,90,50);
     expect(wide.left).toBeLessThan(40); // first contact, before the fork notch crosses
-    for(let t=0;t<=1;t+=.1)expect(gripperOpening(wide.left*t,wide.right*t)).toBeGreaterThanOrEqual(50.5-1e-6);
+    expect(wide.left).toBeLessThan(fitted.left);
   });
   it('animates a timed grip on the simulation clock, pauses and releases correctly',()=>{
     const robot=new RobotSimulator(),site=robot.mission.slots('pollution')[0];

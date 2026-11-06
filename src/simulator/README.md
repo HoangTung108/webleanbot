@@ -132,9 +132,9 @@ Thông số người dùng xác nhận: L × W × H = 180 × 120 × 70 mm, khố
 Tâm hai bánh 100 mm là suy ra từ bề rộng tổng 120 mm và lốp ước lượng 20 mm;
 không tuyên bố đây là số đo chính thức. Điểm gắp vẫn cách trục bánh 75 mm.
 
-Cùng polygon càng được dùng để vẽ và tính khoảng hở: khoảng 66,5 mm khi mở,
-25,5 mm khi đóng ở 90°. Khối chỉ giữ được khi hai càng khép đủ, không dùng ngưỡng
-55° cũ. Điều kiện khó gắp khối nằm vẫn áp dụng. Khối lượng robot tham gia xung lực
+Cùng polygon càng được dùng để vẽ và tìm tiếp xúc với toàn bộ hình chữ nhật
+của khối tại vị trí thực. Hai càng phải chạm cùng một khối; góc đóng thực tế
+phụ thuộc vị trí và hướng khối, không dùng một ngưỡng góc cố định. Điều kiện khó gắp khối nằm vẫn áp dụng. Khối lượng robot tham gia xung lực
 đẩy khối; vận tốc bánh vẫn do bộ điều khiển đặt để giữ hiệu chuẩn 35 cm / 5 giây.
 Độ cao là metadata của mô hình nhìn từ trên; chưa phải mesh/mô phỏng 3D đầy đủ.
 
@@ -150,3 +150,21 @@ số thời gian giữ hành vi tức thời hiện có. Đây là mô hình cà
 sa bàn; video không cung cấp số đo cơ khí chính xác cho trục quay và khe càng.
 
 Càng phải có tiếp xúc ở cả hai bên mới giữ khối; khối ngoài tầm hoặc mặt quá hẹp sẽ không tự dính vào robot. Vùng bắt khối đứng được thu còn 12 mm quanh điểm gắp và lệch ngang tối đa 8 mm; khối nằm vẫn yêu cầu căn sát hơn.
+
+### Vật lý giữ và thả khối
+
+Điểm giữ lưu độ lệch và góc tương đối tại lúc tiếp xúc, không kéo khối về tâm càng.
+Khi thả, khối nhận vận tốc tịnh tiến và vận tốc tiếp tuyến do robot quay, cùng vận tốc
+xoay. Tích phân chia bước tối đa 5 ms để tránh bỏ qua va chạm khi tua nhanh.
+Khối chỉ đổ khi đủ năng lượng và mô men; thả chậm không tự động làm khối đổ.
+
+Lực giữ ước lượng tối đa 1,5 N, giảm tới 0,15 N cho khối nằm thấp. Gia tốc hoặc
+va chạm vượt lực giữ làm khối tuột; phải mở càng trước khi gắp lại khối vừa tuột.
+Đây là tham số mô hình cần hiệu chuẩn thực nghiệm, không phải thông số servo đã đo.
+Khối rời mép sa bàn rơi xuống sàn giả định thấp hơn 750 mm, không bị ép trở vào biên
+và không được tính điểm. Mô hình vẫn là vật lý 2,5D, chưa mô phỏng biến dạng càng.
+
+Khối trung hòa và pollution dùng cùng kích thước 15 × 25 × 75 mm. Hình nhìn từ trên
+vẽ đúng footprint dùng cho va chạm, không cộng chiều cao vào bề rộng hiển thị.
+Dải trắng của khối trung hòa là ký hiệu nằm trong footprint. Hành trình càng đóng
+được hiệu chỉnh để chạm được mặt hẹp 15 mm cả khi lệch ngang 2 mm tại Storage.

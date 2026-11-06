@@ -1,6 +1,4 @@
 import { MissionWorld } from './missionWorld';
-import { fitGripperToBlock } from './robotGeometry';
-import { blockFootprint } from './missionWorld';
 import { LEANBOT_APPEARANCE } from './robotAppearance';
 /**
  * 2D Robot Physics Simulator Engine
@@ -209,13 +207,7 @@ export class RobotSimulator {
     if(t>=1)this.gripperMotion=undefined;
   }
 
-  getGripper(): { left: number; right: number } {
-    const held=this.mission.heldBlock;
-    if(!held)return {...this.gripper};
-    const shape=blockFootprint(held),a=(held.rotation-this.state.robotState.pose.heading)*Math.PI/180;
-    const width=Math.abs(Math.sin(a))*shape.length+Math.abs(Math.cos(a))*shape.width;
-    return fitGripperToBlock(this.gripper.left,this.gripper.right,width,{...shape,rotation:held.rotation-this.state.robotState.pose.heading});
-  }
+  getGripper(): { left: number; right: number } { return this.mission.getGripperAngles(this.getRobotPose()); }
 
   getRobotPose(): Pose {
     return { ...this.state.robotState.pose };

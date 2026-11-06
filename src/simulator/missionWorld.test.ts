@@ -44,7 +44,7 @@ describe('gripping and block physics', () => {
     const {world,block}=oneBlock();block.x=pose.x+LEANBOT_GEOMETRY.graspOffset;block.y=pose.y;block.rotation=0;
     world.setGripper(90,90,{...pose,y:pose.y+100});expect(world.heldBlock).toBeUndefined();
     world.setGripper(0,0,pose);world.setGripper(90,90,pose);expect(world.heldBlock?.id).toBe(block.id);
-    world.step(.01,{...pose,x:650,heading:90});
+    world.step(1,{...pose,x:650,heading:90}); // bounded angular acceleration, not a 90-degree teleport in 10 ms
     expect(block.x).toBeCloseTo(650);expect(block.y).toBeCloseTo(pose.y+LEANBOT_GEOMETRY.graspOffset);expect(block.rotation).toBe(90);
     world.setGripper(0,0,{...pose,x:650,heading:90});
     expect(block.held).toBe(false);expect(block.state).toBe('standing');
@@ -68,9 +68,10 @@ describe('gripping and block physics', () => {
     expect(block.state).toBe('fallen');
   });
   it('applies Coulomb friction and settles a released moving block horizontally', () => {
-    const {world,block}=oneBlock();block.x=pose.x+LEANBOT_GEOMETRY.graspOffset;block.y=900;world.setGripper(90,90,pose);
-    world.setGripper(0,0,pose,70,70);expect(block.state).toBe('falling');
-    const initialSpeed=Math.hypot(block.vx,block.vy);expect(initialSpeed).toBeCloseTo(70);
+    const {world,block}=oneBlock();block.x=pose.x+LEANBOT_GEOMETRY.graspOffset;block.y=900;block.rotation=0;world.setGripper(90,90,pose);
+    world.setGripper(0,0,pose,200,200);expect(block.state).toBe('falling');
+    const initialSpeed=Math.hypot(block.vx,block.vy);expect(initialSpeed).toBeCloseTo(200);
+    world.syncPose({x:900,y:500,heading:0});
     world.step(.005,{x:900,y:500,heading:0});expect(Math.hypot(block.vx,block.vy)).toBeLessThan(initialSpeed);
     world.step(1,{x:900,y:500,heading:0});
     expect(block.state).toBe('fallen');expect(blockFootprint(block).length).toBeCloseTo(75);
@@ -82,13 +83,13 @@ describe('gripping and block physics', () => {
     expect(block.vx).toBeGreaterThan(0);expect(block.state).toBe('falling');
     world.step(1,{x:900,y:500,heading:0});expect(block.state).toBe('fallen');
   });
-  it('resolves block collisions and keeps fallen footprints inside the mat', () => {
+  it('resolves block collisions and lets unsupported blocks fall outside the mat', () => {
     const world=new MissionWorld(SYNAPSE_CITY);world.randomize(2,0,1);
     const [a,b]=world.blocks;Object.assign(a,{x:500,y:500,rotation:0,vx:70});Object.assign(b,{x:510,y:500,rotation:0});
     world.friction=0;world.step(.005,{x:900,y:900,heading:0});
     expect(b.vx).toBeGreaterThan(0);expect(b.x-a.x).toBeGreaterThanOrEqual(15-1e-6);
     Object.assign(a,{x:-100,y:-100,state:'fallen',tilt:Math.PI/2,rotation:0});world.step(.005,{x:900,y:900,heading:0});
-    expect(a.x).toBeGreaterThanOrEqual(37.5);expect(a.y).toBeGreaterThanOrEqual(12.5);
+    expect(a.offBoard).toBe(true);expect(a.x).toBeLessThan(0);expect(a.y).toBeLessThan(0);
   });
   it('detects upright mission blocks with ultrasound but ignores held or low fallen blocks', () => {
     const {world,block}=oneBlock();Object.assign(block,{x:700,y:900,rotation:0});

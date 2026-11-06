@@ -13,7 +13,7 @@ export const LEANBOT_GEOMETRY = {
   graspOffset: 75,
   body: { x: -27, y: 0, length: 130, width: 70 },
   wheel: { length: 32.5, width: 20 },
-  gripper: { pivotX: 53, pivotY: 35, openAngle: 0.75, closedAngle: -0.61 },
+  gripper: { pivotX: 53, pivotY: 35, openAngle: 0.75, closedAngle: -0.98 },
 } as const;
 
 // Fork outline in servo-local coordinates. Both jaws use the same mirrored shape.
@@ -24,20 +24,7 @@ export function gripperJaw(side: -1|1, degrees: number) {
   const t=Math.max(0,Math.min(90,degrees))/90,a=g.openAngle+(g.closedAngle-g.openAngle)*t;
   return FINGER.map(([x,y])=>({x:g.pivotX+x*Math.cos(a)-y*Math.sin(a),y:side*(g.pivotY+x*Math.sin(a)+y*Math.cos(a))}));
 }
-/** Inner jaw-to-jaw clearance at the shared grasp point, in mm. */
-export function gripperOpening(left: number,right: number) {
-  const at=(side:-1|1,degrees:number)=>{
-    const p=gripperJaw(side,degrees),ys:number[]=[];
-    for(let i=0;i<p.length;i++) {
-      const a=p[i],b=p[(i+1)%p.length],x=LEANBOT_GEOMETRY.graspOffset;
-      if(Math.abs(b.x-a.x)>1e-9 && x>=Math.min(a.x,b.x) && x<=Math.max(a.x,b.x))ys.push(a.y+(x-a.x)/(b.x-a.x)*(b.y-a.y));
-    }
-    return ys.length?(side===1?Math.min(...ys):Math.max(...ys)):side*100;
-  };
-  return Math.max(0,at(1,right)-at(-1,left));
-}
-
-type GripFootprint={length:number;width:number;rotation:number};
+export type GripFootprint={length:number;width:number;rotation:number;x?:number;y?:number};
 function intersects(a:{x:number;y:number}[],b:{x:number;y:number}[]) {
   const inside=(p:{x:number;y:number},poly:{x:number;y:number}[])=>{
     let result=false;
@@ -59,13 +46,11 @@ function intersects(a:{x:number;y:number}[],b:{x:number;y:number}[]) {
 export function fitGripperToBlock(left:number,right:number,width:number,shape?:GripFootprint) {
   const l=Math.max(0,Math.min(90,left)),r=Math.max(0,Math.min(90,right));
   if(!Number.isFinite(width)||width<=0)return {left:l,right:r};
-  let rectangle:{x:number;y:number}[]=[];
-  if(shape) {
-    const a=shape.rotation*Math.PI/180;
-    rectangle=[[-1,-1],[-1,1],[1,1],[1,-1]].map(([x,y])=>({x:LEANBOT_GEOMETRY.graspOffset+x*(shape.length+1)/2*Math.cos(a)-y*(shape.width+1)/2*Math.sin(a),y:x*(shape.length+1)/2*Math.sin(a)+y*(shape.width+1)/2*Math.cos(a)}));
-  }
-  const safe=(t:number,side?:-1|1)=>shape?!intersects(gripperJaw(side!,t),rectangle):gripperOpening(l*t,r*t)>=width+0.5;
-  const firstContact=(max:number,side?:-1|1)=>{
+  const target=shape??{length:15,width,rotation:0};
+  const a=target.rotation*Math.PI/180;
+  const rectangle=[[-1,-1],[-1,1],[1,1],[1,-1]].map(([x,y])=>({x:(target.x??LEANBOT_GEOMETRY.graspOffset)+x*(target.length+1)/2*Math.cos(a)-y*(target.width+1)/2*Math.sin(a),y:(target.y??0)+x*(target.length+1)/2*Math.sin(a)+y*(target.width+1)/2*Math.cos(a)}));
+  const safe=(t:number,side:-1|1)=>!intersects(gripperJaw(side,t),rectangle);
+  const firstContact=(max:number,side:-1|1)=>{
     let lo=0,hi=max,found=false;
     for(let step=1;step<=180;step++) {
       const t=max*step/180;
@@ -75,6 +60,5 @@ export function fitGripperToBlock(left:number,right:number,width:number,shape?:G
     for(let i=0;i<28;i++){const t=(lo+hi)/2;if(safe(t,side))lo=t;else hi=t;}
     return lo;
   };
-  if(shape)return {left:firstContact(l,-1),right:firstContact(r,1)};
-  const t=firstContact(1);return {left:l*t,right:r*t};
+  return {left:firstContact(l,-1),right:firstContact(r,1)};
 }
