@@ -52,7 +52,7 @@ export class CppSimulatorBridge {
           this.simulator.advanceSimulatedTime(seconds * 1000);
           if (this.simulator.getFallState().status !== 'supported') this.runtime?.stop();
         },
-        gripper: (left, right) => this.simulator.setGripper(left, right),
+        gripper: (left, right, duration) => this.simulator.setGripper(left, right, duration),
         sensors: () => this.simulator.getSensorReadings(),
         log: message => this.logs.push(message),
       });

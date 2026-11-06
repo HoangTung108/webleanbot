@@ -30,6 +30,11 @@ describe('custom C++ execution', () => {
     expect(motors.some(([l, r]) => l < 0 && r < 0)).toBe(true);
     expect(motors.at(-1)).toEqual([0, 0]);
   });
+  it('uses the correct duration argument for moveTo and moveToLR',()=>{
+    const result=run('void loop(){ LbGripper.moveTo(90,100); LbGripper.moveToLR(0,45,200); LbMission.end(); }');
+    expect(result.hands).toEqual([[90,90],[0,45]]);
+    expect(result.runtime.time).toBe(300);
+  });
   it('matches measured 35 cm in 5 seconds at command 2000', () => {
     const runtime = new CppRuntime('void loop(){ LbMotion.runLR(2000,2000); LbMotion.waitDistanceMm(350); LbMission.end(); }', { motors() {}, advance() {} });
     runtime.start(); runtime.tick(0); runtime.tick(4900);

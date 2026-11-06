@@ -132,8 +132,21 @@ Thông số người dùng xác nhận: L × W × H = 180 × 120 × 70 mm, khố
 Tâm hai bánh 100 mm là suy ra từ bề rộng tổng 120 mm và lốp ước lượng 20 mm;
 không tuyên bố đây là số đo chính thức. Điểm gắp vẫn cách trục bánh 75 mm.
 
-Cùng polygon càng được dùng để vẽ và tính khoảng hở: khoảng 69 mm khi mở,
+Cùng polygon càng được dùng để vẽ và tính khoảng hở: khoảng 66,5 mm khi mở,
 25,5 mm khi đóng ở 90°. Khối chỉ giữ được khi hai càng khép đủ, không dùng ngưỡng
 55° cũ. Điều kiện khó gắp khối nằm vẫn áp dụng. Khối lượng robot tham gia xung lực
 đẩy khối; vận tốc bánh vẫn do bộ điều khiển đặt để giữ hiệu chuẩn 35 cm / 5 giây.
 Độ cao là metadata của mô hình nhìn từ trên; chưa phải mesh/mô phỏng 3D đầy đủ.
+
+### Hiệu chỉnh càng gắp
+
+Hai miệng càng được phản chiếu vào phía trong. `fitGripperToBlock` tìm tiếp xúc đầu tiên
+trên toàn hành trình càng, tránh xuyên khối nằm chéo; hình vẽ dừng ở mặt khối trong
+khi lệnh servo vẫn giữ góc đích. Mở càng giải phóng khối tại vị trí đang giữ.
+
+`moveToLR(left,right,ms)` và `moveTo(degree,ms)` chuyển động theo thời gian mô phỏng,
+đồng bộ pause/tua. C++ vẫn chờ đúng thời gian lệnh. Các lệnh open/close không có tham
+số thời gian giữ hành vi tức thời hiện có. Đây là mô hình càng quay trong mặt phẳng
+sa bàn; video không cung cấp số đo cơ khí chính xác cho trục quay và khe càng.
+
+Càng phải có tiếp xúc ở cả hai bên mới giữ khối; khối ngoài tầm hoặc mặt quá hẹp sẽ không tự dính vào robot. Vùng bắt khối đứng được thu còn 12 mm quanh điểm gắp và lệch ngang tối đa 8 mm; khối nằm vẫn yêu cầu căn sát hơn.

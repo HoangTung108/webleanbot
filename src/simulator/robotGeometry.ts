@@ -13,11 +13,12 @@ export const LEANBOT_GEOMETRY = {
   graspOffset: 75,
   body: { x: -27, y: 0, length: 130, width: 70 },
   wheel: { length: 32.5, width: 20 },
-  gripper: { pivotX: 53, pivotY: 35, openAngle: 0.2, closedAngle: -0.75 },
+  gripper: { pivotX: 53, pivotY: 35, openAngle: 0.75, closedAngle: -0.61 },
 } as const;
 
 // Fork outline in servo-local coordinates. Both jaws use the same mirrored shape.
-const FINGER = [[0,-5],[21,-5],[32,-1],[33,4],[26,9],[19,3],[15,3],[22,14],[18,18],[9,13],[1,4]] as const;
+// The fork notch faces the centreline, not the outside of the robot.
+const FINGER = [[0,5],[21,5],[32,1],[33,-4],[26,-9],[19,-3],[15,-3],[22,-14],[18,-18],[9,-13],[1,-4]] as const;
 export function gripperJaw(side: -1|1, degrees: number) {
   const g=LEANBOT_GEOMETRY.gripper;
   const t=Math.max(0,Math.min(90,degrees))/90,a=g.openAngle+(g.closedAngle-g.openAngle)*t;
@@ -34,4 +35,46 @@ export function gripperOpening(left: number,right: number) {
     return ys.length?(side===1?Math.min(...ys):Math.max(...ys)):side*100;
   };
   return Math.max(0,at(1,right)-at(-1,left));
+}
+
+type GripFootprint={length:number;width:number;rotation:number};
+function intersects(a:{x:number;y:number}[],b:{x:number;y:number}[]) {
+  const inside=(p:{x:number;y:number},poly:{x:number;y:number}[])=>{
+    let result=false;
+    for(let i=0,j=poly.length-1;i<poly.length;j=i++) {
+      const u=poly[i],v=poly[j];
+      if((u.y>p.y)!==(v.y>p.y)&&p.x<(v.x-u.x)*(p.y-u.y)/(v.y-u.y)+u.x)result=!result;
+    }
+    return result;
+  };
+  const cross=(p:{x:number;y:number},q:{x:number;y:number},r:{x:number;y:number})=>(q.x-p.x)*(r.y-p.y)-(q.y-p.y)*(r.x-p.x);
+  if(a.some(p=>inside(p,b))||b.some(p=>inside(p,a)))return true;
+  for(let i=0;i<a.length;i++)for(let j=0;j<b.length;j++) {
+    const p=a[i],q=a[(i+1)%a.length],r=b[j],t=b[(j+1)%b.length];
+    if(cross(p,q,r)*cross(p,q,t)<-1e-9&&cross(r,t,p)*cross(r,t,q)<-1e-9)return true;
+  }
+  return false;
+}
+/** Limit each finger at its first contact with the entire oriented block. */
+export function fitGripperToBlock(left:number,right:number,width:number,shape?:GripFootprint) {
+  const l=Math.max(0,Math.min(90,left)),r=Math.max(0,Math.min(90,right));
+  if(!Number.isFinite(width)||width<=0)return {left:l,right:r};
+  let rectangle:{x:number;y:number}[]=[];
+  if(shape) {
+    const a=shape.rotation*Math.PI/180;
+    rectangle=[[-1,-1],[-1,1],[1,1],[1,-1]].map(([x,y])=>({x:LEANBOT_GEOMETRY.graspOffset+x*(shape.length+1)/2*Math.cos(a)-y*(shape.width+1)/2*Math.sin(a),y:x*(shape.length+1)/2*Math.sin(a)+y*(shape.width+1)/2*Math.cos(a)}));
+  }
+  const safe=(t:number,side?:-1|1)=>shape?!intersects(gripperJaw(side!,t),rectangle):gripperOpening(l*t,r*t)>=width+0.5;
+  const firstContact=(max:number,side?:-1|1)=>{
+    let lo=0,hi=max,found=false;
+    for(let step=1;step<=180;step++) {
+      const t=max*step/180;
+      if(!safe(t,side)){lo=max*(step-1)/180;hi=t;found=true;break;}
+    }
+    if(!found)return max;
+    for(let i=0;i<28;i++){const t=(lo+hi)/2;if(safe(t,side))lo=t;else hi=t;}
+    return lo;
+  };
+  if(shape)return {left:firstContact(l,-1),right:firstContact(r,1)};
+  const t=firstContact(1);return {left:l*t,right:r*t};
 }

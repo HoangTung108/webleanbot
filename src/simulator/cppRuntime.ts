@@ -114,7 +114,7 @@ export interface RuntimeHost {
   advance(seconds: number): void;
   log?(message: string): void;
   sensors?(): { distance?: number; irLine?: { left: number; center: number; right: number } };
-  gripper?(left: number, right: number): void;
+  gripper?(left: number, right: number, durationMs?: number): void;
 }
 type Scope = Map<string, Value>;
 type Yield = { ms?: number; end?: boolean };
@@ -217,7 +217,12 @@ export class CppRuntime {
       case 'Leanbot.pingCm': return (this.host.sensors?.().distance ?? 300) / 10;
       case 'LbGripper.open': this.host.gripper?.(0, 0); return null;
       case 'LbGripper.close': this.host.gripper?.(90, 90); return null;
-      case 'LbGripper.moveTo': case 'LbGripper.moveToLR': this.host.gripper?.(a, name.endsWith('LR') ? b : a); if (c > 0) yield { ms: c }; return null;
+      case 'LbGripper.moveTo': case 'LbGripper.moveToLR': {
+        const lr=name.endsWith('LR'),duration=lr?c:b;
+        if(!Number.isFinite(duration)||duration<0)throw new Error('Thời gian đóng/mở tay gắp không hợp lệ');
+        this.host.gripper?.(a,lr?b:a,duration);
+        if(duration>0)yield {ms:duration};return null;
+      }
       case 'Leanbot.tone': yield { ms: b }; return null;
     }
     throw new Error(`Hàm chưa hỗ trợ: ${name}`);

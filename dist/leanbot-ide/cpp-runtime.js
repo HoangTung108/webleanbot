@@ -41,9 +41,9 @@ var LeanbotCpp = (() => {
     graspOffset: 75,
     body: { x: -27, y: 0, length: 130, width: 70 },
     wheel: { length: 32.5, width: 20 },
-    gripper: { pivotX: 53, pivotY: 35, openAngle: 0.2, closedAngle: -0.75 }
+    gripper: { pivotX: 53, pivotY: 35, openAngle: 0.75, closedAngle: -0.61 }
   };
-  var FINGER = [[0, -5], [21, -5], [32, -1], [33, 4], [26, 9], [19, 3], [15, 3], [22, 14], [18, 18], [9, 13], [1, 4]];
+  var FINGER = [[0, 5], [21, 5], [32, 1], [33, -4], [26, -9], [19, -3], [15, -3], [22, -14], [18, -18], [9, -13], [1, -4]];
   function gripperJaw(side, degrees) {
     const g = LEANBOT_GEOMETRY.gripper;
     const t = Math.max(0, Math.min(90, degrees)) / 90, a = g.openAngle + (g.closedAngle - g.openAngle) * t;
@@ -59,6 +59,55 @@ var LeanbotCpp = (() => {
       return ys.length ? side === 1 ? Math.min(...ys) : Math.max(...ys) : side * 100;
     };
     return Math.max(0, at(1, right) - at(-1, left));
+  }
+  function intersects(a, b) {
+    const inside = (p, poly) => {
+      let result = false;
+      for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+        const u = poly[i], v = poly[j];
+        if (u.y > p.y !== v.y > p.y && p.x < (v.x - u.x) * (p.y - u.y) / (v.y - u.y) + u.x) result = !result;
+      }
+      return result;
+    };
+    const cross = (p, q, r) => (q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x);
+    if (a.some((p) => inside(p, b)) || b.some((p) => inside(p, a))) return true;
+    for (let i = 0; i < a.length; i++) for (let j = 0; j < b.length; j++) {
+      const p = a[i], q = a[(i + 1) % a.length], r = b[j], t = b[(j + 1) % b.length];
+      if (cross(p, q, r) * cross(p, q, t) < -1e-9 && cross(r, t, p) * cross(r, t, q) < -1e-9) return true;
+    }
+    return false;
+  }
+  function fitGripperToBlock(left, right, width, shape) {
+    const l = Math.max(0, Math.min(90, left)), r = Math.max(0, Math.min(90, right));
+    if (!Number.isFinite(width) || width <= 0) return { left: l, right: r };
+    let rectangle = [];
+    if (shape) {
+      const a = shape.rotation * Math.PI / 180;
+      rectangle = [[-1, -1], [-1, 1], [1, 1], [1, -1]].map(([x, y]) => ({ x: LEANBOT_GEOMETRY.graspOffset + x * (shape.length + 1) / 2 * Math.cos(a) - y * (shape.width + 1) / 2 * Math.sin(a), y: x * (shape.length + 1) / 2 * Math.sin(a) + y * (shape.width + 1) / 2 * Math.cos(a) }));
+    }
+    const safe = (t2, side) => shape ? !intersects(gripperJaw(side, t2), rectangle) : gripperOpening(l * t2, r * t2) >= width + 0.5;
+    const firstContact = (max, side) => {
+      let lo = 0, hi = max, found = false;
+      for (let step = 1; step <= 180; step++) {
+        const t2 = max * step / 180;
+        if (!safe(t2, side)) {
+          lo = max * (step - 1) / 180;
+          hi = t2;
+          found = true;
+          break;
+        }
+      }
+      if (!found) return max;
+      for (let i = 0; i < 28; i++) {
+        const t2 = (lo + hi) / 2;
+        if (safe(t2, side)) lo = t2;
+        else hi = t2;
+      }
+      return lo;
+    };
+    if (shape) return { left: firstContact(l, -1), right: firstContact(r, 1) };
+    const t = firstContact(1);
+    return { left: l * t, right: r * t };
   }
 
   // src/simulator/missionWorld.ts
@@ -253,17 +302,22 @@ var LeanbotCpp = (() => {
     setGripper(left, right, pose, motorLeft = 0, motorRight = 0) {
       const angle = pose.heading * RAD, speed = (motorLeft + motorRight) / 2;
       this.velocity = { x: speed * Math.cos(angle), y: speed * Math.sin(angle), omega: (motorLeft - motorRight) / LEANBOT_GEOMETRY.wheelBase };
-      const wasClosed = gripperOpening(this.gripper.left, this.gripper.right) <= BLOCK_SIZE.width + 2;
       this.gripper = { left, right };
       const closed = gripperOpening(left, right) <= BLOCK_SIZE.width + 2;
-      if (this.heldBlock && !closed) {
+      const hasContact = (block) => {
+        const shape = blockFootprint(block), rotation = block.rotation - pose.heading, a = rotation * RAD;
+        const width = Math.abs(Math.sin(a)) * shape.length + Math.abs(Math.cos(a)) * shape.width;
+        const actual = fitGripperToBlock(left, right, width, { ...shape, rotation });
+        return actual.left < left - 1e-4 && actual.right < right - 1e-4;
+      };
+      if (this.heldBlock && !hasContact(this.heldBlock)) {
         const block = this.heldBlock, point = this.graspPoint(pose);
         block.held = false;
         block.vx = this.velocity.x - this.velocity.omega * (point.y - pose.y);
         block.vy = this.velocity.y + this.velocity.omega * (point.x - pose.x);
         if (Math.hypot(block.vx, block.vy) > 20) this.tip(block, Math.atan2(block.vy, block.vx) / RAD);
         this.changed();
-      } else if (closed && !wasClosed && !this.heldBlock) {
+      } else if (closed && !this.heldBlock) {
         const point = this.graspPoint(pose), a = pose.heading * RAD;
         const candidates = this.blocks.filter((b) => {
           const dx = b.x - pose.x, dy = b.y - pose.y;
@@ -272,7 +326,7 @@ var LeanbotCpp = (() => {
           const low = height < 30;
           if (height < 12) return false;
           if (low && (Math.abs(Math.cos((b.rotation - pose.heading) * RAD)) < 0.96 || Math.hypot(b.vx, b.vy) > 5 || Math.abs(b.spin) > 5 || Math.max(Math.abs(motorLeft), Math.abs(motorRight)) > 10)) return false;
-          return dx * Math.cos(a) + dy * Math.sin(a) >= LEANBOT_GEOMETRY.graspOffset - (low ? 6 : 16) && Math.abs(-dx * Math.sin(a) + dy * Math.cos(a)) <= (low ? 4 : 17) && Math.hypot(b.x - point.x, b.y - point.y) <= (low ? 6 : 23);
+          return dx * Math.cos(a) + dy * Math.sin(a) >= LEANBOT_GEOMETRY.graspOffset - (low ? 6 : 16) && Math.abs(-dx * Math.sin(a) + dy * Math.cos(a)) <= (low ? 4 : 8) && Math.hypot(b.x - point.x, b.y - point.y) <= (low ? 6 : 12) && hasContact(b);
         }).sort((a2, b) => Math.hypot(a2.x - point.x, a2.y - point.y) - Math.hypot(b.x - point.x, b.y - point.y));
         if (candidates[0]) {
           const block = candidates[0];
@@ -1406,10 +1460,13 @@ var LeanbotCpp = (() => {
           this.host.gripper?.(90, 90);
           return null;
         case "LbGripper.moveTo":
-        case "LbGripper.moveToLR":
-          this.host.gripper?.(a, name.endsWith("LR") ? b : a);
-          if (c > 0) yield { ms: c };
+        case "LbGripper.moveToLR": {
+          const lr = name.endsWith("LR"), duration = lr ? c : b;
+          if (!Number.isFinite(duration) || duration < 0) throw new Error("Th\u1EDDi gian \u0111\xF3ng/m\u1EDF tay g\u1EAFp kh\xF4ng h\u1EE3p l\u1EC7");
+          this.host.gripper?.(a, lr ? b : a, duration);
+          if (duration > 0) yield { ms: duration };
           return null;
+        }
         case "Leanbot.tone":
           yield { ms: b };
           return null;

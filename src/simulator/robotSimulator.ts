@@ -1,4 +1,6 @@
 import { MissionWorld } from './missionWorld';
+import { fitGripperToBlock } from './robotGeometry';
+import { blockFootprint } from './missionWorld';
 import { LEANBOT_APPEARANCE } from './robotAppearance';
 /**
  * 2D Robot Physics Simulator Engine
@@ -38,6 +40,7 @@ const MM_TO_PIXELS = 0.5; // conversion for rendering
 export class RobotSimulator {
   mission: MissionWorld;
   private gripper = { left: 0, right: 0 };
+  private gripperMotion?: {from:{left:number;right:number};to:{left:number;right:number};duration:number;elapsed:number};
   private state: SimulationState;
   private robotConfig: RobotConfig;
   private board: BoardConfig;
@@ -98,6 +101,7 @@ export class RobotSimulator {
    * Stop simulation
    */
   stop(): void {
+    this.gripperMotion=undefined;
     this.state.isRunning = false;
     this.state.isPaused = false;
     this.state.robotState.velocityLeft = 0;
@@ -184,12 +188,34 @@ export class RobotSimulator {
     this.state.sensorReadings = this.readSensors();
   }
 
-  setGripper(left: number, right: number): void {
-    this.gripper = { left: Math.max(0, Math.min(90, left)), right: Math.max(0, Math.min(90, right)) };
-    this.mission.setGripper(this.gripper.left, this.gripper.right, this.getRobotPose(), this.state.robotState.velocityLeft, this.state.robotState.velocityRight);
+  setGripper(left: number, right: number, durationMs = 0): void {
+    if (![left,right,durationMs].every(Number.isFinite)||durationMs<0) throw new Error('Thông số tay gắp không hợp lệ');
+    const to={left:Math.max(0,Math.min(90,left)),right:Math.max(0,Math.min(90,right))};
+    if(durationMs>0) { this.gripperMotion={from:{...this.gripper},to,duration:durationMs,elapsed:0}; return; }
+    this.gripperMotion=undefined;this.applyGripper(to);
   }
 
-  getGripper(): { left: number; right: number } { return { ...this.gripper }; }
+  private applyGripper(value:{left:number;right:number}) {
+    this.gripper=value;
+    this.mission.setGripper(value.left,value.right,this.getRobotPose(),this.state.robotState.velocityLeft,this.state.robotState.velocityRight);
+  }
+
+  private advanceGripper(milliseconds:number) {
+    const motion=this.gripperMotion;if(!motion)return;
+    motion.elapsed=Math.min(motion.duration,motion.elapsed+milliseconds);
+    const t=motion.elapsed/motion.duration;
+    const next={left:motion.from.left+(motion.to.left-motion.from.left)*t,right:motion.from.right+(motion.to.right-motion.from.right)*t};
+    if(t>=1||Math.abs(next.left-this.gripper.left)>1e-9||Math.abs(next.right-this.gripper.right)>1e-9)this.applyGripper(next);
+    if(t>=1)this.gripperMotion=undefined;
+  }
+
+  getGripper(): { left: number; right: number } {
+    const held=this.mission.heldBlock;
+    if(!held)return {...this.gripper};
+    const shape=blockFootprint(held),a=(held.rotation-this.state.robotState.pose.heading)*Math.PI/180;
+    const width=Math.abs(Math.sin(a))*shape.length+Math.abs(Math.cos(a))*shape.width;
+    return fitGripperToBlock(this.gripper.left,this.gripper.right,width,{...shape,rotation:held.rotation-this.state.robotState.pose.heading});
+  }
 
   getRobotPose(): Pose {
     return { ...this.state.robotState.pose };
@@ -238,6 +264,7 @@ export class RobotSimulator {
   /** Advance an already-scaled simulation clock (used by the C++ runtime). */
   advanceSimulatedTime(deltaMilliseconds: number): void {
     if (!this.state.isRunning || this.state.isPaused || !Number.isFinite(deltaMilliseconds) || deltaMilliseconds <= 0) return;
+    if(this.fall.status==='supported')this.advanceGripper(deltaMilliseconds);
     const deltaTime = deltaMilliseconds / 1000;
     this.simulationTime += deltaMilliseconds;
 

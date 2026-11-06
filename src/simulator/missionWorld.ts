@@ -1,4 +1,4 @@
-import { gripperOpening, LEANBOT_GEOMETRY } from './robotGeometry';
+import { fitGripperToBlock, gripperOpening, LEANBOT_GEOMETRY } from './robotGeometry';
 import type { BoardConfig, Pose } from './types';
 
 export type BlockKind = 'pollution' | 'neutralizer';
@@ -137,17 +137,22 @@ export class MissionWorld {
   setGripper(left: number, right: number, pose: Pose, motorLeft = 0, motorRight = 0) {
     const angle = pose.heading * RAD, speed = (motorLeft + motorRight) / 2;
     this.velocity = { x: speed * Math.cos(angle), y: speed * Math.sin(angle), omega: (motorLeft - motorRight) / LEANBOT_GEOMETRY.wheelBase };
-    const wasClosed = gripperOpening(this.gripper.left,this.gripper.right) <= BLOCK_SIZE.width + 2;
     this.gripper = { left, right };
     const closed = gripperOpening(left,right) <= BLOCK_SIZE.width + 2;
-    if (this.heldBlock && !closed) {
+    const hasContact=(block:MissionBlock)=>{
+      const shape=blockFootprint(block),rotation=block.rotation-pose.heading,a=rotation*RAD;
+      const width=Math.abs(Math.sin(a))*shape.length+Math.abs(Math.cos(a))*shape.width;
+      const actual=fitGripperToBlock(left,right,width,{...shape,rotation});
+      return actual.left<left-1e-4&&actual.right<right-1e-4;
+    };
+    if (this.heldBlock && !hasContact(this.heldBlock)) {
       const block = this.heldBlock, point = this.graspPoint(pose);
       block.held = false;
       block.vx = this.velocity.x - this.velocity.omega * (point.y-pose.y);
       block.vy = this.velocity.y + this.velocity.omega * (point.x-pose.x);
       if (Math.hypot(block.vx, block.vy) > 20) this.tip(block, Math.atan2(block.vy,block.vx)/RAD);
       this.changed();
-    } else if (closed && !wasClosed && !this.heldBlock) {
+    } else if (closed && !this.heldBlock) {
       const point = this.graspPoint(pose), a = pose.heading * RAD;
       const candidates = this.blocks.filter(b => {
         const dx = b.x-pose.x, dy = b.y-pose.y;
@@ -160,8 +165,8 @@ export class MissionWorld {
         if (low && (Math.abs(Math.cos((b.rotation-pose.heading)*RAD)) < 0.96 ||
           Math.hypot(b.vx,b.vy) > 5 || Math.abs(b.spin) > 5 || Math.max(Math.abs(motorLeft),Math.abs(motorRight)) > 10)) return false;
         return dx*Math.cos(a)+dy*Math.sin(a) >= LEANBOT_GEOMETRY.graspOffset - (low ? 6 : 16) &&
-          Math.abs(-dx*Math.sin(a)+dy*Math.cos(a)) <= (low ? 4 : 17) &&
-          Math.hypot(b.x-point.x,b.y-point.y) <= (low ? 6 : 23);
+          Math.abs(-dx*Math.sin(a)+dy*Math.cos(a)) <= (low ? 4 : 8) &&
+          Math.hypot(b.x-point.x,b.y-point.y) <= (low ? 6 : 12) && hasContact(b);
       }).sort((a,b) => Math.hypot(a.x-point.x,a.y-point.y) - Math.hypot(b.x-point.x,b.y-point.y));
       if (candidates[0]) {
         const block = candidates[0]; block.held = true; block.slotId = undefined; block.vx = block.vy = block.spin = 0;
