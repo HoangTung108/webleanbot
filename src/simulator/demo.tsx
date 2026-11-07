@@ -1,3 +1,5 @@
+import { robotNetworkManager } from '../lib/robotNetworkManager';
+import { MultiRobotConnector } from '../components/MultiRobotConnector';
 import { LEANBOT_GEOMETRY } from './robotGeometry';
 import { ScorePanel } from './ScorePanel';
 import type { Pose } from './types';
@@ -69,6 +71,15 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
       showSensorDebug,
     });
 
+    // Network rendering continues while the local program is stopped or paused.
+    const networkTimer = setInterval(() => {
+      if (robotNetworkManager.isConnected()) {
+        const state = simulator.getSimulationState();
+        robotNetworkManager.sendRobotState(simulator.getRobotPose(), state.robotState.velocityLeft, state.robotState.velocityRight);
+      }
+      renderer.setRemoteRobots(robotNetworkManager.getAllPeers());
+      renderer.render();
+    }, 50);
     const bridge = new CppSimulatorBridge(simulator);
 
     simulatorRef.current = simulator;
@@ -100,7 +111,7 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
     resize();
     renderer.render();
     addLog(`Đã tải sa bàn: ${board.name}`);
-    return () => { detachScoring(); detachMission(); detachPlacement(); observer?.disconnect(); window.removeEventListener('resize', resize); bridge.stopExecution(); simulator.stop(); };
+    return () => { clearInterval(networkTimer); detachScoring(); detachMission(); detachPlacement(); observer?.disconnect(); window.removeEventListener('resize', resize); bridge.stopExecution(); simulator.stop(); };
   }, []);
 
   useEffect(() => {
@@ -280,6 +291,7 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
         <span className={`sim-status ${fallStatus && fallStatus !== 'supported' ? 'fallen' : isRunning && !isPaused ? 'running' : ''}`}><span />{status}</span>
       </header>
       <div className="sim-toolbar" role="toolbar" aria-label="Điều khiển mô phỏng">
+        <MultiRobotConnector />
         <div className="sim-playback">
           <button className="sim-button primary" onClick={handleStart} disabled={isRunning}><Play size={15} />Chạy</button>
           <button className="sim-button" onClick={handlePause} disabled={!isRunning}>{isPaused ? <Play size={15} /> : <Pause size={15} />}{isPaused ? 'Tiếp tục' : 'Tạm dừng'}</button>

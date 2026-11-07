@@ -6,15 +6,16 @@ export function MultiRobotConnector() {
   const [connectionMode, setConnectionMode] = useState<'idle' | 'create' | 'join'>('idle');
   const [roomId, setRoomId] = useState('');
   const [password, setPassword] = useState('');
-  const [isConnected, setIsConnected] = useState(false);
-  const [currentRoom, setCurrentRoom] = useState<string | null>(null);
-  const [peers, setPeers] = useState<any[]>([]);
+  const [isConnected, setIsConnected] = useState(robotNetworkManager.isConnected());
+  const [currentRoom, setCurrentRoom] = useState<string | null>(robotNetworkManager.getRoomId());
+  const [peers, setPeers] = useState<string[]>(robotNetworkManager.getAllPeers().map(peer => peer.id));
   const [error, setError] = useState<string | null>(null);
   const [showMenu, setShowMenu] = useState(false);
 
   useEffect(() => {
     const handleConnected = () => {
       setIsConnected(true);
+      setPeers(robotNetworkManager.getAllPeers().map(peer => peer.id));
       setCurrentRoom(robotNetworkManager.getRoomId());
       setError(null);
       setConnectionMode('idle');
@@ -27,7 +28,7 @@ export function MultiRobotConnector() {
     };
 
     const handlePeerJoined = (event: any) => {
-      setPeers(prev => [...prev, event.data.peerId]);
+      setPeers(prev => [...new Set([...prev, event.data.peerId])]);
     };
 
     const handlePeerLeft = (event: any) => {
@@ -65,7 +66,7 @@ export function MultiRobotConnector() {
       setError('Please enter a room ID');
       return;
     }
-    const success = await robotNetworkManager.connectToRoom(roomId.toUpperCase(), password || undefined);
+    const success = await robotNetworkManager.connectToRoom(roomId.trim().toUpperCase(), password || undefined);
     if (!success) {
       setError(current => current || 'Không tham gia được phòng.');
     }
@@ -101,7 +102,7 @@ export function MultiRobotConnector() {
               </div>
               <div style={styles.dropdownRow}>
                 <span style={styles.dropdownLabel}>Robots:</span>
-                <span style={styles.dropdownValue}>{peers.length + 1}</span>
+                <span style={styles.dropdownValue}>{peers.length + 1}/2</span>
               </div>
               <button 
                 onClick={() => navigator.clipboard.writeText(currentRoom)}
@@ -121,7 +122,8 @@ export function MultiRobotConnector() {
             </>
           ) : (
             <>
-              <div style={styles.dropdownHeader}>Multi-Robot</div>
+              <div style={styles.dropdownHeader}>Online · 2 robot song song</div>
+              <p>Tạo phòng và gửi mã cho máy thứ hai. Mỗi máy mở Simulator và chạy chương trình riêng.</p>
               {error && <div style={styles.dropdownError}>{error}</div>}
 
               {connectionMode === 'idle' && (

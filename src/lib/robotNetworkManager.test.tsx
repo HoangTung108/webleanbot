@@ -12,7 +12,8 @@ class Socket {
   send = vi.fn()
   constructor(public url: string) { Socket.instances.push(this) }
   close() { this.readyState = 3; this.onclose?.() }
-  open() { this.readyState = 1; this.onopen?.() }
+  message(data: object) { this.onmessage?.({ data: JSON.stringify(data) }) }
+  open() { this.readyState = 1; this.onopen?.(); this.message({ type: 'room-joined', peers: [] }) }
 }
 
 beforeEach(() => { vi.useFakeTimers(); Socket.instances = []; vi.stubGlobal('WebSocket', Socket) })
@@ -79,3 +80,33 @@ describe('multi-robot WebSocket connection', () => {
     manager.disconnect()
   })
 })
+
+ it('waits for room acceptance and restores the existing peer snapshot', async () => {
+    const manager = new RobotNetworkManager(), connected = vi.fn()
+    manager.on('connected', connected)
+    const pending = manager.connectToRoom('CITY')
+    const socket = Socket.instances[0]
+    socket.readyState = 1; socket.onopen?.()
+    expect(manager.isConnected()).toBe(false)
+    expect(connected).not.toHaveBeenCalled()
+    const state = {pose: {x: 320, y: 240, heading: 90}, motorLeft: 100, motorRight: 120, timestamp: 1}
+    socket.message({type: 'room-joined', peers: [{id: 'host', robotId: 'Robot-1', state}]})
+    expect(await pending).toBe(true)
+    expect(manager.getPeerState('host')?.pose).toEqual(state.pose)
+    socket.close()
+    expect(manager.getAllPeers()).toEqual([])
+    manager.disconnect()
+  })
+  it('rejects a full room without reconnecting or reporting success', async () => {
+    const manager = new RobotNetworkManager(), connected = vi.fn()
+    manager.on('connected', connected)
+    const pending = manager.connectToRoom('FULL')
+    const socket = Socket.instances[0]
+    socket.readyState = 1; socket.onopen?.()
+    socket.message({type: 'error', message: 'Room is full'})
+    expect(await pending).toBe(false)
+    expect(connected).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(20000)
+    expect(Socket.instances).toHaveLength(1)
+    manager.disconnect()
+  })

@@ -88,6 +88,17 @@ class RobotNetworkServer {
     ws.on('message', (data) => {
       try {
         const message: Message = JSON.parse(data.toString());
+        if (!this.findClientRoom(client)) {
+          if (message.type !== 'create-room' && message.type !== 'join-room') return;
+          const existing = this.rooms.get(roomId);
+          const error = message.type === 'create-room' && existing ? 'Room already exists'
+            : message.type === 'join-room' && !existing ? 'Room not found'
+            : existing?.password && existing.password !== message.password ? 'Incorrect password' : null;
+          if (error) { ws.send(JSON.stringify({ type: 'error', message: error })); ws.close(); return; }
+          if (!existing) this.handleCreateRoom({ ...message, maxPeers: 2 }, roomId);
+          this.joinRoom(client, roomId);
+          return;
+        }
         this.handleMessage(client, message);
       } catch (error) {
         console.error('Failed to parse message:', error);
@@ -106,12 +117,11 @@ class RobotNetworkServer {
       console.error('WebSocket error:', error);
     });
 
-    // Join room
-    this.joinRoom(client, roomId);
+
   }
 
   private handleMessage(client: ClientConnection, message: Message) {
-    const roomId = message.roomId || this.findClientRoom(client);
+    const roomId = this.findClientRoom(client);
 
     if (!roomId) {
       client.ws.send(JSON.stringify({
@@ -164,7 +174,7 @@ class RobotNetworkServer {
       room = this.rooms.get(roomId)!;
     }
 
-    if (room.clients.size >= room.maxPeers) {
+    if (room.clients.has(client.id) || room.clients.size >= room.maxPeers) {
       client.ws.send(JSON.stringify({
         type: 'error',
         message: 'Room is full',
@@ -174,7 +184,7 @@ class RobotNetworkServer {
     }
 
     room.clients.set(client.id, client);
-    client.robotId = `Robot-${room.clients.size}`;
+    client.robotId = Array.from(room.clients.values()).some(c => c !== client && c.robotId === 'Robot-1') ? 'Robot-2' : 'Robot-1';
 
     // Notify existing clients about new peer
     const joinMessage = {
@@ -201,6 +211,7 @@ class RobotNetworkServer {
         .map(([id, c]) => ({
           id,
           robotId: c.robotId,
+          state: c.lastState,
         })),
     }));
 
@@ -229,7 +240,7 @@ class RobotNetworkServer {
 
   private handleClientDisconnect(client: ClientConnection, roomId: string) {
     const room = this.rooms.get(roomId);
-    if (!room) return;
+    if (!room || room.clients.get(client.id) !== client) return;
 
     room.clients.delete(client.id);
     console.log(`Client ${client.id} disconnected. Remaining: ${room.clients.size}`);

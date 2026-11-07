@@ -37,6 +37,12 @@ const DEFAULT_RENDERER_OPTIONS: RendererOptions = {
 };
 
 export class SimulatorRenderer {
+  private remoteRobots: { robotId: string; pose: Pose }[] = [];
+
+  setRemoteRobots(robots: { robotId: string; pose: Pose }[]): void {
+    this.remoteRobots = robots;
+  }
+
   private canvas: HTMLCanvasElement;
   private context: CanvasRenderingContext2D;
   private simulator: RobotSimulator;
@@ -231,6 +237,21 @@ export class SimulatorRenderer {
     drawMissionBlocks(this.context, this.simulator.mission);
     this.context.restore();
     this.drawRobot();
+    for (const robot of this.remoteRobots) {
+      const center = this.boardToCanvas(robot.pose.x, robot.pose.y);
+      const ctx = this.context;
+      ctx.save();
+      ctx.translate(center.x, center.y);
+      ctx.rotate(robot.pose.heading * Math.PI / 180);
+      ctx.scale(this.scale, this.scale);
+      drawLeanbot(ctx);
+      ctx.strokeStyle = '#2563eb'; ctx.lineWidth = 3 / this.scale;
+      ctx.strokeRect(-100, -50, 155, 100);
+      ctx.restore();
+      ctx.save(); ctx.fillStyle = '#2563eb'; ctx.font = 'bold 12px system-ui';
+      ctx.fillText(robot.robotId + ' (Online)', center.x - 45, center.y - 55 * this.scale);
+      ctx.restore();
+    }
 
     if (this.options.showTrajectory) {
       this.drawTrajectory();

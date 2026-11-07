@@ -27,6 +27,9 @@ export interface NetworkEvent {
 }
 
 export class RobotNetworkManager {
+  private joined = false;
+  private password?: string;
+  private creating = false;
   private ws: WebSocket | null = null;
   private roomId: string | null = null;
   private clientId: string;
@@ -97,6 +100,8 @@ export class RobotNetworkManager {
       this.disconnect();
       this.reconnectAttempts = 0;
       this.roomId = roomId;
+      this.password = password;
+      this.creating = false;
       return await this.connectWebSocket();
     } catch (error) {
       this.emit('error', undefined, `Failed to connect to room: ${error instanceof Error ? error.message : String(error)}`);
@@ -112,16 +117,10 @@ export class RobotNetworkManager {
       this.disconnect();
       this.reconnectAttempts = 0;
       this.roomId = this.generateRoomId();
+      this.password = password;
+      this.creating = true;
       const connected = await this.connectWebSocket();
-      if (connected) {
-        this.sendMessage({
-          type: 'create-room',
-          roomId: this.roomId,
-          password,
-          maxPeers,
-        });
-        return this.roomId;
-      }
+      if (connected) return this.roomId;
       return null;
     } catch (error) {
       this.emit('error', undefined, `Failed to create room: ${error instanceof Error ? error.message : String(error)}`);
@@ -171,12 +170,31 @@ export class RobotNetworkManager {
         socket.onopen = () => {
           if (this.ws !== socket) return;
           this.reconnectAttempts = 0;
-          settle(true);
-          this.emit('connected', { clientId: this.clientId, roomId: this.roomId });
+          socket.send(JSON.stringify({ type: this.creating ? 'create-room' : 'join-room', password: this.password }));
         };
         socket.onmessage = (event) => {
           if (this.ws !== socket) return;
-          try { this.handleMessage(JSON.parse(event.data)); }
+          try {
+            const message = JSON.parse(event.data);
+            if (message.type === 'room-joined') {
+              this.joined = true;
+              this.creating = false;
+              this.peers.clear();
+              for (const peer of message.peers || []) {
+                this.handleMessage({ type: 'peer-joined', peerId: peer.id, ...peer });
+                if (peer.state) this.handleMessage({ type: 'state-sync', peerId: peer.id, state: peer.state });
+              }
+              settle(true);
+              this.emit('connected', message);
+            } else {
+              this.handleMessage(message);
+              if (message.type === 'error' && !this.joined) {
+                this.roomId = null;
+                settle(false);
+                socket.close();
+              }
+            }
+          }
           catch { this.emit('error', undefined, 'Máy chủ nhiều robot trả dữ liệu không hợp lệ.'); }
         };
         socket.onerror = () => {
@@ -188,6 +206,8 @@ export class RobotNetworkManager {
           settle(false);
           if (this.ws !== socket) return;
           this.ws = null;
+          this.joined = false;
+          this.peers.clear();
           this.emit('disconnected');
           this.attemptReconnect();
         };
@@ -293,6 +313,7 @@ export class RobotNetworkManager {
   disconnect(): void {
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     this.reconnectTimer = null;
+    this.joined = false;
     const socket = this.ws;
     this.ws = null;
     socket?.close();
@@ -321,7 +342,7 @@ export class RobotNetworkManager {
    * Is connected
    */
   isConnected(): boolean {
-    return this.ws?.readyState === WebSocket.OPEN;
+    return this.joined && this.ws?.readyState === WebSocket.OPEN;
   }
 
   /**
