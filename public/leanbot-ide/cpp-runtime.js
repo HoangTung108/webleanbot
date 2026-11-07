@@ -71,7 +71,7 @@ var LeanbotCpp = (() => {
     if (!Number.isFinite(width) || width <= 0) return { left: l, right: r };
     const target = shape ?? { length: 15, width, rotation: 0 };
     const a = target.rotation * Math.PI / 180;
-    const rectangle = [[-1, -1], [-1, 1], [1, 1], [1, -1]].map(([x, y]) => ({ x: (target.x ?? LEANBOT_GEOMETRY.graspOffset) + x * (target.length + 1) / 2 * Math.cos(a) - y * (target.width + 1) / 2 * Math.sin(a), y: (target.y ?? 0) + x * (target.length + 1) / 2 * Math.sin(a) + y * (target.width + 1) / 2 * Math.cos(a) }));
+    const rectangle = [[-1, -1], [-1, 1], [1, 1], [1, -1]].map(([x, y]) => ({ x: (target.x ?? LEANBOT_GEOMETRY.graspOffset) + x * (target.length + 0.2) / 2 * Math.cos(a) - y * (target.width + 0.2) / 2 * Math.sin(a), y: (target.y ?? 0) + x * (target.length + 0.2) / 2 * Math.sin(a) + y * (target.width + 0.2) / 2 * Math.cos(a) }));
     const safe = (t, side) => !intersects(gripperJaw(side, t), rectangle);
     const firstContact = (max, side) => {
       let lo = 0, hi = max, found = false;
@@ -146,6 +146,7 @@ var LeanbotCpp = (() => {
     heldAnchor = { x: LEANBOT_GEOMETRY.graspOffset, y: 0, rotation: 0 };
     gripper = { left: 0, right: 0 };
     velocity = { x: 0, y: 0, omega: 0 };
+    gripVelocity = { x: 0, y: 0 };
     lastPose;
     regripBlocked = /* @__PURE__ */ new Set();
     subscribe(fn) {
@@ -364,6 +365,7 @@ var LeanbotCpp = (() => {
       block.vx = v.x;
       block.vy = v.y;
       block.spin = this.velocity.omega / RAD;
+      this.gripVelocity = { ...v };
       this.lastPose = { ...pose };
       this.changed();
     }
@@ -405,7 +407,11 @@ var LeanbotCpp = (() => {
       const held = this.heldBlock;
       if (held) {
         this.syncHeld(pose);
-        const v = this.pointVelocity(held, pose), accel = Math.hypot(v.x - held.vx, v.y - held.vy) / dt;
+        const v = this.pointVelocity(held, pose), response = 0.02;
+        const accel = Math.hypot(v.x - this.gripVelocity.x, v.y - this.gripVelocity.y) / response;
+        const blend = 1 - Math.exp(-dt / response);
+        this.gripVelocity.x += (v.x - this.gripVelocity.x) * blend;
+        this.gripVelocity.y += (v.y - this.gripVelocity.y) * blend;
         const force = held.mass * (accel / 1e3 + (Math.hypot(v.x, v.y) > 0.1 ? this.friction * 9.81 : 0));
         if (force > this.gripLimit(held)) this.release(pose);
         else {

@@ -185,3 +185,9 @@ Dung sai 0,5° giúp hai càng vừa chạm vẫn giữ khối, không yêu cầ
 một càng chưa chạm hoặc bị vật khác chặn vẫn không tạo được một cặp gắp.
 Chuyển động servo có thời gian bắt đầu từ góc thực tế bị giới hạn bởi khối,
 nhờ đó mở càng không phải chờ góc lệnh 90° quay về tới điểm tiếp xúc.
+
+Lực quán tính khi giữ khối dùng đáp ứng motor/tiếp xúc ước lượng 20 ms và bộ lọc
+mũ theo thời gian, thay vì chia thay đổi vận tốc cho bước cập nhật của C++.
+Điều này tránh lực giật giả làm tuột khối chỉ vì chương trình dùng `LbDelay(1)`.
+Vận tốc khối khi thả vẫn lấy từ chuyển động thật tại điểm giữ. Padding tiếp xúc
+hình học còn 0,1 mm mỗi mặt để hai càng khép sát khối hơn.

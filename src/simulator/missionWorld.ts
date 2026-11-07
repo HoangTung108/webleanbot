@@ -49,6 +49,7 @@ export class MissionWorld {
   private heldAnchor = {x:LEANBOT_GEOMETRY.graspOffset as number,y:0,rotation:0};
   private gripper = { left: 0, right: 0 };
   private velocity = { x: 0, y: 0, omega: 0 };
+  private gripVelocity = { x: 0, y: 0 };
   private lastPose?: Pose;
   private regripBlocked = new Set<string>();
   constructor(readonly board: Pick<BoardConfig, 'width' | 'height' | 'cityZones' | 'storageSites'>) {}
@@ -210,6 +211,7 @@ export class MissionWorld {
     this.heldAnchor=this.local(block,pose); // bind at contact; never snap to a fixed centre
     block.held=true;block.slotId=undefined;
     const v=this.pointVelocity(block,pose);block.vx=v.x;block.vy=v.y;block.spin=this.velocity.omega/RAD;
+    this.gripVelocity={...v};
     this.lastPose={...pose};this.changed();
   }
   private tip(block: MissionBlock, rotation: number) {
@@ -244,7 +246,13 @@ export class MissionWorld {
     const held=this.heldBlock;
     if(held) {
       this.syncHeld(pose);
-      const v=this.pointVelocity(held,pose),accel=Math.hypot(v.x-held.vx,v.y-held.vy)/dt;
+      // The driven wheel model changes speed instantly. Use a fixed motor/contact
+      // response time, not the interpreter's variable 1–5 ms integration interval.
+      const v=this.pointVelocity(held,pose),response=.02;
+      const accel=Math.hypot(v.x-this.gripVelocity.x,v.y-this.gripVelocity.y)/response;
+      const blend=1-Math.exp(-dt/response);
+      this.gripVelocity.x+=(v.x-this.gripVelocity.x)*blend;
+      this.gripVelocity.y+=(v.y-this.gripVelocity.y)*blend;
       const force=held.mass*(accel/1000+(Math.hypot(v.x,v.y)>.1?this.friction*9.81:0));
       if(force>this.gripLimit(held))this.release(pose);
       else { held.vx=v.x;held.vy=v.y;held.spin=omega/RAD; }

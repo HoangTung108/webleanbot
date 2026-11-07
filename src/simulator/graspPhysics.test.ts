@@ -87,3 +87,14 @@ describe('bilateral contact tolerance',()=>{
     expect(block.held).toBe(false);
   });
 });
+
+describe('grip stability with 1 ms feedback loops',()=>{
+  it.each([.001,.002,.005,.01])('keeps an upright block on motor start/stop with %s s physics steps',dt=>{
+    const {world,block}=scene(675,900);
+    world.setGripper(90,90,pose);expect(block.held).toBe(true);
+    for(const speed of [65,0,-65,0]) for(let i=0;i<20;i++) {
+      world.step(dt,pose,speed,speed);
+      expect(block.held).toBe(true);
+    }
+  });
+});

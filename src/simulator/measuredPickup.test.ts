@@ -24,3 +24,29 @@ describe('measured approach and timed C++ pickup',()=>{
     expect(b.held).toBe(false);
   });
 });
+
+describe('custom gripper loops followed by 1 ms encoder feedback',()=>{
+  it.each([1,2,5,10])('keeps the acquired block throughout motion at %sx',multiplier=>{
+    const robot=new RobotSimulator(),bridge=new CppSimulatorBridge(robot),site=robot.mission.slots('pollution')[0];
+    robot.reset({x:site.x-75,y:site.y,heading:0});robot.setSpeedMultiplier(multiplier);
+    const b=robot.mission.place('pollution','yellow',site.x,site.y);b.rotation=0;
+    expect(bridge.loadCode(`void loop(){
+      for(int count=0;count<10;count++) LbGripper.moveToLR(90,90,100);
+      float origin=LbMotion.getDistanceMm();
+      LbMotion.runLR(-2000,-2000);
+      while(fabsf(LbMotion.getDistanceMm()-origin)<65) LbDelay(1);
+      LbMotion.stopAndWait();
+      float angle=LbMotion.getRotationDeg();LbMotion.runLR(2000,-2000);
+      while(fabsf(LbMotion.getRotationDeg()-angle)<90) LbDelay(1);
+      LbMotion.stopAndWait();LbMission.end();
+    }`).success).toBe(true);
+    robot.start();bridge.startExecution();
+    for(let t=0;t<5000&&bridge.isExecuting();t+=16)bridge.executeStep(t);
+    expect(bridge.isExecuting()).toBe(false);
+    expect(b.held).toBe(true);
+    const pose=robot.getRobotPose(),a=pose.heading*Math.PI/180;
+    expect(pose.heading).toBeCloseTo(90,0);
+    expect(b.x).toBeCloseTo(pose.x+75*Math.cos(a),5);
+    expect(b.y).toBeCloseTo(pose.y+75*Math.sin(a),5);
+  });
+});

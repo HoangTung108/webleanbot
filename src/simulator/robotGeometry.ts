@@ -48,7 +48,7 @@ export function fitGripperToBlock(left:number,right:number,width:number,shape?:G
   if(!Number.isFinite(width)||width<=0)return {left:l,right:r};
   const target=shape??{length:15,width,rotation:0};
   const a=target.rotation*Math.PI/180;
-  const rectangle=[[-1,-1],[-1,1],[1,1],[1,-1]].map(([x,y])=>({x:(target.x??LEANBOT_GEOMETRY.graspOffset)+x*(target.length+1)/2*Math.cos(a)-y*(target.width+1)/2*Math.sin(a),y:(target.y??0)+x*(target.length+1)/2*Math.sin(a)+y*(target.width+1)/2*Math.cos(a)}));
+  const rectangle=[[-1,-1],[-1,1],[1,1],[1,-1]].map(([x,y])=>({x:(target.x??LEANBOT_GEOMETRY.graspOffset)+x*(target.length+.2)/2*Math.cos(a)-y*(target.width+.2)/2*Math.sin(a),y:(target.y??0)+x*(target.length+.2)/2*Math.sin(a)+y*(target.width+.2)/2*Math.cos(a)}));
   const safe=(t:number,side:-1|1)=>!intersects(gripperJaw(side,t),rectangle);
   const firstContact=(max:number,side:-1|1)=>{
     let lo=0,hi=max,found=false;
