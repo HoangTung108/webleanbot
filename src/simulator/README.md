@@ -179,3 +179,9 @@ Ba ảnh IMG_5457–5459 cho thấy bo mở rộng có OLED ở đuôi, hai serv
 khối được kẹp giữa hai càng. Các ảnh có phối cảnh nên không dùng để suy ra số đo
 cơ khí chính xác mới. Khối đứng được nhận theo tiếp xúc hai càng thực, thay vì loại
 khối chỉ vì tâm nằm ngoài bán kính 12 mm quanh điểm gắp danh nghĩa.
+
+Tiếp xúc gắp dùng góc chạm tìm trên toàn hành trình, độc lập với góc lệnh hiện tại.
+Dung sai 0,5° giúp hai càng vừa chạm vẫn giữ khối, không yêu cầu càng xuyên qua khối;
+một càng chưa chạm hoặc bị vật khác chặn vẫn không tạo được một cặp gắp.
+Chuyển động servo có thời gian bắt đầu từ góc thực tế bị giới hạn bởi khối,
+nhờ đó mở càng không phải chờ góc lệnh 90° quay về tới điểm tiếp xúc.

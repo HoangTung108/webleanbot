@@ -67,3 +67,23 @@ describe('pickup away from the old fixed centre gate',()=>{
     expect(block.x).toBe(663);
   });
 });
+
+describe('bilateral contact tolerance',()=>{
+  it('holds at the contact angles without requiring the servo to push through',()=>{
+    const {world,block}=scene(676,901);
+    world.setGripper(90,90,pose);
+    const contact=world.getGripperAngles(pose);
+    world.setGripper(0,0,pose);
+    world.setGripper(contact.left-.1,contact.right-.1,pose);
+    expect(block.held).toBe(true);
+    world.step(.05,pose);
+    expect(block.held).toBe(true);
+    world.setGripper(contact.left-2,contact.right-2,pose);
+    expect(block.held).toBe(false);
+  });
+  it('still rejects a grasp when only one finger has reached the object',()=>{
+    const {world,block}=scene();
+    world.setGripper(90,30,pose);
+    expect(block.held).toBe(false);
+  });
+});

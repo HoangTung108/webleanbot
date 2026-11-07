@@ -189,7 +189,7 @@ export class RobotSimulator {
   setGripper(left: number, right: number, durationMs = 0): void {
     if (![left,right,durationMs].every(Number.isFinite)||durationMs<0) throw new Error('Thông số tay gắp không hợp lệ');
     const to={left:Math.max(0,Math.min(90,left)),right:Math.max(0,Math.min(90,right))};
-    if(durationMs>0) { this.gripperMotion={from:{...this.gripper},to,duration:durationMs,elapsed:0}; return; }
+    if(durationMs>0) { this.gripperMotion={from:this.getGripper(),to,duration:durationMs,elapsed:0}; return; }
     this.gripperMotion=undefined;this.applyGripper(to);
   }
 

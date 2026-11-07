@@ -57,3 +57,29 @@ describe('video-referenced Leanbot geometry',()=>{
     expect(b.vx).toBeCloseTo(72.4705882353,5);
   });
 });
+
+describe('servo movement from physical contact',()=>{
+  it('opens immediately from each stopped jaw angle without waiting at the block',()=>{
+    const robot=new RobotSimulator(),site=robot.mission.slots('pollution')[0];
+    robot.reset({x:site.x-76,y:site.y-1,heading:0});
+    const b=robot.mission.place('pollution','green',site.x,site.y);b.rotation=0;
+    robot.start();robot.setGripper(90,90,100);robot.advanceSimulatedTime(100);
+    expect(b.held).toBe(true);
+    const before=robot.getGripper();
+    expect(Math.abs(before.left-before.right)).toBeGreaterThan(1);
+    robot.setGripper(0,0,100);robot.advanceSimulatedTime(10);
+    expect(robot.getGripper().left).toBeCloseTo(before.left*.9,5);
+    expect(robot.getGripper().right).toBeCloseTo(before.right*.9,5);
+    expect(b.held).toBe(false);
+    robot.advanceSimulatedTime(90);
+    expect(robot.getGripper()).toEqual({left:0,right:0});
+  });
+  it('starts an interrupted motion at the visible angle without a jump',()=>{
+    const robot=new RobotSimulator();robot.start();
+    robot.setGripper(90,90,100);robot.advanceSimulatedTime(40);
+    const before=robot.getGripper();robot.setGripper(0,0,100);
+    expect(robot.getGripper()).toEqual(before);
+    robot.advanceSimulatedTime(10);
+    expect(robot.getGripper().left).toBeCloseTo(before.left*.9);
+  });
+});

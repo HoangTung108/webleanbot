@@ -285,9 +285,9 @@ var LeanbotCpp = (() => {
       const a = pose.heading * RAD, dx = block.x - pose.x, dy = block.y - pose.y;
       return { x: dx * Math.cos(a) + dy * Math.sin(a), y: -dx * Math.sin(a) + dy * Math.cos(a), rotation: block.rotation - pose.heading };
     }
-    fingerContact(block, pose) {
+    fingerContact(block, pose, left = this.gripper.left, right = this.gripper.right) {
       const shape = blockFootprint(block), local = this.local(block, pose);
-      return fitGripperToBlock(this.gripper.left, this.gripper.right, shape.width, { ...shape, ...local });
+      return fitGripperToBlock(left, right, shape.width, { ...shape, ...local });
     }
     /** Visible servo angles include obstructions, even when no block is held. */
     getGripperAngles(pose) {
@@ -336,8 +336,8 @@ var LeanbotCpp = (() => {
       this.gripper = { left: clamp(left, 0, 90), right: clamp(right, 0, 90) };
       const stops = this.getGripperAngles(pose);
       const touchesBoth = (b) => {
-        const c = this.fingerContact(b, pose);
-        return c.left < this.gripper.left - 1e-4 && c.right < this.gripper.right - 1e-4 && c.left <= stops.left + 0.05 && c.right <= stops.right + 0.05;
+        const c = this.fingerContact(b, pose, 90, 90), tolerance = 0.5;
+        return c.left < 90 - 1e-4 && c.right < 90 - 1e-4 && c.left <= this.gripper.left + tolerance && c.right <= this.gripper.right + tolerance && c.left <= stops.left + tolerance && c.right <= stops.right + tolerance;
       };
       if (this.heldBlock) {
         if (!touchesBoth(this.heldBlock)) this.release(pose, !opening);
