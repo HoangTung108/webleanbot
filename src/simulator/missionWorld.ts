@@ -193,7 +193,9 @@ export class MissionWorld {
     const candidates=this.blocks.filter(b=>{
       if(b.held||b.offBoard||this.regripBlocked.has(b.id)||b.state==='falling'||(b.elevation??0)>0)return false;
       const local=this.local(b,pose),height=BLOCK_SIZE.height*Math.cos(b.tilt)+BLOCK_SIZE.length*Math.sin(b.tilt),low=height<30;
-      if(height<12||Math.hypot(b.x-point.x,b.y-point.y)>(low?6:12)||Math.abs(local.y)>(low?4:8))return false;
+      // Upright capture is governed by bilateral polygon contact, not a fixed centre target.
+      if(height<12||local.x<40||local.x>110||Math.abs(local.y)>50)return false;
+      if(low&&(Math.hypot(b.x-point.x,b.y-point.y)>6||Math.abs(local.y)>4))return false;
       if(low&&(Math.abs(Math.cos(local.rotation*RAD))<.96||Math.hypot(b.vx,b.vy)>5||Math.abs(b.spin)>5||Math.max(Math.abs(motorLeft),Math.abs(motorRight))>10))return false;
       const body=LEANBOT_GEOMETRY.body,a=pose.heading*RAD;
       const hit=contact({...body,x:pose.x+body.x*Math.cos(a),y:pose.y+body.x*Math.sin(a),rotation:pose.heading},{...b,...blockFootprint(b)});

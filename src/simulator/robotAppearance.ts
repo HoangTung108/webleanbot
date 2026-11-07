@@ -44,6 +44,16 @@ export function drawLeanbot(ctx: CanvasRenderingContext2D, leftGrip = 0, rightGr
   ctx.fillStyle='#c0bfa3';ctx.fillRect(-67,-3,5,6);
   ctx.fillStyle='#87b6ae';for(let x=-68;x<-28;x+=8)ctx.fillRect(x,6,3,1);
   ctx.fillStyle='#f3efe4';ctx.font='bold 4.2px sans-serif';ctx.fillText('NANO',-65,-5);
+  // Rear IoT expansion / OLED visible in IMG_5458 and IMG_5459, above the Nano.
+  ctx.fillStyle='#d82636';ctx.fillRect(-89,-37,58,74);
+  ctx.strokeStyle='#7f1524';ctx.lineWidth=.8;ctx.strokeRect(-89,-37,58,74);
+  ctx.fillStyle='#172222';ctx.fillRect(-79,-23,37,46);
+  ctx.strokeStyle='#849e9b';ctx.strokeRect(-79,-23,37,46);
+  ctx.fillStyle='#243936';ctx.fillRect(-76,-18,31,36);
+  for(const y of [-31,31]) {
+    ctx.fillStyle='#142225';ctx.fillRect(-76,y-3,30,6);
+    ctx.fillStyle='#c4bd96';for(let x=-73;x<-48;x+=4)ctx.fillRect(x,y-1,1.5,2);
+  }
   // White plugs and the looms running to each drive motor / front servo.
   for(const side of [-1,1] as const) {
     ctx.fillStyle='#eee8d5';ctx.fillRect(-4,side<0?-25:16,13,9);

@@ -42,15 +42,15 @@ describe('static IDE simulator', () => {
     sim.start();
     for (let i = 0; i < 200; i++) h.frame();
     expect(sim.isRunning).toBe(true);
-    expect(sim.robotX).toBeCloseTo(624);
+    expect(sim.robotX).toBeCloseTo(608);
     sim.togglePause(); for (let i = 0; i < 50; i++) h.frame();
-    expect(sim.robotX).toBeCloseTo(624);
+    expect(sim.robotX).toBeCloseTo(608);
     sim.togglePause(); for (let i = 0; i < 60; i++) h.frame();
     expect(sim.isRunning).toBe(false);
-    expect(sim.robotX).toBeCloseTo(680);
+    expect(sim.robotX).toBeCloseTo(660);
     source = 'void loop(){ LbMotion.runLR(-2000,-2000); LbDelay(1000); LbMission.end(); }';
     sim.start(); for (let i = 0; i < 65; i++) h.frame();
-    expect(sim.robotX).toBeCloseTo(610);
+    expect(sim.robotX).toBeCloseTo(595);
     expect(reads).toBe(2);
   });
   it('reports missing editor source instead of starting a demonstration', () => {

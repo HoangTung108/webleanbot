@@ -304,7 +304,7 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
           <section className="sim-field" ref={fieldRef} aria-label="Sa bàn Synapse City">
             <div className="sim-section-heading"><div><MapPin size={15} /><strong>Synapse City · 4 ft × 4 ft</strong></div><button className="sim-button icon-only" title="Toàn màn hình sa bàn" aria-label="Toàn màn hình sa bàn" onClick={() => { void fieldRef.current?.requestFullscreen?.().catch(() => addLog('[ERROR] Không mở được toàn màn hình.')); }}><Maximize2 size={15} /></button></div>
             <div className="sim-canvas-wrap"><canvas ref={canvasRef} aria-label="Sa bàn và robot" /></div>
-            <div className="sim-field-caption"><MousePointer2 size={13} /><span>Kéo để đặt robot · Đi qua mép sa bàn có thể rơi</span><span>2000 = 35 cm / 5 giây</span></div>
+            <div className="sim-field-caption"><MousePointer2 size={13} /><span>Kéo để đặt robot · Đi qua mép sa bàn có thể rơi</span><span>2000 = 32,5 cm / 5 giây</span></div>
           </section>
           <section className="sim-log-panel" aria-label="Nhật ký mô phỏng">
             <div className="sim-section-heading"><div><Terminal size={15} /><strong>Nhật ký</strong><span className="sim-count">{logs.length}</span></div><div><label className="sim-follow"><input type="checkbox" checked={followLogs} onChange={e => setFollowLogs(e.target.checked)} />Theo dõi</label><button className="sim-button icon-only" aria-label="Xóa nhật ký" title="Xóa nhật ký" disabled={!logs.length} onClick={() => setLogs([])}><Trash2 size={14} /></button></div></div>

@@ -17,8 +17,8 @@ nội dung editor hay dữ liệu trình duyệt.
 
 ## Tỷ lệ và ô thi đấu
 
-- Một cạnh ô thành phố, đo giữa tâm giao lộ, dài 350 mm.
-- Đã hiệu chỉnh theo số đo: `runLR(2000, 2000)` đi 350 mm trong 5 giây (70 mm/s).
+- Một cạnh ô thành phố, đo giữa tâm giao lộ, dài 325 mm.
+- Đã hiệu chỉnh theo số đo: `runLR(2000, 2000)` đi 325 mm trong 5 giây (65 mm/s).
   Tốc độ trung gian được nội suy tuyến tính; khoảng cách hai bánh ước lượng 100 mm, dùng chung cho vật lý và encoder C++.
 - Robot vẽ theo ảnh Leanbot: PCB đỏ dài, Nano xanh, hai bánh đen, cảm biến siêu âm đôi và càng màu be.
   Tổng hình khoảng 180 × 120 mm, bán kính chọn/chặn tường bảo thủ 110 mm; đây là tỷ lệ
@@ -78,8 +78,8 @@ Vật lý khối là mô hình 2.5D định tính với khối lượng 25 g ư�
 
 ## Hiệu chỉnh từ ảnh ngày 06/11/2026
 
-- Mốc cố định: sa bàn 4 ft = 1219,2 mm mỗi chiều; cạnh thành phố 350 mm;
-  khối 15 × 25 × 75 mm. Khối đứng hiển thị mặt đáy 15 × 25 mm với phần gợi chiều cao;
+- Mốc cố định: sa bàn 4 ft = 1219,2 mm mỗi chiều; cạnh thành phố 325 mm;
+  khối 15 × 25 × 75 mm. Khối đứng hiển thị mặt đáy 15 × 25 mm khớp hitbox;
   khi đổ, chiều dài chiếm mặt sàn tiến tới 75 mm.
 - Ước lượng robot từ ảnh phối cảnh: 180 × 120 × 70 mm, khối lượng 400 g do người dùng cung cấp sau khi đối chiếu video;
   khoảng cách tâm bánh 100 mm là ước lượng nội bộ theo bề rộng lốp 20 mm. Kích thước tổng thể dùng làm chuẩn; khoảng cách tâm bánh và khớp càng vẫn cần đo trực tiếp để chốt.
@@ -135,7 +135,7 @@ không tuyên bố đây là số đo chính thức. Điểm gắp vẫn cách t
 Cùng polygon càng được dùng để vẽ và tìm tiếp xúc với toàn bộ hình chữ nhật
 của khối tại vị trí thực. Hai càng phải chạm cùng một khối; góc đóng thực tế
 phụ thuộc vị trí và hướng khối, không dùng một ngưỡng góc cố định. Điều kiện khó gắp khối nằm vẫn áp dụng. Khối lượng robot tham gia xung lực
-đẩy khối; vận tốc bánh vẫn do bộ điều khiển đặt để giữ hiệu chuẩn 35 cm / 5 giây.
+đẩy khối; vận tốc bánh vẫn do bộ điều khiển đặt để giữ hiệu chuẩn 32,5 cm / 5 giây.
 Độ cao là metadata của mô hình nhìn từ trên; chưa phải mesh/mô phỏng 3D đầy đủ.
 
 ### Hiệu chỉnh càng gắp
@@ -168,3 +168,14 @@ Khối trung hòa và pollution dùng cùng kích thước 15 × 25 × 75 mm. H�
 vẽ đúng footprint dùng cho va chạm, không cộng chiều cao vào bề rộng hiển thị.
 Dải trắng của khối trung hòa là ký hiệu nằm trong footprint. Hành trình càng đóng
 được hiệu chỉnh để chạm được mặt hẹp 15 mm cả khi lệch ngang 2 mm tại Storage.
+
+## Số đo cập nhật ngày 07/11/2026
+
+Cạnh line một thành phố là 325 mm; `runLR(2000,2000)` chạy 325 mm trong 5 giây.
+Lệnh motor giới hạn ±2000 tương ứng ±65 mm/s. Sa bàn vẫn 1219,2 × 1219,2 mm;
+layout in được thu quanh tâm với hệ số 325/350, đồng bộ SVG, line sensor, CRL,
+các site và Storage. Kích thước robot và khối không bị thu theo layout.
+Ba ảnh IMG_5457–5459 cho thấy bo mở rộng có OLED ở đuôi, hai servo trước và
+khối được kẹp giữa hai càng. Các ảnh có phối cảnh nên không dùng để suy ra số đo
+cơ khí chính xác mới. Khối đứng được nhận theo tiếp xúc hai càng thực, thay vì loại
+khối chỉ vì tâm nằm ngoài bán kính 12 mm quanh điểm gắp danh nghĩa.

@@ -30,8 +30,8 @@ describe('Rulebook V6 scoring',()=>{
     expect(score([{...red,color:'green'}]).total).toBe(100);
     expect(score([{...red,color:'blue'}]).total).toBe(100);
     expect(score([{...red,color:'purple'}]).total).toBe(100);
-    expect(score([{...red,x:802.1}]).total).toBe(0); // touches only the edge, not inner colour
-    expect(score([{...red,x:807.1}]).total).toBe(100); // partial overlap with inner CRL
+    expect(score([{...red,x:SYNAPSE_CITY.analysisArea!.x-SYNAPSE_CITY.analysisArea!.width/2-7.5}]).total).toBe(0); // touches only the edge, not inner colour
+    expect(score([{...red,x:SYNAPSE_CITY.analysisArea!.x-SYNAPSE_CITY.analysisArea!.width/2-2.5}]).total).toBe(100); // partial overlap with inner CRL
     expect(score([mystery]).total).toBe(0);
     expect(score([mystery],'master').mystery).toBe(150);
   });

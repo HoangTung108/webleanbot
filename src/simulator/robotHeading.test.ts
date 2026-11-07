@@ -27,7 +27,7 @@ describe('starting robot direction', () => {
       robot.update();
       expect(robot.getRobotPose().heading).toBe(90);
       expect(robot.getRobotPose().x).toBeCloseTo(500);
-      expect(robot.getRobotPose().y).toBeCloseTo(510);
+      expect(robot.getRobotPose().y).toBeCloseTo(506.5);
       robot.pause();
       robot.setHeading(270);
       expect(robot.getRobotPose().heading).toBe(90);

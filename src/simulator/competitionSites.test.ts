@@ -15,19 +15,22 @@ describe('competition markers from the supplied diagram', () => {
         expect(Math.sign(site.y-zone.center.y)).toBe(site.number <= 2 ? -1 : 1);
         expect(svg).toContain(`id="site-${site.id}"`);
         expect(site.rotation).toBe([1,4].includes(site.number) ? 45 : -45);
-        expect(svg).toContain(`rotate(${site.rotation} ${site.x} ${site.y})`);
+        const originalX=Math.round((609.6+(site.x-609.6)*350/325)*1e6)/1e6;
+        const originalY=Math.round((609.6+(site.y-609.6)*350/325)*1e6)/1e6;
+        expect(svg).toContain(`rotate(${site.rotation} ${originalX} ${originalY})`);
       }
     }
     expect(ids.size).toBe(32);
   });
   it('places odd storage sites below and even sites to the right, and starts in CRL', () => {
     expect(SYNAPSE_CITY.storageSites).toHaveLength(6);
+    expect(svg).toContain('scale(0.9285714285714286)');
     for (const site of SYNAPSE_CITY.storageSites!) {
       expect(svg).toContain(`id="storage-${site.id}"`);
-      if (Number(site.id.slice(1)) % 2) { expect(site.y).toBe(1180); expect(site.rotation).toBe(0); }
-      else { expect(site.x).toBe(1180); expect(site.rotation).toBe(90); }
+      if (Number(site.id.slice(1)) % 2) { expect(site.y).toBeCloseTo(1139.257143,5); expect(site.rotation).toBe(0); }
+      else { expect(site.x).toBeCloseTo(1139.257143,5); expect(site.rotation).toBe(90); }
     }
-    expect(SYNAPSE_CITY.initialPose).toEqual({ x: 959.6, y: 959.6, heading: 270 });
+    expect(SYNAPSE_CITY.initialPose).toEqual({ x: 934.6, y: 934.6, heading: 270 });
     expect(SYNAPSE_CITY.obstacles).toHaveLength(0);
   });
 });

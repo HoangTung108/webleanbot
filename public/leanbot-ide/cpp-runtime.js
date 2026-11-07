@@ -347,7 +347,8 @@ var LeanbotCpp = (() => {
       const candidates = this.blocks.filter((b) => {
         if (b.held || b.offBoard || this.regripBlocked.has(b.id) || b.state === "falling" || (b.elevation ?? 0) > 0) return false;
         const local = this.local(b, pose), height = BLOCK_SIZE.height * Math.cos(b.tilt) + BLOCK_SIZE.length * Math.sin(b.tilt), low = height < 30;
-        if (height < 12 || Math.hypot(b.x - point.x, b.y - point.y) > (low ? 6 : 12) || Math.abs(local.y) > (low ? 4 : 8)) return false;
+        if (height < 12 || local.x < 40 || local.x > 110 || Math.abs(local.y) > 50) return false;
+        if (low && (Math.hypot(b.x - point.x, b.y - point.y) > 6 || Math.abs(local.y) > 4)) return false;
         if (low && (Math.abs(Math.cos(local.rotation * RAD)) < 0.96 || Math.hypot(b.vx, b.vy) > 5 || Math.abs(b.spin) > 5 || Math.max(Math.abs(motorLeft), Math.abs(motorRight)) > 10)) return false;
         const body = LEANBOT_GEOMETRY.body, a = pose.heading * RAD;
         const hit = contact({ ...body, x: pose.x + body.x * Math.cos(a), y: pose.y + body.x * Math.sin(a), rotation: pose.heading }, { ...b, ...blockFootprint(b) });
@@ -952,6 +953,23 @@ var LeanbotCpp = (() => {
     ctx.fillStyle = "#f3efe4";
     ctx.font = "bold 4.2px sans-serif";
     ctx.fillText("NANO", -65, -5);
+    ctx.fillStyle = "#d82636";
+    ctx.fillRect(-89, -37, 58, 74);
+    ctx.strokeStyle = "#7f1524";
+    ctx.lineWidth = 0.8;
+    ctx.strokeRect(-89, -37, 58, 74);
+    ctx.fillStyle = "#172222";
+    ctx.fillRect(-79, -23, 37, 46);
+    ctx.strokeStyle = "#849e9b";
+    ctx.strokeRect(-79, -23, 37, 46);
+    ctx.fillStyle = "#243936";
+    ctx.fillRect(-76, -18, 31, 36);
+    for (const y of [-31, 31]) {
+      ctx.fillStyle = "#142225";
+      ctx.fillRect(-76, y - 3, 30, 6);
+      ctx.fillStyle = "#c4bd96";
+      for (let x = -73; x < -48; x += 4) ctx.fillRect(x, y - 1, 1.5, 2);
+    }
     for (const side of [-1, 1]) {
       ctx.fillStyle = "#eee8d5";
       ctx.fillRect(-4, side < 0 ? -25 : 16, 13, 9);
@@ -1436,8 +1454,8 @@ var LeanbotCpp = (() => {
       throw new Error(`Bi\u1EC3u th\u1EE9c ch\u01B0a h\u1ED7 tr\u1EE3: ${n.k}`);
     }
     motors(left, right) {
-      this.left = Math.max(-500, Math.min(500, left));
-      this.right = Math.max(-500, Math.min(500, right));
+      this.left = Math.max(-65, Math.min(65, left));
+      this.right = Math.max(-65, Math.min(65, right));
       this.host.motors(this.left, this.right);
     }
     *call(name, args) {
@@ -1467,7 +1485,7 @@ var LeanbotCpp = (() => {
           yield { end: true };
           return null;
         case "LbMotion.runLR":
-          this.motors(a * 70 / 2e3, b * 70 / 2e3);
+          this.motors(Math.max(-2e3, Math.min(2e3, a)) * 65 / 2e3, Math.max(-2e3, Math.min(2e3, b)) * 65 / 2e3);
           return null;
         case "LbMotion.runLRrpm":
           this.motors(a * 2 * Math.PI * 16.25 / 60, b * 2 * Math.PI * 16.25 / 60);

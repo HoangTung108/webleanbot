@@ -35,13 +35,13 @@ describe('custom C++ execution', () => {
     expect(result.hands).toEqual([[90,90],[0,45]]);
     expect(result.runtime.time).toBe(300);
   });
-  it('matches measured 35 cm in 5 seconds at command 2000', () => {
-    const runtime = new CppRuntime('void loop(){ LbMotion.runLR(2000,2000); LbMotion.waitDistanceMm(350); LbMission.end(); }', { motors() {}, advance() {} });
+  it('matches measured 32.5 cm in 5 seconds at command 2000', () => {
+    const runtime = new CppRuntime('void loop(){ LbMotion.runLR(2000,2000); LbMotion.waitDistanceMm(325); LbMission.end(); }', { motors() {}, advance() {} });
     runtime.start(); runtime.tick(0); runtime.tick(4900);
     expect(runtime.running).toBe(true);
-    expect(runtime.distance).toBeCloseTo(343, 6);
+    expect(runtime.distance).toBeCloseTo(318.5, 6);
     runtime.tick(100);
-    expect(runtime.distance).toBeCloseTo(350, 6);
+    expect(runtime.distance).toBeCloseTo(325, 6);
     expect(runtime.time).toBeCloseTo(5000, 6);
     expect(runtime.running).toBe(false);
   });

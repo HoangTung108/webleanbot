@@ -58,3 +58,12 @@ describe('grasp contact and rigid attachment regressions',()=>{
     expect(block.held).toBe(false);expect(Number.isFinite(other.vx)).toBe(true);
   });
 });
+
+describe('pickup away from the old fixed centre gate',()=>{
+  it('captures a reachable narrow-face block beyond the old 12 mm radius',()=>{
+    const {world,block}=scene(663,901,90);
+    world.setGripper(90,90,pose);
+    expect(block.held).toBe(true);
+    expect(block.x).toBe(663);
+  });
+});

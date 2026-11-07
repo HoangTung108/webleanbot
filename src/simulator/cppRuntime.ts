@@ -174,8 +174,8 @@ export class CppRuntime {
     throw new Error(`Biểu thức chưa hỗ trợ: ${n.k}`);
   }
   private motors(left: number, right: number) {
-    // Measured calibration: runLR(2000, 2000) travels 350 mm in 5 s.
-    this.left = Math.max(-500, Math.min(500, left)); this.right = Math.max(-500, Math.min(500, right));
+    // Measured calibration: runLR(2000, 2000) travels 325 mm in 5 s.
+    this.left = Math.max(-65, Math.min(65, left)); this.right = Math.max(-65, Math.min(65, right));
     this.host.motors(this.left, this.right);
   }
   private *call(name: string, args: Value[]): Generator<Yield, Value, unknown> {
@@ -190,7 +190,7 @@ export class CppRuntime {
     switch (name) {
       case 'Leanbot.begin': case 'LbMission.begin': case 'Serial.begin': case 'LbRGB.show': return null;
       case 'LbMission.end': this.motors(0, 0); yield { end: true }; return null;
-      case 'LbMotion.runLR': this.motors(a * 70 / 2000, b * 70 / 2000); return null;
+      case 'LbMotion.runLR': this.motors(Math.max(-2000,Math.min(2000,a)) * 65 / 2000, Math.max(-2000,Math.min(2000,b)) * 65 / 2000); return null;
       case 'LbMotion.runLRrpm': this.motors(a * 2 * Math.PI * 16.25 / 60, b * 2 * Math.PI * 16.25 / 60); return null;
       case 'LbMotion.stopAndWait': this.motors(0, 0); return null;
       case 'LbMotion.setZeroOrigin': this.distance = 0; this.rotation = 0; return null;

@@ -23,7 +23,7 @@ import {
 const DEFAULT_ROBOT_CONFIG: RobotConfig = {
   wheelRadius: 16.25, // mm
   wheelBase: LEANBOT_APPEARANCE.wheelBase, // mm, shared with drawing and encoders
-  maxSpeed: 500, // mm/s
+  maxSpeed: 65, // mm/s: measured 325 mm / 5 s
   maxAcceleration: 2000, // mm/s²
   sensorOffsets: {
     irLineLeft: { x: 50, y: -30 },    // Updated from 37.5, -20

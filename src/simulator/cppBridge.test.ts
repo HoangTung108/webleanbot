@@ -3,21 +3,21 @@ import { LEANBOT_GEOMETRY } from './robotGeometry';
 import { CppSimulatorBridge } from './cppBridge';
 import { RobotSimulator } from './robotSimulator';
 
-const code = 'void setup(){} void loop(){ LbMotion.runLR(2000,2000); LbMotion.waitDistanceMm(350); LbMotion.stopAndWait(); LbMission.end(); }';
+const code = 'void setup(){} void loop(){ LbMotion.runLR(2000,2000); LbMotion.waitDistanceMm(325); LbMotion.stopAndWait(); LbMission.end(); }';
 describe('editor code bridge', () => {
-  it('preserves the configured pose, pauses without adding elapsed time, and stops at 350 mm', () => {
+  it('preserves the configured pose, pauses without adding elapsed time, and stops at 325 mm', () => {
     const robot = new RobotSimulator();
     robot.reset({ x: 400, y: 500, heading: 90 });
     const bridge = new CppSimulatorBridge(robot);
     expect(bridge.loadCode(code).success).toBe(true);
     robot.start(); bridge.startExecution(); bridge.executeStep(0);
     for (let t = 10; t <= 300; t += 10) bridge.executeStep(t);
-    expect(robot.getRobotPose().y).toBeCloseTo(521);
+    expect(robot.getRobotPose().y).toBeCloseTo(519.5);
     robot.pause(); bridge.executeStep(10000);
-    expect(robot.getRobotPose().y).toBeCloseTo(521);
+    expect(robot.getRobotPose().y).toBeCloseTo(519.5);
     robot.resume();
     for (let t = 10010; t <= 14700; t += 10) bridge.executeStep(t);
-    expect(robot.getRobotPose().y).toBeCloseTo(850);
+    expect(robot.getRobotPose().y).toBeCloseTo(825);
     expect(robot.getRobotPose().x).toBeCloseTo(400);
     expect(bridge.isExecuting()).toBe(false);
   });
@@ -27,7 +27,7 @@ describe('editor code bridge', () => {
     robot.setSpeedMultiplier(multiplier);
     expect(bridge.loadCode(`void loop(){
       LbMotion.runLR(2000,2000);
-      while(LbMotion.getDistanceMm()<350) { LbDelay(1); }
+      while(LbMotion.getDistanceMm()<325) { LbDelay(1); }
       LbMotion.stopAndWait();
       LbDelay(250);
       LbMotion.runLR(2000,-2000); LbMotion.waitRotationDeg(90);
@@ -39,11 +39,11 @@ describe('editor code bridge', () => {
     let wall = 0;
     for(;wall<=10000 && bridge.isExecuting();wall+=16)bridge.executeStep(wall);
     expect(bridge.isExecuting()).toBe(false);
-    expect(robot.getRobotPose().x).toBeCloseTo(750,0);
+    expect(robot.getRobotPose().x).toBeCloseTo(725,0);
     expect(robot.getRobotPose().y).toBeCloseTo(500,5);
     expect(robot.getRobotPose().heading).toBeCloseTo(90,5);
     const [distance,rotation,time]=bridge.getLogs().map(Number);
-    expect(distance).toBeCloseTo(350,0);expect(rotation).toBeCloseTo(90,5);
+    expect(distance).toBeCloseTo(325,0);expect(rotation).toBeCloseTo(90,5);
     // Arduino millis() reports whole milliseconds.
     expect(Math.floor(robot.getSimulationState().currentTime)).toBe(time);
     expect(wall).toBeLessThan(6500/multiplier+50);
@@ -53,10 +53,10 @@ describe('editor code bridge', () => {
     const robot = new RobotSimulator(), bridge = new CppSimulatorBridge(robot);
     robot.reset({x:400,y:500,heading:0});bridge.loadCode(code);robot.start();bridge.startExecution();
     bridge.executeStep(0);bridge.executeStep(1000);
-    expect(robot.getRobotPose().x).toBeCloseTo(470,5);
+    expect(robot.getRobotPose().x).toBeCloseTo(465,5);
     robot.setSpeedMultiplier(10);
     bridge.executeStep(1400);
-    expect(robot.getRobotPose().x).toBeCloseTo(750,5);
+    expect(robot.getRobotPose().x).toBeCloseTo(725,5);
     expect(robot.getSimulationState().currentTime).toBeCloseTo(5000,5);
     expect(bridge.isExecuting()).toBe(false);
   });
@@ -79,7 +79,7 @@ describe('editor code bridge', () => {
     expect(bridge.loadCode('void loop(){ LbMotion.runLR(-400,-400); LbDelay(100); LbMission.end(); }').success).toBe(true);
     robot.reset({ x: 400, y: 500, heading: 0 }); robot.start(); bridge.startExecution();
     bridge.executeStep(0); bridge.executeStep(100);
-    expect(robot.getRobotPose().x).toBeCloseTo(398.6);
+    expect(robot.getRobotPose().x).toBeCloseTo(398.7);
     expect(bridge.loadCode('void loop(){ unknown(); }')).toMatchObject({ success: false });
   });
   it.each([[2000, -2000, 90], [-2000, 2000, -90]])('turns and reports matching encoder direction for runLR(%s, %s)', (left, right, angle) => {
