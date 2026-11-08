@@ -256,7 +256,15 @@ export class RobotSimulator {
   /** Advance an already-scaled simulation clock (used by the C++ runtime). */
   advanceSimulatedTime(deltaMilliseconds: number): void {
     if (!this.state.isRunning || this.state.isPaused || !Number.isFinite(deltaMilliseconds) || deltaMilliseconds <= 0) return;
-    if(this.fall.status==='supported')this.advanceGripper(deltaMilliseconds);
+    let remaining=deltaMilliseconds;
+    while(remaining>1e-8&&this.state.isRunning&&!this.state.isPaused) {
+      const step=Math.min(5,remaining);this.advancePhysicsStep(step);remaining-=step;
+    }
+  }
+
+  private advancePhysicsStep(deltaMilliseconds:number):void {
+    const wasSupported=this.fall.status==='supported';
+    if(wasSupported)this.advanceGripper(deltaMilliseconds);
     const deltaTime = deltaMilliseconds / 1000;
     this.simulationTime += deltaMilliseconds;
 
@@ -276,7 +284,7 @@ export class RobotSimulator {
       this.state.robotState.velocityLeft = this.state.robotState.velocityRight = 0;
     }
     if (this.fall.status === 'falling') {
-      pose.x += this.fall.vx*deltaTime; pose.y += this.fall.vy*deltaTime;
+      if(!wasSupported) {pose.x += this.fall.vx*deltaTime; pose.y += this.fall.vy*deltaTime;}
       this.fall.drop += this.fall.velocityZ*deltaTime + 0.5*9810*deltaTime*deltaTime;
       this.fall.velocityZ += 9810*deltaTime;
       // Assumed tabletop drop: 750 mm. A 2.5D fall, not a rigid-body solver.

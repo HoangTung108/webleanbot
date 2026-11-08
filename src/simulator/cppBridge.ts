@@ -26,6 +26,7 @@ export class CppSimulatorBridge {
   private commandQueue: CommandQueue;
   private runtime?: CppRuntime;
   private lastTick?: number;
+  private pendingTime = 0;
   private logs: string[] = [];
   private elapsed = 0;
   private completionReason: 'program' | 'time-limit' | undefined;
@@ -65,18 +66,28 @@ export class CppSimulatorBridge {
     }
   }
 
-  executeStep(currentTime: number): void {
-    if (!this.isExecuting()) return;
+  executeStep(currentTime: number, maxWorkMs = Infinity): void {
+    if (!Number.isFinite(currentTime) || !this.isExecuting()) return;
     if (this.simulator.getSimulationState().isPaused) { this.lastTick = currentTime; return; }
-    const delta = this.lastTick === undefined ? 0 : currentTime - this.lastTick;
+    if(this.lastTick!==undefined&&currentTime<this.lastTick)return;
+    const delta = this.lastTick === undefined ? 0 : currentTime-this.lastTick;
     this.lastTick = currentTime;
-    const before=this.simulator.getSimulationState().currentTime;
-    const budget=Math.min(delta*this.simulator.getSpeedMultiplier(),Math.max(0,ROUND_LIMIT_MS-this.elapsed));
-    if (this.simulator.getFallState().status === 'falling') this.simulator.advanceSimulatedTime(budget);
-    else this.runtime?.tick(budget);
-    this.elapsed+=this.simulator.getSimulationState().currentTime-before;
-    if(this.elapsed>=ROUND_LIMIT_MS-1e-6) { this.runtime?.stop();this.simulator.stop();this.completionReason='time-limit'; }
-    else if(!this.runtime?.running) this.completionReason='program';
+    this.pendingTime=Math.min(this.pendingTime+delta*this.simulator.getSpeedMultiplier(),Math.max(0,ROUND_LIMIT_MS-this.elapsed));
+    const deadline=Number.isFinite(maxWorkMs)?performance.now()+Math.max(0,maxWorkMs):Infinity;
+    // Prime commands without advancing time, including zero-duration programs.
+    if(this.runtime?.running)this.runtime.tick(0);
+    while(this.isExecuting()) {
+      const slice=Math.min(5,Math.max(0,ROUND_LIMIT_MS-this.elapsed));
+      if(slice<=1e-8) {this.runtime?.stop();this.simulator.stop();this.completionReason='time-limit';break;}
+      if(this.pendingTime+1e-8<slice||performance.now()>=deadline)break;
+      const before=this.simulator.getSimulationState().currentTime;
+      if(this.simulator.getFallState().status==='falling')this.simulator.advanceSimulatedTime(slice);
+      else this.runtime?.tick(slice);
+      this.pendingTime=Math.max(0,this.pendingTime-slice);
+      this.elapsed+=this.simulator.getSimulationState().currentTime-before;
+      if(this.elapsed>=ROUND_LIMIT_MS-1e-6) {this.runtime?.stop();this.simulator.stop();this.completionReason='time-limit';break;}
+    }
+    if (!this.runtime?.running && !this.isExecuting() && !this.completionReason) this.completionReason='program';
     if (this.simulator.getFallState().status === 'fallen') {
       this.stopExecution();
       throw new Error('Robot đã rơi khỏi sa bàn. Đặt lại mô phỏng hoặc kéo robot trở lại trước khi chạy.');
@@ -84,17 +95,17 @@ export class CppSimulatorBridge {
     this.commandQueue.isExecuting = this.isExecuting();
   }
 
-  resetClock(): void { this.lastTick = undefined; }
+  resetClock(currentTime?:number): void { this.lastTick = currentTime; }
 
   isExecuting(): boolean { return (this.runtime?.running ?? false) || (this.simulator.getFallState().status === 'falling' && this.simulator.getSimulationState().isRunning); }
 
   /**
    * Start executing command queue
    */
-  startExecution(): void {
-    this.elapsed=0;this.completionReason=undefined;
+  startExecution(currentTime?:number): void {
+    this.elapsed=0;this.pendingTime=0;this.completionReason=undefined;
     this.runtime?.start();
-    this.lastTick = undefined;
+    this.lastTick = currentTime;
     this.commandQueue.isExecuting = true;
     this.commandQueue.currentIndex = 0;
   }
@@ -104,6 +115,7 @@ export class CppSimulatorBridge {
    */
   stopExecution(): void {
     this.runtime?.stop();
+    this.pendingTime=0;
     this.commandQueue.isExecuting = false;
     this.simulator.setMotorSpeeds(0, 0);
   }
@@ -127,7 +139,7 @@ export class CppSimulatorBridge {
    */
   reset(): void {
     this.runtime?.stop();
-    this.lastTick = undefined;
+    this.lastTick = undefined;this.pendingTime=0;
     this.commandQueue.currentIndex = 0;
     this.commandQueue.isExecuting = false;
     this.logs = [];

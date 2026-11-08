@@ -212,3 +212,21 @@ Chạy `npm run benchmark:simulator`: ba lượt, mỗi lượt 10 giây mô ph�
 Kiểm tra Edge headless trên máy phát triển với 14 khối, tua 10×, DPR 2 trong 5 giây:
 median khung hình 16,7 ms, P95 17,3 ms; P95 vẽ canvas 0,7 ms. Kết quả phụ thuộc máy,
 trình duyệt, mã C++ và cảnh đang chạy; không phải cam kết FPS cho mọi thiết bị.
+
+### Tua và bước vật lý
+
+Bridge tích lũy thời gian đã nhân hệ số tua và xử lý theo quantum 5 ms cố định,
+độc lập FPS. Các khoảng chờ 1 ms trong C++ vẫn đọc cảm biến/encoder ở từng bước.
+Phần lẻ và phần chưa xử lý được giữ cho khung hình kế tiếp; không bỏ thời gian.
+Giao diện dành tối đa khoảng 8 ms mỗi khung cho xử lý C++/vật lý (kiểm tra giữa các
+quantum). Nếu máy không đủ nhanh cho mức tua đã chọn, mô phỏng bắt kịp dần thay vì
+nhảy qua các bước hoặc chặn giao diện để xử lý hết một lần.
+
+`RobotSimulator.advanceSimulatedTime` cũng chia cập nhật dài thành bước tối đa 5 ms,
+bao gồm chuyển động tay, rơi và cảm biến. Bước vừa mất điểm tựa không dịch robot
+thêm lần thứ hai. Đổi hệ số tua chốt thời gian cũ trước khi áp dụng hệ số mới;
+đổi trạng thái hiển thị tab đặt lại đồng hồ hiển thị để tránh tua bù toàn bộ thời
+gian tab bị ẩn. Bắt đầu và tiếp tục dùng mốc thời gian ngay tại thao tác người dùng.
+
+`playback.test.ts` kiểm tra thời gian hoãn, ngân sách xử lý, pause/đổi tốc độ,
+đồng hồ không hợp lệ và so sánh nguyên trạng vật lý giữa các FPS/hệ số tua.

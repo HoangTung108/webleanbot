@@ -114,10 +114,12 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
     const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(resize);
     if (canvasRef.current.parentElement) observer?.observe(canvasRef.current.parentElement);
     window.addEventListener('resize', resize);
+    const visibilityClock=()=>bridge.resetClock(performance.now());
+    document.addEventListener('visibilitychange',visibilityClock);
     resize();
     renderer.render();
     addLog(`Đã tải sa bàn: ${board.name}`);
-    return () => { clearInterval(networkTimer); detachScoring(); detachMission(); detachPlacement(); observer?.disconnect(); window.removeEventListener('resize', resize); bridge.stopExecution(); simulator.stop(); };
+    return () => { clearInterval(networkTimer); detachScoring(); detachMission(); detachPlacement(); observer?.disconnect(); window.removeEventListener('resize', resize); document.removeEventListener('visibilitychange',visibilityClock); bridge.stopExecution(); simulator.stop(); };
   }, []);
 
   useEffect(() => {
@@ -148,7 +150,7 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
       // Execute C++ code if loaded
       if (bridge) {
         try {
-          bridge.executeStep(performance.now());
+          bridge.executeStep(performance.now(),8);
           if (!bridge.isExecuting()) { sim.stop(); setIsRunning(false); finishScore(bridge.getCompletionReason()==='time-limit'?'Hết 2 phút · STOP':'C++ đã kết thúc'); addLog(bridge.getCompletionReason()==='time-limit'?'[OK] Hết 2 phút, đã dừng robot':'[OK] Chương trình kết thúc'); }
         } catch (error) {
           sim.stop(); setIsRunning(false);
@@ -226,7 +228,7 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
     scoringStartPose.current=simulatorRef.current.getRobotPose();
     simulatorRef.current.start();
     simulatorRef.current.setMotorSpeeds(0, 0);
-    bridgeRef.current.startExecution();
+    bridgeRef.current.startExecution(performance.now());
     setIsRunning(true);
     setIsPaused(false);
 
@@ -247,11 +249,18 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
   const handlePause = () => {
     if (!simulatorRef.current) return;
     if (isPaused) {
-      bridgeRef.current?.resetClock();
+      bridgeRef.current?.resetClock(performance.now());
       simulatorRef.current.resume();
       setIsPaused(false);
       addLog('Đã tiếp tục mô phỏng');
     } else {
+      try {
+        bridgeRef.current?.executeStep(performance.now(),8);
+        if(!bridgeRef.current?.isExecuting()) {
+          simulatorRef.current.stop();setIsRunning(false);
+          finishScore(bridgeRef.current?.getCompletionReason()==='time-limit'?'Hết 2 phút · STOP':'C++ đã kết thúc');return;
+        }
+      } catch(error) {handleStop();addLog(`[ERROR] ${error instanceof Error?error.message:String(error)}`);return;}
       simulatorRef.current.pause();
       setIsPaused(true);
       addLog('Đã tạm dừng mô phỏng');
@@ -280,7 +289,7 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
     if (!simulatorRef.current) return;
     if (isRunning && !isPaused) {
       try {
-        bridgeRef.current?.executeStep(performance.now());
+        bridgeRef.current?.executeStep(performance.now(),8);
         if (!bridgeRef.current?.isExecuting()) { simulatorRef.current.stop(); setIsRunning(false); finishScore(bridgeRef.current?.getCompletionReason()==='time-limit'?'Hết 2 phút · STOP':'C++ đã kết thúc'); }
       } catch (error) {
         handleStop();
