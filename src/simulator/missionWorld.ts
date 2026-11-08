@@ -10,7 +10,7 @@ export interface MissionBlock {
   id: string; kind: BlockKind; color: BlockColor; x: number; y: number; rotation: number;
   originZone?: string; elevation?: number; offBoard?: boolean; verticalVelocity?: number;
   slotId?: string; vx: number; vy: number; spin: number; tilt: number; tipSpeed: number;
-  state: 'standing' | 'falling' | 'fallen'; held: boolean; mass: number;
+  state: 'standing' | 'falling' | 'fallen'; held: boolean; heldBy?:string; mass: number;
 }
 interface Slot { id: string; x: number; y: number; rotation: number }
 interface Box { x: number; y: number; rotation: number; length: number; width: number }
@@ -53,6 +53,8 @@ function contact(a: Box, b: Box) {
 /** 2.5D rigid-block approximation: oriented collisions, Coulomb friction and tipping. */
 export class MissionWorld {
   blocks: MissionBlock[] = [];
+  hidePollutionColors=false;
+  integrateFreeBodies=true;
   friction = 0.35;
   restitution = 0.1;
   private initial: MissionBlock[] = [];
@@ -64,10 +66,10 @@ export class MissionWorld {
   private gripVelocity = { x: 0, y: 0 };
   private lastPose?: Pose;
   private regripBlocked = new Set<string>();
-  constructor(readonly board: Pick<BoardConfig, 'width' | 'height' | 'cityZones' | 'storageSites'>) {}
+  constructor(readonly board: Pick<BoardConfig, 'width' | 'height' | 'cityZones' | 'storageSites' | 'analysisArea'>,readonly actorId='local') {}
   subscribe(fn: () => void) { this.listeners.add(fn); return () => { this.listeners.delete(fn); }; }
   changed() { this.listeners.forEach(fn => fn()); }
-  get heldBlock() { return this.blocks.find(b => b.held); }
+  get heldBlock() { return this.blocks.find(b => b.held&&(!b.heldBy||b.heldBy===this.actorId)); }
   get hasMotion() { return this.blocks.some(b => !b.held && (Math.hypot(b.vx, b.vy) > 0.01 || Math.abs(b.spin) > 0.01 || b.state === 'falling' || (!!b.offBoard && (b.elevation??0)>-750))); }
   slots(kind: BlockKind): Slot[] {
     return kind === 'pollution' ? (this.board.cityZones ?? []).flatMap(z => z.sites) : this.board.storageSites ?? [];
@@ -180,7 +182,7 @@ export class MissionWorld {
     const block=this.heldBlock;if(!block)return;
     this.syncHeld(pose);
     if(inhibitRegrip)this.regripBlocked.add(block.id);
-    const v=this.pointVelocity(block,pose);block.held=false;block.vx=v.x;block.vy=v.y;block.spin=this.velocity.omega/RAD;
+    const v=this.pointVelocity(block,pose);block.held=false;block.heldBy=undefined;block.vx=v.x;block.vy=v.y;block.spin=this.velocity.omega/RAD;
     // Sliding slowly does not automatically topple an upright block. It needs
     // enough kinetic energy to lift the centre of mass over a support edge.
     const speed=Math.hypot(v.x,v.y),a=Math.atan2(v.y,v.x)-block.rotation*RAD;
@@ -221,7 +223,7 @@ export class MissionWorld {
     }).sort((a,b)=>Math.hypot(a.x-point.x,a.y-point.y)-Math.hypot(b.x-point.x,b.y-point.y));
     const block=candidates[0];if(!block)return;
     this.heldAnchor=this.local(block,pose); // bind at contact; never snap to a fixed centre
-    block.held=true;block.slotId=undefined;
+    block.held=true;block.heldBy=this.actorId;block.slotId=undefined;
     const v=this.pointVelocity(block,pose);block.vx=v.x;block.vy=v.y;block.spin=this.velocity.omega/RAD;
     this.gripVelocity={...v};
     this.lastPose={...pose};this.changed();
@@ -273,6 +275,7 @@ export class MissionWorld {
     const robotBoxes=ROBOT_SHAPES.map(shape=>({...shape,x:pose.x+shape.x*cos-shape.y*sin,y:pose.y+shape.x*sin+shape.y*cos,rotation:pose.heading}));
     for (const b of this.blocks) {
       if (b.held) continue;
+      if(this.integrateFreeBodies) {
       if(!b.offBoard&&(b.x<0||b.y<0||b.x>this.board.width||b.y>this.board.height)) { b.offBoard=true;b.elevation=0;b.verticalVelocity=0;b.slotId=undefined;this.changed(); }
       if(b.offBoard) {
         if((b.elevation??0)>-750) {
@@ -296,6 +299,8 @@ export class MissionWorld {
         b.x += Math.cos(b.rotation*RAD)*shift; b.y += Math.sin(b.rotation*RAD)*shift;
         if (b.tilt === Math.PI/2) { b.state = 'fallen'; b.tipSpeed = 0; this.changed(); }
       }
+      }
+      if(b.offBoard)continue;
       for (const box of robotBoxes) {
         const hit = contact(box,blockBox(b));
         if (!hit) continue;
@@ -321,6 +326,8 @@ export class MissionWorld {
     // Carried objects use the actual point velocity, including angular motion.
     for(let i=0;i<this.blocks.length;i++)for(let j=i+1;j<this.blocks.length;j++) {
       const a=this.blocks[i],b=this.blocks[j];if(a.offBoard||b.offBoard)continue;
+      if((a.held&&a.heldBy&&a.heldBy!==this.actorId)||(b.held&&b.heldBy&&b.heldBy!==this.actorId))continue;
+      if(!this.integrateFreeBodies&&!a.held&&!b.held)continue;
       const sa=blockFootprint(a),sb=blockFootprint(b),reach=(sa.length+sa.width+sb.length+sb.width)/2;
       if(Math.abs(a.x-b.x)>reach||Math.abs(a.y-b.y)>reach)continue;
       const hit=contact(blockBox(a),blockBox(b));if(!hit)continue;
@@ -365,11 +372,12 @@ export function drawMissionBlocks(ctx: CanvasRenderingContext2D, world: MissionW
     if(b.offBoard){const t=Math.min(1,-(b.elevation??0)/750);ctx.globalAlpha=1-.85*t;ctx.scale(1-.4*t,1-.4*t);}
     ctx.rotate(b.rotation*RAD);
     ctx.fillStyle='rgba(0,0,0,.22)'; ctx.fillRect(-shape.length/2+3,-shape.width/2+4,shape.length,shape.width);
-    ctx.fillStyle=BLOCK_COLORS[b.color]; ctx.strokeStyle=b.held?'#fff':'#26333a'; ctx.lineWidth=b.held?2:0.8;
+    const hidden=world.hidePollutionColors&&b.kind==='pollution';
+    ctx.fillStyle=hidden?'#9ca8ae':BLOCK_COLORS[b.color]; ctx.strokeStyle=b.held?'#fff':'#26333a'; ctx.lineWidth=b.held?2:0.8;
     ctx.fillRect(-shape.length/2,-shape.width/2,shape.length,shape.width);
     ctx.strokeRect(-shape.length/2,-shape.width/2,shape.length,shape.width);
     ctx.fillStyle='rgba(255,255,255,.2)'; ctx.fillRect(-shape.length/2,-shape.width/2,shape.length,Math.min(3,shape.width));
-    if (b.color==='mystery') { ctx.fillStyle='#344357';ctx.font='bold 14px sans-serif';ctx.textAlign='center';ctx.fillText('?',0,4); }
+    if (hidden||b.color==='mystery') { ctx.fillStyle='#344357';ctx.font='bold 14px sans-serif';ctx.textAlign='center';ctx.fillText('?',0,4); }
     // A symbolic white band stays inside the shared top-down footprint.
     if (b.kind==='neutralizer') {
       ctx.fillStyle='#f3efe0';

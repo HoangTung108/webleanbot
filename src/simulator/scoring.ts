@@ -9,7 +9,8 @@ export const SCORE_CATEGORIES = {
   master: {name:'Master', pollution:['green','blue','red','yellow','purple','yellow','mystery'], neutralizers:['green','blue','purple'], robots:2},
 } as const;
 export type ScoreCategory = keyof typeof SCORE_CATEGORIES;
-export const RULEBOOK_URL = 'https://drive.google.com/file/d/1KBwprFcB4-8hPliPkTJlqjujqLcO3FP_/view';
+export const RULEBOOK_URL = 'https://drive.google.com/file/d/1fJczHjPiiQfXwryGKQHC2LIvRvlHgr5E/view';
+export const TECHNICAL_RULEBOOK_URL='https://drive.google.com/file/d/1KBwprFcB4-8hPliPkTJlqjujqLcO3FP_/view';
 export const ROUND_LIMIT_MS = 120000;
 interface Rect {x:number;y:number;width:number;height:number;rotation:number}
 export interface ScoreResult {
@@ -69,7 +70,7 @@ export function calculateScore(board:BoardConfig,blocks:MissionBlock[],category:
   score.total=score.containment+score.neutralization+score.analysis+score.mystery+score.returned;
   return score;
 }
-export function robotWithinCRL(board:BoardConfig,pose:Pose) {
+export function robotWithinCRL(board:Pick<BoardConfig,'analysisArea'>,pose:Pose) {
   const a=pose.heading*Math.PI/180;
   return !!board.analysisArea&&within(corners(pose.x-2*Math.cos(a),pose.y-2*Math.sin(a),LEANBOT_GEOMETRY.length,LEANBOT_GEOMETRY.width,pose.heading),board.analysisArea);
 }

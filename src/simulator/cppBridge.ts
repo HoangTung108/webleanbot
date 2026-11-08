@@ -27,6 +27,7 @@ export class CppSimulatorBridge {
   private runtime?: CppRuntime;
   private lastTick?: number;
   private pendingTime = 0;
+  private roundClockActive=false;
   private logs: string[] = [];
   private elapsed = 0;
   private completionReason: 'program' | 'time-limit' | undefined;
@@ -78,14 +79,14 @@ export class CppSimulatorBridge {
     if(this.runtime?.running)this.runtime.tick(0);
     while(this.isExecuting()) {
       const slice=Math.min(5,Math.max(0,ROUND_LIMIT_MS-this.elapsed));
-      if(slice<=1e-8) {this.runtime?.stop();this.simulator.stop();this.completionReason='time-limit';break;}
+      if(slice<=1e-8) {this.runtime?.stop();this.simulator.stop();this.completionReason='time-limit';this.roundClockActive=false;break;}
       if(this.pendingTime+1e-8<slice||performance.now()>=deadline)break;
       const before=this.simulator.getSimulationState().currentTime;
-      if(this.simulator.getFallState().status==='falling')this.simulator.advanceSimulatedTime(slice);
+      if(this.simulator.getFallState().status==='falling'||!this.runtime?.running)this.simulator.advanceSimulatedTime(slice);
       else this.runtime?.tick(slice);
       this.pendingTime=Math.max(0,this.pendingTime-slice);
       this.elapsed+=this.simulator.getSimulationState().currentTime-before;
-      if(this.elapsed>=ROUND_LIMIT_MS-1e-6) {this.runtime?.stop();this.simulator.stop();this.completionReason='time-limit';break;}
+      if(this.elapsed>=ROUND_LIMIT_MS-1e-6) {this.runtime?.stop();this.simulator.stop();this.completionReason='time-limit';this.roundClockActive=false;break;}
     }
     if (!this.runtime?.running && !this.isExecuting() && !this.completionReason) this.completionReason='program';
     if (this.simulator.getFallState().status === 'fallen') {
@@ -105,12 +106,15 @@ export class CppSimulatorBridge {
 
   resetClock(currentTime?:number): void { this.lastTick = currentTime; }
 
-  isExecuting(): boolean { return (this.runtime?.running ?? false) || (this.simulator.getFallState().status === 'falling' && this.simulator.getSimulationState().isRunning); }
+  isProgramRunning():boolean {return this.runtime?.running??false;}
+
+  isExecuting(): boolean { return (this.roundClockActive&&this.simulator.getSimulationState().isRunning)||(this.runtime?.running ?? false) || (this.simulator.getFallState().status === 'falling' && this.simulator.getSimulationState().isRunning); }
 
   /**
    * Start executing command queue
    */
-  startExecution(currentTime?:number): void {
+  startExecution(currentTime?:number,options?:{keepRoundClock?:boolean}): void {
+    this.roundClockActive=options?.keepRoundClock??false;
     this.elapsed=0;this.pendingTime=0;this.completionReason=undefined;
     this.runtime?.start();
     this.lastTick = currentTime;
@@ -123,7 +127,7 @@ export class CppSimulatorBridge {
    */
   stopExecution(): void {
     this.runtime?.stop();
-    this.pendingTime=0;
+    this.pendingTime=0;this.roundClockActive=false;
     this.commandQueue.isExecuting = false;
     this.simulator.setMotorSpeeds(0, 0);
   }
@@ -147,7 +151,7 @@ export class CppSimulatorBridge {
    */
   reset(): void {
     this.runtime?.stop();
-    this.lastTick = undefined;this.pendingTime=0;
+    this.lastTick = undefined;this.pendingTime=0;this.roundClockActive=false;
     this.commandQueue.currentIndex = 0;
     this.commandQueue.isExecuting = false;
     this.logs = [];

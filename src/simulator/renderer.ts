@@ -82,7 +82,7 @@ export class SimulatorRenderer {
     if (board.backgroundImage) {
       this.boardImage = new Image();
       this.boardImage.onload = () => { this.boardRaster=undefined;this.render(); };
-      this.boardImage.src = `${import.meta.env.BASE_URL}${board.backgroundImage.replace(/^\//, '')}?v=crl-green-full-v2`;
+      this.boardImage.src = `${import.meta.env.BASE_URL}${board.backgroundImage.replace(/^\//, '')}?v=gameplay-sites-v3`;
     }
   }
 
@@ -194,18 +194,20 @@ export class SimulatorRenderer {
     this.fitBoardToCanvas();
   }
 
-  enablePlacement(onChange?: (pose: Pose) => void): () => void {
+  enablePlacement(onChange?: (pose: Pose) => void,canPlace:()=>boolean=()=>true,requestPlacement?:(pose:Pose)=>boolean): () => void {
     let dragging = false;
     let dx = 0, dy = 0;
     const place = (event: PointerEvent) => {
-      if (this.simulator.getSimulationState().isRunning) return;
+      if (this.simulator.getSimulationState().isRunning||!canPlace()) return;
       const point = this.clientToBoard(event.clientX, event.clientY);
-      this.simulator.setPose({ ...this.simulator.getRobotPose(), x: point.x - dx, y: point.y - dy });
+      const requested={ ...this.simulator.getRobotPose(), x: point.x - dx, y: point.y - dy };
+      if(requestPlacement?.(requested))return;
+      this.simulator.setPose(requested);
       onChange?.(this.simulator.getRobotPose());
       this.render();
     };
     const down = (event: PointerEvent) => {
-      if (event.button !== 0 || this.simulator.getSimulationState().isRunning) return;
+      if (event.button !== 0 || this.simulator.getSimulationState().isRunning||!canPlace()) return;
       const point = this.clientToBoard(event.clientX, event.clientY);
       const pose = this.simulator.getRobotPose();
       const onRobot = Math.hypot(point.x - pose.x, point.y - pose.y) < LEANBOT_APPEARANCE.collisionRadius;

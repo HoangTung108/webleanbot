@@ -1,3 +1,4 @@
+import type {OnlineCommand,OnlineCompetitionState} from '../simulator/onlineCompetition';
 import {isFinitePose} from '../simulator/robotCollision';
 /**
  * Robot Network Manager - Multi-robot online synchronization
@@ -21,7 +22,7 @@ export interface RoomConfig {
   maxPeers: number;
 }
 
-export type NetworkEventType = 'connected' | 'disconnected' | 'peer-joined' | 'peer-left' | 'state-sync' | 'pose-correction' | 'error';
+export type NetworkEventType = 'connected' | 'disconnected' | 'peer-joined' | 'peer-left' | 'state-sync' | 'pose-correction' | 'competition-state' | 'error';
 
 export interface NetworkEvent {
   type: NetworkEventType;
@@ -31,6 +32,15 @@ export interface NetworkEvent {
 
 export class RobotNetworkManager {
   private joined = false;
+  private competition:OnlineCompetitionState|null=null;
+  private ownerId='';
+  private competitionProtocol=0;
+  getCompetitionState(){return this.competition;}
+  isHost(){return this.ownerId===this.clientId;}
+  sendCompetitionCommand(command:OnlineCommand){
+    if(!this.isConnected()||this.competitionProtocol!==1){this.emit('error',undefined,'Máy chủ chưa hỗ trợ phiên thi online. Cần triển khai backend mới.');return;}
+    this.sendMessage({type:'competition-command',command:{sessionId:this.competition?.sessionId,round:this.competition?.round,...command}});
+  }
   private password?: string;
   private creating = false;
   private ws: WebSocket | null = null;
@@ -58,7 +68,7 @@ export class RobotNetworkManager {
   }
 
   private initializeListeners() {
-    const eventTypes: NetworkEventType[] = ['connected', 'disconnected', 'peer-joined', 'peer-left', 'state-sync', 'pose-correction', 'error'];
+    const eventTypes: NetworkEventType[] = ['connected', 'disconnected', 'peer-joined', 'peer-left', 'state-sync', 'pose-correction', 'competition-state', 'error'];
     eventTypes.forEach(type => {
       this.listeners.set(type, new Set());
     });
@@ -181,6 +191,7 @@ export class RobotNetworkManager {
             const message = JSON.parse(event.data);
             if (message.type === 'room-joined') {
               this.joined = true;
+              this.ownerId=message.ownerId;this.competitionProtocol=message.competitionProtocol??0;
               this.creating = false;
               this.peers.clear();
               for (const peer of message.peers || []) {
@@ -226,6 +237,13 @@ export class RobotNetworkManager {
    */
   private handleMessage(message: any): void {
     switch (message.type) {
+      case 'competition-state':
+        this.competition=message.state;this.ownerId=message.ownerId??this.ownerId;
+        if(this.competition)for(const p of this.competition.players)if(p.id!==this.clientId){
+          if(!this.peers.has(p.id))this.peers.set(p.id,{...p,robotId:p.id,timestamp:Date.now()});
+          this.updatePeerState(p.id,{...p,timestamp:Date.now()});
+        }
+        this.emit('competition-state',this.competition);break;
       case 'peer-joined':
         this.peers.set(message.peerId, {
           id: message.peerId,
@@ -328,6 +346,7 @@ export class RobotNetworkManager {
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     this.reconnectTimer = null;
     this.joined = false;
+    this.competition=null;
     const socket = this.ws;
     this.ws = null;
     socket?.close();

@@ -156,10 +156,13 @@ var LeanbotCpp = (() => {
     return { depth, nx, ny };
   }
   var MissionWorld = class {
-    constructor(board) {
+    constructor(board, actorId = "local") {
       this.board = board;
+      this.actorId = actorId;
     }
     blocks = [];
+    hidePollutionColors = false;
+    integrateFreeBodies = true;
     friction = 0.35;
     restitution = 0.1;
     initial = [];
@@ -181,7 +184,7 @@ var LeanbotCpp = (() => {
       this.listeners.forEach((fn) => fn());
     }
     get heldBlock() {
-      return this.blocks.find((b) => b.held);
+      return this.blocks.find((b) => b.held && (!b.heldBy || b.heldBy === this.actorId));
     }
     get hasMotion() {
       return this.blocks.some((b) => !b.held && (Math.hypot(b.vx, b.vy) > 0.01 || Math.abs(b.spin) > 0.01 || b.state === "falling" || !!b.offBoard && (b.elevation ?? 0) > -750));
@@ -341,6 +344,7 @@ var LeanbotCpp = (() => {
       if (inhibitRegrip) this.regripBlocked.add(block.id);
       const v = this.pointVelocity(block, pose);
       block.held = false;
+      block.heldBy = void 0;
       block.vx = v.x;
       block.vy = v.y;
       block.spin = this.velocity.omega / RAD;
@@ -382,6 +386,7 @@ var LeanbotCpp = (() => {
       if (!block) return;
       this.heldAnchor = this.local(block, pose);
       block.held = true;
+      block.heldBy = this.actorId;
       block.slotId = void 0;
       const v = this.pointVelocity(block, pose);
       block.vx = v.x;
@@ -446,59 +451,62 @@ var LeanbotCpp = (() => {
       const robotBoxes = ROBOT_SHAPES.map((shape) => ({ ...shape, x: pose.x + shape.x * cos - shape.y * sin, y: pose.y + shape.x * sin + shape.y * cos, rotation: pose.heading }));
       for (const b of this.blocks) {
         if (b.held) continue;
-        if (!b.offBoard && (b.x < 0 || b.y < 0 || b.x > this.board.width || b.y > this.board.height)) {
-          b.offBoard = true;
-          b.elevation = 0;
-          b.verticalVelocity = 0;
-          b.slotId = void 0;
-          this.changed();
-        }
-        if (b.offBoard) {
-          if ((b.elevation ?? 0) > -750) {
-            b.x += b.vx * dt;
-            b.y += b.vy * dt;
-            b.rotation += b.spin * dt;
-            b.elevation = Math.max(-750, (b.elevation ?? 0) - (b.verticalVelocity ?? 0) * dt - 0.5 * GRAVITY * dt * dt);
-            b.verticalVelocity = (b.verticalVelocity ?? 0) + GRAVITY * dt;
-            if (b.elevation <= -750) {
-              b.vx = b.vy = b.spin = b.verticalVelocity = b.tipSpeed = 0;
+        if (this.integrateFreeBodies) {
+          if (!b.offBoard && (b.x < 0 || b.y < 0 || b.x > this.board.width || b.y > this.board.height)) {
+            b.offBoard = true;
+            b.elevation = 0;
+            b.verticalVelocity = 0;
+            b.slotId = void 0;
+            this.changed();
+          }
+          if (b.offBoard) {
+            if ((b.elevation ?? 0) > -750) {
+              b.x += b.vx * dt;
+              b.y += b.vy * dt;
+              b.rotation += b.spin * dt;
+              b.elevation = Math.max(-750, (b.elevation ?? 0) - (b.verticalVelocity ?? 0) * dt - 0.5 * GRAVITY * dt * dt);
+              b.verticalVelocity = (b.verticalVelocity ?? 0) + GRAVITY * dt;
+              if (b.elevation <= -750) {
+                b.vx = b.vy = b.spin = b.verticalVelocity = b.tipSpeed = 0;
+                b.state = "fallen";
+                b.tilt = Math.PI / 2;
+                this.changed();
+              }
+            }
+            continue;
+          }
+          const speed = Math.hypot(b.vx, b.vy), next = Math.max(0, speed - this.friction * GRAVITY * dt);
+          if (speed > 0) {
+            b.vx *= next / speed;
+            b.vy *= next / speed;
+          }
+          b.spin *= Math.max(0, 1 - this.friction * 30 * dt);
+          b.x += b.vx * dt;
+          b.y += b.vy * dt;
+          b.rotation += b.spin * dt;
+          if (b.x < 0 || b.y < 0 || b.x > this.board.width || b.y > this.board.height) {
+            b.offBoard = true;
+            b.elevation = 0;
+            b.verticalVelocity = 0;
+            b.slotId = void 0;
+            this.changed();
+            continue;
+          }
+          if (b.state === "falling") {
+            const before = Math.sin(b.tilt);
+            b.tipSpeed += GRAVITY / (BLOCK_SIZE.height * 0.65) * Math.sin(Math.max(0.08, b.tilt)) * dt;
+            b.tilt = Math.min(Math.PI / 2, b.tilt + b.tipSpeed * dt);
+            const shift = BLOCK_SIZE.height / 2 * (Math.sin(b.tilt) - before);
+            b.x += Math.cos(b.rotation * RAD) * shift;
+            b.y += Math.sin(b.rotation * RAD) * shift;
+            if (b.tilt === Math.PI / 2) {
               b.state = "fallen";
-              b.tilt = Math.PI / 2;
+              b.tipSpeed = 0;
               this.changed();
             }
           }
-          continue;
         }
-        const speed = Math.hypot(b.vx, b.vy), next = Math.max(0, speed - this.friction * GRAVITY * dt);
-        if (speed > 0) {
-          b.vx *= next / speed;
-          b.vy *= next / speed;
-        }
-        b.spin *= Math.max(0, 1 - this.friction * 30 * dt);
-        b.x += b.vx * dt;
-        b.y += b.vy * dt;
-        b.rotation += b.spin * dt;
-        if (b.x < 0 || b.y < 0 || b.x > this.board.width || b.y > this.board.height) {
-          b.offBoard = true;
-          b.elevation = 0;
-          b.verticalVelocity = 0;
-          b.slotId = void 0;
-          this.changed();
-          continue;
-        }
-        if (b.state === "falling") {
-          const before = Math.sin(b.tilt);
-          b.tipSpeed += GRAVITY / (BLOCK_SIZE.height * 0.65) * Math.sin(Math.max(0.08, b.tilt)) * dt;
-          b.tilt = Math.min(Math.PI / 2, b.tilt + b.tipSpeed * dt);
-          const shift = BLOCK_SIZE.height / 2 * (Math.sin(b.tilt) - before);
-          b.x += Math.cos(b.rotation * RAD) * shift;
-          b.y += Math.sin(b.rotation * RAD) * shift;
-          if (b.tilt === Math.PI / 2) {
-            b.state = "fallen";
-            b.tipSpeed = 0;
-            this.changed();
-          }
-        }
+        if (b.offBoard) continue;
         for (const box of robotBoxes) {
           const hit = contact(box, blockBox(b));
           if (!hit) continue;
@@ -523,6 +531,8 @@ var LeanbotCpp = (() => {
       for (let i = 0; i < this.blocks.length; i++) for (let j = i + 1; j < this.blocks.length; j++) {
         const a = this.blocks[i], b = this.blocks[j];
         if (a.offBoard || b.offBoard) continue;
+        if (a.held && a.heldBy && a.heldBy !== this.actorId || b.held && b.heldBy && b.heldBy !== this.actorId) continue;
+        if (!this.integrateFreeBodies && !a.held && !b.held) continue;
         const sa = blockFootprint(a), sb = blockFootprint(b), reach = (sa.length + sa.width + sb.length + sb.width) / 2;
         if (Math.abs(a.x - b.x) > reach || Math.abs(a.y - b.y) > reach) continue;
         const hit = contact(blockBox(a), blockBox(b));
@@ -588,14 +598,15 @@ var LeanbotCpp = (() => {
       ctx.rotate(b.rotation * RAD);
       ctx.fillStyle = "rgba(0,0,0,.22)";
       ctx.fillRect(-shape.length / 2 + 3, -shape.width / 2 + 4, shape.length, shape.width);
-      ctx.fillStyle = BLOCK_COLORS[b.color];
+      const hidden = world.hidePollutionColors && b.kind === "pollution";
+      ctx.fillStyle = hidden ? "#9ca8ae" : BLOCK_COLORS[b.color];
       ctx.strokeStyle = b.held ? "#fff" : "#26333a";
       ctx.lineWidth = b.held ? 2 : 0.8;
       ctx.fillRect(-shape.length / 2, -shape.width / 2, shape.length, shape.width);
       ctx.strokeRect(-shape.length / 2, -shape.width / 2, shape.length, shape.width);
       ctx.fillStyle = "rgba(255,255,255,.2)";
       ctx.fillRect(-shape.length / 2, -shape.width / 2, shape.length, Math.min(3, shape.width));
-      if (b.color === "mystery") {
+      if (hidden || b.color === "mystery") {
         ctx.fillStyle = "#344357";
         ctx.font = "bold 14px sans-serif";
         ctx.textAlign = "center";
@@ -652,7 +663,7 @@ var LeanbotCpp = (() => {
       host.querySelectorAll("button,input").forEach((el) => {
         if (el.disabled !== locked) el.disabled = locked;
       });
-      query("[data-summary]").textContent = `${world.blocks.filter((b) => b.kind === "pollution").length} pollution \xB7 ${world.blocks.filter((b) => b.kind === "neutralizer").length} neutralizers${world.heldBlock ? ` \xB7 Carrying ${world.heldBlock.color} ${world.heldBlock.kind}` : ""}`;
+      query("[data-summary]").textContent = `${world.blocks.filter((b) => b.kind === "pollution").length} pollution \xB7 ${world.blocks.filter((b) => b.kind === "neutralizer").length} neutralizers${world.heldBlock ? ` \xB7 Carrying ${world.hidePollutionColors && world.heldBlock.kind === "pollution" ? "unknown" : world.heldBlock.color} ${world.heldBlock.kind}` : ""}`;
       host.querySelectorAll("[data-tool],[data-block-kind]").forEach((button) => {
         const selected = typeof tool === "string" ? button.dataset.tool === tool : button.dataset.blockKind === tool.kind && button.dataset.color === tool.color;
         button.setAttribute("aria-pressed", String(selected));

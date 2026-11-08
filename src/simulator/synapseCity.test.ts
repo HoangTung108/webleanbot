@@ -16,6 +16,12 @@ describe('Synapse City mat', () => {
     }
   });
 
+  it('scores the full green CRL interior up to the inside edge of its black roads',()=>{
+    const area=SYNAPSE_CITY.analysisArea!,road=SYNAPSE_CITY.lines.find(l=>l.id==='synapse-2')!;
+    expect(area.x-area.width/2).toBeCloseTo(road.points[0].x+road.width/2,5);
+    expect(area.y-area.height/2).toBeCloseTo(SYNAPSE_CITY.lines.find(l=>l.id==='synapse-4')!.points[0].y+road.width/2,5);
+  });
+
   it('travels exactly one city side when both wheels advance 325 mm', () => {
     const clock = vi.spyOn(Date, 'now');
     try {

@@ -32,7 +32,7 @@ export function mountMissionEditor(host: HTMLElement, world: MissionWorld, optio
   const controls=()=> {
     const locked=options.locked();lastLocked=locked;
     host.querySelectorAll<HTMLButtonElement|HTMLInputElement>('button,input').forEach(el=>{if(el.disabled!==locked)el.disabled=locked;});
-    query('[data-summary]').textContent=`${world.blocks.filter(b=>b.kind==='pollution').length} pollution · ${world.blocks.filter(b=>b.kind==='neutralizer').length} neutralizers${world.heldBlock?` · Carrying ${world.heldBlock.color} ${world.heldBlock.kind}`:''}`;
+    query('[data-summary]').textContent=`${world.blocks.filter(b=>b.kind==='pollution').length} pollution · ${world.blocks.filter(b=>b.kind==='neutralizer').length} neutralizers${world.heldBlock?` · Carrying ${world.hidePollutionColors&&world.heldBlock.kind==='pollution'?'unknown':world.heldBlock.color} ${world.heldBlock.kind}`:''}`;
     host.querySelectorAll<HTMLButtonElement>('[data-tool],[data-block-kind]').forEach(button=>{
       const selected=typeof tool==='string'?button.dataset.tool===tool:button.dataset.blockKind===tool.kind&&button.dataset.color===tool.color;
       button.setAttribute('aria-pressed',String(selected));

@@ -1,3 +1,5 @@
+import {OnlineCompetition} from './onlineCompetition';
+import type {OnlineCommand} from '../src/simulator/onlineCompetition';
 import {isFinitePose,separateRobots} from '../src/simulator/robotCollision';
 /**
  * Multi-Robot WebSocket Server
@@ -11,6 +13,8 @@ import http from 'http';
 
 interface Room {
   id: string;
+  ownerId?: string;
+  competition?: OnlineCompetition;
   password?: string;
   maxPeers: number;
   clients: Map<string, ClientConnection>;
@@ -32,6 +36,7 @@ interface ClientConnection {
 }
 
 interface Message {
+  command?: OnlineCommand;
   type: string;
   clientId?: string;
   roomId?: string;
@@ -47,19 +52,20 @@ class RobotNetworkServer {
   private wss: WebSocketServer;
   private server: http.Server;
   private port: number;
+  private timer?: ReturnType<typeof setInterval>;
 
   constructor(port: number = 8080) {
     this.port = port;
     this.server = http.createServer((request, response) => {
       if (request.url?.split('?')[0] === '/health') {
         response.writeHead(200, { 'Content-Type': 'application/json' });
-        response.end(JSON.stringify({ ok: true, service: 'leanbot-robot-network' }));
+        response.end(JSON.stringify({ ok: true, service: 'leanbot-robot-network', competitionProtocol: 1, revision: process.env.RENDER_GIT_COMMIT ?? null }));
         return;
       }
       response.writeHead(404, { 'Content-Type': 'text/plain' });
       response.end('Not found');
     });
-    this.wss = new WebSocketServer({ noServer: true });
+    this.wss = new WebSocketServer({ noServer: true,maxPayload:300000 });
     this.setupRoutes();
   }
 
@@ -142,7 +148,25 @@ class RobotNetworkServer {
         this.handleCreateRoom(message, roomId);
         break;
 
+      case 'competition-command':
+        try {
+          room.competition?.advanceWall(performance.now());
+          const cmd=message.command;if(!cmd)throw new Error('Thiếu lệnh phiên thi.');
+          if(cmd.action==='enable'){
+            if(client.id!==room.ownerId||room.competition)throw new Error('Chỉ chủ phòng có thể tạo phiên thi mới.');
+            room.competition=new OnlineCompetition(client.id,[...room.clients.keys()]);
+          }else if(cmd.action==='disable'||cmd.action==='new'){
+            const session=room.competition;
+            if(!session||client.id!==session.ownerId||cmd.sessionId!==session.sessionId||cmd.round!==session.flow.round)throw new Error('Phiên thi hoặc quyền điều khiển không hợp lệ.');
+            if(cmd.action==='new'&&session.flow.phase!=='complete')throw new Error('Cần hoàn tất hai vòng.');
+            if(cmd.action==='disable'&&(session.flow.locked||[...session.players.values()].some(p=>p.locked)))throw new Error('Không thể tắt phiên đang khóa code.');
+            session.dispose();room.competition=cmd.action==='new'?new OnlineCompetition(client.id,[...room.clients.keys()]):undefined;
+          }else {if(!room.competition)throw new Error('Chưa bật phiên thi online.');room.competition.command(client.id,cmd);}
+          this.broadcastCompetition(room);
+        }catch(error){client.ws.send(JSON.stringify({type:'error',message:(error as Error).message}));}
+        break;
       case 'robot-state':
+        if(room.competition)return;
         this.handleRobotStateUpdate(client, message, room);
         break;
 
@@ -186,7 +210,9 @@ class RobotNetworkServer {
       return;
     }
 
+    if(room.competition&&!room.competition.canJoin){client.ws.send(JSON.stringify({type:'error',message:'Phiên thi đã khóa danh sách robot.'}));client.ws.close();return;}
     room.clients.set(client.id, client);
+    room.ownerId??=client.id;room.competition?.addPlayer(client.id);
     client.robotId = Array.from(room.clients.values()).some(c => c !== client && c.robotId === 'Robot-1') ? 'Robot-2' : 'Robot-1';
 
     // Notify existing clients about new peer
@@ -206,6 +232,7 @@ class RobotNetworkServer {
     // Send room info to new client
     client.ws.send(JSON.stringify({
       type: 'room-joined',
+      ownerId:room.ownerId,competitionProtocol:1,
       roomId,
       clientId: client.id,
       robotId: client.robotId,
@@ -218,6 +245,7 @@ class RobotNetworkServer {
         })),
     }));
 
+    this.broadcastCompetition(room);
     console.log(`Client ${client.id} joined room ${roomId}. Total: ${room.clients.size}`);
   }
 
@@ -253,7 +281,10 @@ class RobotNetworkServer {
     const room = this.rooms.get(roomId);
     if (!room || room.clients.get(client.id) !== client) return;
 
+    room.competition?.removePlayer(client.id);
     room.clients.delete(client.id);
+    if(room.ownerId===client.id)room.ownerId=room.clients.keys().next().value;
+    this.broadcastCompetition(room);
     console.log(`Client ${client.id} disconnected. Remaining: ${room.clients.size}`);
 
     // Notify others
@@ -271,21 +302,26 @@ class RobotNetworkServer {
 
     // Clean up empty rooms
     if (room.clients.size === 0) {
-      this.rooms.delete(roomId);
+      room.competition?.dispose();this.rooms.delete(roomId);
       console.log(`Room ${roomId} deleted`);
     }
   }
 
   private findClientRoom(client: ClientConnection): string | null {
     for (const [roomId, room] of this.rooms) {
-      if (room.clients.has(client.id)) {
+      if (room.clients.get(client.id)===client) {
         return roomId;
       }
     }
     return null;
   }
 
+  private broadcastCompetition(room:Room){
+    const data=JSON.stringify({type:'competition-state',state:room.competition?.snapshot()??null,ownerId:room.ownerId});
+    for(const c of room.clients.values())if(c.ws.readyState===WebSocket.OPEN)c.ws.send(data);
+  }
   start() {
+    this.timer=setInterval(()=>{for(const room of this.rooms.values())if(room.competition){room.competition.advanceWall(performance.now());this.broadcastCompetition(room);}},50);
     this.server.listen(this.port, '0.0.0.0', () => {
       console.log(`Robot Network Server running on ws://localhost:${this.port}`);
       console.log('Waiting for connections...');
@@ -293,6 +329,7 @@ class RobotNetworkServer {
   }
 
   stop() {
+    clearInterval(this.timer);for(const room of this.rooms.values())room.competition?.dispose();
     this.wss.close();
     this.server.close();
   }

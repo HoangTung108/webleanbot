@@ -71,3 +71,31 @@ describe('IDE to simulator source connection', () => {
   });
 
 });
+
+it('preserves the announced field across IDE navigation, freezes code, and waits for STOP after program end',()=>{
+ render(<App/>);
+ fireEvent.change(screen.getByLabelText('Editor C++'),{target:{value:'void loop(){LbMission.end();}'}});
+ fireEvent.click(screen.getByRole('button',{name:'Simulator'}));
+ fireEvent.change(screen.getByLabelText('Chế độ giả lập'),{target:{value:'competition'}});
+ fireEvent.change(screen.getByLabelText('Hạng mục thi đấu'),{target:{value:'innovator'}});
+ fireEvent.click(screen.getByRole('button',{name:'Công bố vị trí · Vòng 1'}));
+ expect(screen.getByText(/Màu pollution được giấu/)).toBeTruthy();
+ fireEvent.click(screen.getByRole('button',{name:'IDE'}));
+ fireEvent.click(screen.getByRole('button',{name:'Simulator'}));
+ expect(screen.getByRole('button',{name:'Khóa code · Cách ly'})).toBeTruthy();
+ fireEvent.click(screen.getByRole('button',{name:'Khóa code · Cách ly'}));
+ expect((screen.getByRole('button',{name:'IDE'}) as HTMLButtonElement).disabled).toBe(true);
+ // Simulate an external editor update; execution must use the frozen source.
+ fireEvent.change(screen.getByLabelText('Editor C++'),{target:{value:'void loop(){unknown();}'}});
+ fireEvent.click(screen.getByRole('button',{name:'Công bố màu'}));
+ fireEvent.click(screen.getByRole('button',{name:'Chạy'}));
+ const callback=vi.mocked(requestAnimationFrame).mock.calls.at(-1)![0];act(()=>callback(0));
+ expect(screen.getByLabelText('Raw Score').textContent).toBe('—');
+ expect((screen.getByRole('button',{name:'Tạm dừng'}) as HTMLButtonElement).disabled).toBe(true);
+ expect(screen.getByText('Chờ chốt lượt')).toBeTruthy();
+ fireEvent.click(screen.getByRole('button',{name:'Dừng'}));
+ expect(screen.getByText(/Vòng 1: 40 điểm/)).toBeTruthy();
+ fireEvent.click(screen.getByRole('button',{name:'Chuẩn bị vòng 2'}));
+ expect(screen.getByRole('button',{name:'Công bố vị trí · Vòng 2'})).toBeTruthy();
+ expect(screen.getByText(/Vòng 1: 40 điểm/)).toBeTruthy();
+});

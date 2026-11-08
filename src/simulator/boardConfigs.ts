@@ -4,8 +4,8 @@ export const SYNAPSE_CITY: BoardConfig = {
   "analysisArea": {
     "x": 934.6,
     "y": 934.6,
-    "width": 278.571429,
-    "height": 278.571429,
+    "width": 309.315797,
+    "height": 309.315797,
     "rotation": 0
   },
   "name": "Synapse City — 4 ft × 4 ft",
@@ -704,8 +704,8 @@ export const SYNAPSE_CITY: BoardConfig = {
         {
           "id": "A2",
           "number": 2,
-          "x": 354.242857,
-          "y": 214.957143,
+          "x": 214.957143,
+          "y": 354.242857,
           "width": 13.928571,
           "height": 23.214286,
           "rotation": -45
@@ -713,8 +713,8 @@ export const SYNAPSE_CITY: BoardConfig = {
         {
           "id": "A3",
           "number": 3,
-          "x": 214.957143,
-          "y": 354.242857,
+          "x": 354.242857,
+          "y": 214.957143,
           "width": 13.928571,
           "height": 23.214286,
           "rotation": -45
@@ -755,8 +755,8 @@ export const SYNAPSE_CITY: BoardConfig = {
         {
           "id": "C2",
           "number": 2,
-          "x": 679.242857,
-          "y": 214.957143,
+          "x": 539.957143,
+          "y": 354.242857,
           "width": 13.928571,
           "height": 23.214286,
           "rotation": -45
@@ -764,8 +764,8 @@ export const SYNAPSE_CITY: BoardConfig = {
         {
           "id": "C3",
           "number": 3,
-          "x": 539.957143,
-          "y": 354.242857,
+          "x": 679.242857,
+          "y": 214.957143,
           "width": 13.928571,
           "height": 23.214286,
           "rotation": -45
@@ -806,8 +806,8 @@ export const SYNAPSE_CITY: BoardConfig = {
         {
           "id": "F2",
           "number": 2,
-          "x": 1004.242857,
-          "y": 214.957143,
+          "x": 864.957143,
+          "y": 354.242857,
           "width": 13.928571,
           "height": 23.214286,
           "rotation": -45
@@ -815,8 +815,8 @@ export const SYNAPSE_CITY: BoardConfig = {
         {
           "id": "F3",
           "number": 3,
-          "x": 864.957143,
-          "y": 354.242857,
+          "x": 1004.242857,
+          "y": 214.957143,
           "width": 13.928571,
           "height": 23.214286,
           "rotation": -45
@@ -857,8 +857,8 @@ export const SYNAPSE_CITY: BoardConfig = {
         {
           "id": "B2",
           "number": 2,
-          "x": 354.242857,
-          "y": 539.957143,
+          "x": 214.957143,
+          "y": 679.242857,
           "width": 13.928571,
           "height": 23.214286,
           "rotation": -45
@@ -866,8 +866,8 @@ export const SYNAPSE_CITY: BoardConfig = {
         {
           "id": "B3",
           "number": 3,
-          "x": 214.957143,
-          "y": 679.242857,
+          "x": 354.242857,
+          "y": 539.957143,
           "width": 13.928571,
           "height": 23.214286,
           "rotation": -45
@@ -908,8 +908,8 @@ export const SYNAPSE_CITY: BoardConfig = {
         {
           "id": "E2",
           "number": 2,
-          "x": 679.242857,
-          "y": 539.957143,
+          "x": 539.957143,
+          "y": 679.242857,
           "width": 13.928571,
           "height": 23.214286,
           "rotation": -45
@@ -917,8 +917,8 @@ export const SYNAPSE_CITY: BoardConfig = {
         {
           "id": "E3",
           "number": 3,
-          "x": 539.957143,
-          "y": 679.242857,
+          "x": 679.242857,
+          "y": 539.957143,
           "width": 13.928571,
           "height": 23.214286,
           "rotation": -45
@@ -959,8 +959,8 @@ export const SYNAPSE_CITY: BoardConfig = {
         {
           "id": "H2",
           "number": 2,
-          "x": 1004.242857,
-          "y": 539.957143,
+          "x": 864.957143,
+          "y": 679.242857,
           "width": 13.928571,
           "height": 23.214286,
           "rotation": -45
@@ -968,8 +968,8 @@ export const SYNAPSE_CITY: BoardConfig = {
         {
           "id": "H3",
           "number": 3,
-          "x": 864.957143,
-          "y": 679.242857,
+          "x": 1004.242857,
+          "y": 539.957143,
           "width": 13.928571,
           "height": 23.214286,
           "rotation": -45
@@ -1010,8 +1010,8 @@ export const SYNAPSE_CITY: BoardConfig = {
         {
           "id": "D2",
           "number": 2,
-          "x": 354.242857,
-          "y": 864.957143,
+          "x": 214.957143,
+          "y": 1004.242857,
           "width": 13.928571,
           "height": 23.214286,
           "rotation": -45
@@ -1019,8 +1019,8 @@ export const SYNAPSE_CITY: BoardConfig = {
         {
           "id": "D3",
           "number": 3,
-          "x": 214.957143,
-          "y": 1004.242857,
+          "x": 354.242857,
+          "y": 864.957143,
           "width": 13.928571,
           "height": 23.214286,
           "rotation": -45
@@ -1061,8 +1061,8 @@ export const SYNAPSE_CITY: BoardConfig = {
         {
           "id": "G2",
           "number": 2,
-          "x": 679.242857,
-          "y": 864.957143,
+          "x": 539.957143,
+          "y": 1004.242857,
           "width": 13.928571,
           "height": 23.214286,
           "rotation": -45
@@ -1070,8 +1070,8 @@ export const SYNAPSE_CITY: BoardConfig = {
         {
           "id": "G3",
           "number": 3,
-          "x": 539.957143,
-          "y": 1004.242857,
+          "x": 679.242857,
+          "y": 864.957143,
           "width": 13.928571,
           "height": 23.214286,
           "rotation": -45

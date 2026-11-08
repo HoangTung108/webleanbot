@@ -261,3 +261,28 @@ bộ phận tay gắp khi hai robot va nhau.
 Cần triển khai lại cả frontend GitHub Pages và backend Render, sau đó tải lại cả
 hai máy. Backend cũ không phát thông điệp `pose-correction`, nên không thể hiệu
 chỉnh va chạm hai phía chỉ bằng việc cập nhật giao diện.
+
+## Gameplay và hai vòng thi mô phỏng
+
+Xem [bản phân tích và phạm vi](../../docs/GAMEPLAY_ANALYSIS.md) từ tài liệu Gameplay
+02/03/2026 người dùng cung cấp. Giao diện React có thêm chế độ **Thi đấu mô phỏng ·
+2 vòng** bên cạnh luyện tập tự do: công bố vị trí, chuẩn bị, khóa code/cách ly,
+công bố màu rồi thực thi. Innovator/Master che màu pollution trước cách ly.
+C++ kết thúc sớm không tự chấm trong chế độ thi đấu; đồng hồ/vật lý tiếp tục tới
+120 giây hoặc STOP. Cấu hình và giai đoạn được giữ khi về IDE, còn sau khi khóa
+code thì không thể sửa code qua điều hướng. Kết quả hai vòng có Top 5 riêng.
+
+CRL được chấm trên toàn phần xanh bên trong line đen; số site 2 ở dưới trái và
+site 3 ở trên phải được đồng bộ giữa SVG và tọa độ. Runtime IDE HTML vẫn là chế
+độ luyện tập, chưa có bộ điều phối thi đấu hai vòng. Online chưa gộp khối/đồng hồ/
+điểm của cả đội trong luyện tập tự do; chế độ thi đấu online bên dưới dùng server chung. Mỗi vòng hiện hỗ trợ một lần thực thi, không giả lập đầy đủ
+Reset/Restart/Tries của một giải đấu có trọng tài.
+
+
+### Phiên thi online dùng chung
+
+Tạo/vào cùng phòng, chủ phòng chọn **Thi đấu mô phỏng · 2 vòng**. Với hai robot chọn Innovator hoặc Master. Chủ phòng công bố vị trí; mỗi người có thể sửa và chạy thử C++ của mình, đặt robot trong CRL rồi khóa code. Sau khi cả đội đã khóa, chủ phòng công bố màu và bắt đầu lượt. Cả phòng dùng chung tốc độ tua; bất kỳ thành viên nào cũng có thể STOP.
+
+Server thực thi từng chương trình riêng trên cùng `MissionWorld`, giải quyết va chạm robot, quyền giữ khối và chấm điểm đội. C++ chỉ gửi tới server khi chạy thử/khóa code, không có trong snapshot gửi cho đồng đội. Đồng hồ chính thức vẫn chạy khi C++ kết thúc sớm. Giao diện không tự chạy một bản vật lý thứ hai trong phiên này. Mất kết nối trong lượt thi kết thúc lượt cả đội; robot mất kết nối không được Return.
+
+Cần triển khai **cả backend Render và frontend GitHub Pages** từ cùng phiên bản (`npm run build`, backend `npm start`). Backend cũ không hỗ trợ giao thức phiên thi sẽ được báo rõ trên giao diện. Phiên lưu trong RAM; server restart sẽ mất phòng. Mỗi vòng hiện có một lần chạy, chưa hỗ trợ Reset/Tries giữa lượt.

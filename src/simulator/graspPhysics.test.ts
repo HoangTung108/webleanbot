@@ -98,3 +98,23 @@ describe('grip stability with 1 ms feedback loops',()=>{
     }
   });
 });
+
+describe('shared mission grip ownership',()=>{
+ it('allows two robots to hold separate blocks without stealing or releasing each other',()=>{
+  const a=new MissionWorld(SYNAPSE_CITY,'a'),b=new MissionWorld(SYNAPSE_CITY,'b');b.blocks=a.blocks;b.integrateFreeBodies=false;
+  const sites=a.slots('pollution');
+  const first=a.place('pollution','red',sites[0].x,sites[0].y),second=a.place('pollution','blue',sites[4].x,sites[4].y);
+  Object.assign(first,{x:676,y:901,rotation:0});Object.assign(second,{x:876,y:901,rotation:0});
+  a.setGripper(90,90,pose);b.setGripper(90,90,pose);
+  expect(a.heldBlock?.id).toBe(first.id);expect(b.heldBlock).toBeUndefined();
+  b.setGripper(0,0,{...pose,x:800});b.setGripper(90,90,{...pose,x:800});
+  expect(b.heldBlock?.id).toBe(second.id);expect(first.heldBy).toBe('a');expect(second.heldBy).toBe('b');
+  b.setGripper(0,0,{...pose,x:800});expect(first.held).toBe(true);expect(second.held).toBe(false);
+ });
+ it('integrates free-body gravity only once across shared robot views',()=>{
+  const a=new MissionWorld(SYNAPSE_CITY,'a'),b=new MissionWorld(SYNAPSE_CITY,'b');b.blocks=a.blocks;b.integrateFreeBodies=false;
+  const site=a.slots('pollution')[0],block=a.place('pollution','red',site.x,site.y);
+  Object.assign(block,{offBoard:true,elevation:0,verticalVelocity:0,x:1300,y:600});
+  a.step(.005,pose);const height=block.elevation;b.step(.005,{...pose,x:900});expect(block.elevation).toBe(height);
+ });
+});

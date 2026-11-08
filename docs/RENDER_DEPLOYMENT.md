@@ -33,3 +33,12 @@ Sau khi cập nhật code va chạm, deploy lại dịch vụ Render bằng `npm
 và `npm start`, đồng thời deploy frontend GitHub Pages. Server mới phát
 `pose-correction` (vị trí local và snapshot peer) khi hai hitbox chồng nhau.
 Cả hai client cần tải bản giao diện mới để áp dụng hiệu chỉnh và đồng bộ tay gắp.
+
+
+## Cập nhật phiên thi online hai vòng
+
+Deploy backend và frontend từ cùng commit. Backend build: `npm install && npm run build`; start: `npm start`. GitHub Pages vẫn lấy `VITE_WEBSOCKET_URL=wss://webleanbot.onrender.com/ws`.
+
+Máy chủ mới hỗ trợ `competitionProtocol: 1` trong `room-joined`. Khi chủ phòng bật thi đấu, máy chủ giữ cấu hình, code riêng của từng robot, đồng hồ, khối chung và kết quả hai vòng; giao diện chỉ hiển thị snapshot. Cần cả hai người khóa code trước khi công bố màu và chạy. Mất kết nối giữa lượt sẽ STOP và chốt điểm đội. Dữ liệu phòng chỉ lưu trong RAM, không tồn tại qua restart/deploy Render.
+
+Kiểm tra sau deploy: hai máy vào cùng phòng → chọn Innovator/Master → công bố vị trí → từng máy khóa code → chủ phòng công bố màu/Chạy. Hai máy phải nhận cùng thời gian, khối và Raw Score; Return tối đa 80. Backend cũ sẽ báo chưa hỗ trợ phiên thi thay vì để mỗi máy tự chấm riêng.

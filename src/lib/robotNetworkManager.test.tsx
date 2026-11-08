@@ -123,3 +123,14 @@ it('applies atomic collision snapshots and emits only valid local pose correctio
   socket.message({type:'pose-correction',pose:{x:null,y:0,heading:0}});
   expect(corrected).toHaveBeenCalledTimes(1);manager.disconnect();
 });
+
+it('binds competition commands to the current shared session and preserves peer grippers',async()=>{
+ const manager=new RobotNetworkManager(),pending=manager.connectToRoom('CITY'),socket=Socket.instances[0];
+ socket.readyState=1;socket.onopen?.();socket.message({type:'room-joined',ownerId:manager.getClientId(),competitionProtocol:1,peers:[]});await pending;
+ const snapshots=vi.fn();manager.on('competition-state',snapshots);
+ socket.message({type:'competition-state',state:{sessionId:'session-a',round:2,players:[{id:'peer',pose:{x:900,y:800,heading:90},gripper:{left:72,right:73},supported:true,motorLeft:0,motorRight:0}]}});
+ manager.sendCompetitionCommand({action:'lock-code',code:'void loop(){}'});
+ expect(JSON.parse(socket.send.mock.calls.at(-1)![0])).toEqual({type:'competition-command',command:{sessionId:'session-a',round:2,action:'lock-code',code:'void loop(){}'}});
+ expect(manager.getPeerState('peer')?.gripper).toEqual({left:72,right:73});expect(snapshots).toHaveBeenCalledOnce();expect(manager.isHost()).toBe(true);
+ manager.disconnect();expect(manager.getCompetitionState()).toBeNull();
+});

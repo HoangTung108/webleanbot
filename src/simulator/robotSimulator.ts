@@ -38,6 +38,9 @@ const MM_TO_PIXELS = 0.5; // conversion for rendering
 
 export class RobotSimulator {
   mission: MissionWorld;
+  missionStepEnabled=true;
+  peerCollisionEnabled=true;
+  private presentedGripper?:{left:number;right:number};
   private gripper = { left: 0, right: 0 };
   private gripperMotion?: {from:{left:number;right:number};to:{left:number;right:number};duration:number;elapsed:number};
   private state: SimulationState;
@@ -131,11 +134,11 @@ export class RobotSimulator {
   reset(initialPose?: Pose): void {
     this.stop();
     this.fall = {status:'supported',drop:0,velocityZ:0,vx:0,vy:0};
-    this.state.robotState.pose = initialPose || this.board.initialPose || {
+    this.state.robotState.pose = {...(initialPose || this.board.initialPose || {
       x: 100,
       y: 100,
       heading: 0,
-    };
+    })};
     this.state.robotState.velocityLeft = 0;
     this.state.robotState.velocityRight = 0;
     this.state.robotState.accelerationLeft = 0;
@@ -181,6 +184,15 @@ export class RobotSimulator {
     this.state.sensorReadings = this.readSensors();
   }
 
+  presentOnline(state:{pose:Pose;gripper:{left:number;right:number};motorLeft:number;motorRight:number;fall:ReturnType<RobotSimulator['getFallState']>},timeMs:number):void {
+    if(!isFinitePose(state.pose))return;
+    this.peerCollisionEnabled=false;this.presentedGripper={...state.gripper};
+    this.state.robotState.pose={...state.pose};this.state.robotState.velocityLeft=state.motorLeft;this.state.robotState.velocityRight=state.motorRight;
+    this.state.currentTime=timeMs;this.state.isRunning=false;this.state.isPaused=false;this.fall={...state.fall};
+    this.state.sensorReadings=this.readSensors();
+  }
+  releaseOnlinePresentation():void {this.presentedGripper=undefined;this.peerCollisionEnabled=true;this.stop();}
+
   getBoard():BoardConfig {return this.board;}
 
   setRemoteRobots(robots:{pose:Pose;supported?:boolean}[]):void {
@@ -196,7 +208,7 @@ export class RobotSimulator {
   }
 
   private resolveRobotContacts():boolean {
-    if(this.fall.status!=='supported')return false;
+    if(this.fall.status!=='supported'||!this.peerCollisionEnabled)return false;
     let collided=false;
     for(let pass=0;pass<4;pass++) {
       let changed=false;
@@ -237,7 +249,7 @@ export class RobotSimulator {
     if(t>=1)this.gripperMotion=undefined;
   }
 
-  getGripper(): { left: number; right: number } { return this.mission.getGripperAngles(this.getRobotPose()); }
+  getGripper(): { left: number; right: number } { if(this.presentedGripper)return {...this.presentedGripper};return this.mission.getGripperAngles(this.getRobotPose()); }
 
   getRobotPose(): Pose {
     return { ...this.state.robotState.pose };
@@ -324,7 +336,7 @@ export class RobotSimulator {
     }
 
     const stationaryContact=robotCollision&&Math.hypot(pose.x-before.x,pose.y-before.y)<1e-7&&Math.abs(pose.heading-before.heading)<1e-7;
-    this.mission.step(deltaTime,this.getRobotPose(),stationaryContact?0:this.state.robotState.velocityLeft,stationaryContact?0:this.state.robotState.velocityRight);
+    if(this.missionStepEnabled)this.mission.step(deltaTime,this.getRobotPose(),stationaryContact?0:this.state.robotState.velocityLeft,stationaryContact?0:this.state.robotState.velocityRight);
 
     // Read sensors
     this.state.sensorReadings = this.readSensors();
