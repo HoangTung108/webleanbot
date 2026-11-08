@@ -1,3 +1,4 @@
+import {ROBOT_ENVELOPE} from './robotCollision';
 import { drawMissionBlocks } from './missionWorld';
 /**
  * 2D Canvas Renderer for Robot Simulator
@@ -37,10 +38,11 @@ const DEFAULT_RENDERER_OPTIONS: RendererOptions = {
 };
 
 export class SimulatorRenderer {
-  private remoteRobots: { robotId: string; pose: Pose }[] = [];
+  private remoteRobots: { robotId: string; pose: Pose;gripper?:{left:number;right:number};supported?:boolean }[] = [];
 
-  setRemoteRobots(robots: { robotId: string; pose: Pose }[]): void {
+  setRemoteRobots(robots: { robotId: string; pose: Pose;gripper?:{left:number;right:number};supported?:boolean }[]): void {
     this.remoteRobots = robots;
+    this.simulator.setRemoteRobots(robots);
   }
 
   private canvas: HTMLCanvasElement;
@@ -80,7 +82,7 @@ export class SimulatorRenderer {
     if (board.backgroundImage) {
       this.boardImage = new Image();
       this.boardImage.onload = () => { this.boardRaster=undefined;this.render(); };
-      this.boardImage.src = `${import.meta.env.BASE_URL}${board.backgroundImage.replace(/^\//, '')}?v=measured-325-v1`;
+      this.boardImage.src = `${import.meta.env.BASE_URL}${board.backgroundImage.replace(/^\//, '')}?v=crl-green-full-v2`;
     }
   }
 
@@ -146,6 +148,7 @@ export class SimulatorRenderer {
     this.offsetY = centerY - boardPoint.y * newScale;
 
     this.scale = newScale;
+    this.boardRaster=undefined;
     this.constrainViewport();
   }
 
@@ -187,6 +190,7 @@ export class SimulatorRenderer {
    * Reset zoom and pan to fit board
    */
   resetZoom(): void {
+    this.boardRaster=undefined;
     this.fitBoardToCanvas();
   }
 
@@ -245,12 +249,14 @@ export class SimulatorRenderer {
       ctx.translate(center.x, center.y);
       ctx.rotate(robot.pose.heading * Math.PI / 180);
       ctx.scale(this.scale, this.scale);
-      drawLeanbot(ctx);
+      drawLeanbot(ctx,robot.gripper?.left??0,robot.gripper?.right??0);
       ctx.strokeStyle = '#2563eb'; ctx.lineWidth = 3 / this.scale;
-      ctx.strokeRect(-100, -50, 155, 100);
+      ctx.strokeRect(ROBOT_ENVELOPE.x,ROBOT_ENVELOPE.y,ROBOT_ENVELOPE.length,ROBOT_ENVELOPE.width);
       ctx.restore();
       ctx.save(); ctx.fillStyle = '#2563eb'; ctx.font = 'bold 12px system-ui';
-      ctx.fillText(robot.robotId + ' (Online)', center.x - 45, center.y - 55 * this.scale);
+      const a=robot.pose.heading*Math.PI/180;
+      const halfHeight=(Math.abs(Math.sin(a))*ROBOT_ENVELOPE.length+Math.abs(Math.cos(a))*ROBOT_ENVELOPE.width)/2;
+      ctx.fillText(robot.robotId + ' (Online)',center.x-45,center.y-halfHeight*this.scale-8);
       ctx.restore();
     }
 
@@ -531,6 +537,8 @@ export class SimulatorRenderer {
   /**
    * Update renderer options
    */
+  getScale():number {return this.scale;}
+
   setOptions(options: Partial<RendererOptions>): void {
     this.options = { ...this.options, ...options };
   }

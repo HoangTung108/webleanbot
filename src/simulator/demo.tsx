@@ -73,19 +73,36 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
 
     // Network rendering continues while the local program is stopped or paused.
     let peerSignature = "";
-    const networkTimer = setInterval(() => {
-      if (robotNetworkManager.isConnected()) {
-        const state = simulator.getSimulationState();
-        robotNetworkManager.sendRobotState(simulator.getRobotPose(), state.robotState.velocityLeft, state.robotState.velocityRight);
-      }
+    const updatePeers=(render=true)=>{
       const peers=robotNetworkManager.getAllPeers();
-      const signature=peers.map(p=>`${p.robotId}:${p.pose.x}:${p.pose.y}:${p.pose.heading}`).join('|');
+      const signature=peers.map(p=>`${p.id}:${p.pose.x}:${p.pose.y}:${p.pose.heading}:${p.gripper?.left}:${p.gripper?.right}:${p.supported}`).join('|');
       if(signature!==peerSignature) {
         peerSignature=signature;renderer.setRemoteRobots(peers);
         const state=simulator.getSimulationState();
-        if(!state.isRunning||state.isPaused)renderer.render();
+        if(render&&(!state.isRunning||state.isPaused))renderer.render();
       }
+    };
+    const onPeerUpdate=()=>updatePeers();
+    const peerEvents=['state-sync','peer-left','disconnected'] as const;
+    peerEvents.forEach(event=>robotNetworkManager.on(event,onPeerUpdate));
+    const networkTimer = setInterval(() => {
+      if (robotNetworkManager.isConnected()) {
+        const state = simulator.getSimulationState();
+        robotNetworkManager.sendRobotState(simulator.getRobotPose(),state.robotState.velocityLeft,state.robotState.velocityRight,{gripper:simulator.getGripper(),supported:simulator.getFallState().status==='supported'});
+      }
+      updatePeers();
     }, 50);
+    const onCorrection=(event:{data?:any})=>{
+      updatePeers(false);
+      simulator.applyNetworkPose(event.data?.pose);
+      const state=simulator.getSimulationState();
+      if(!state.isRunning||state.isPaused) {
+        const pose=simulator.getRobotPose();setStats(prev=>({...prev,posX:pose.x,posY:pose.y,heading:pose.heading}));
+        setRobotHeading(pose.heading);renderer.render();
+      }
+      setScoreResult(null);
+    };
+    robotNetworkManager.on('pose-correction',onCorrection);
     const bridge = new CppSimulatorBridge(simulator);
 
     simulatorRef.current = simulator;
@@ -119,7 +136,7 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
     resize();
     renderer.render();
     addLog(`Đã tải sa bàn: ${board.name}`);
-    return () => { clearInterval(networkTimer); detachScoring(); detachMission(); detachPlacement(); observer?.disconnect(); window.removeEventListener('resize', resize); document.removeEventListener('visibilitychange',visibilityClock); bridge.stopExecution(); simulator.stop(); };
+    return () => { clearInterval(networkTimer); peerEvents.forEach(event=>robotNetworkManager.off(event,onPeerUpdate)); robotNetworkManager.off('pose-correction',onCorrection); detachScoring(); detachMission(); detachPlacement(); observer?.disconnect(); window.removeEventListener('resize', resize); document.removeEventListener('visibilitychange',visibilityClock); bridge.stopExecution(); simulator.stop(); };
   }, []);
 
   useEffect(() => {
@@ -286,19 +303,16 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
   };
 
   const handleSpeedChange = (multiplier: number) => {
-    if (!simulatorRef.current) return;
-    if (isRunning && !isPaused) {
-      try {
-        bridgeRef.current?.executeStep(performance.now(),8);
-        if (!bridgeRef.current?.isExecuting()) { simulatorRef.current.stop(); setIsRunning(false); finishScore(bridgeRef.current?.getCompletionReason()==='time-limit'?'Hết 2 phút · STOP':'C++ đã kết thúc'); }
-      } catch (error) {
-        handleStop();
-        addLog(`[ERROR] ${error instanceof Error ? error.message : String(error)}`);
-        return;
+    const simulator=simulatorRef.current,bridge=bridgeRef.current;
+    if(!simulator||!bridge)return;
+    try {
+      bridge.setPlaybackSpeed(multiplier,performance.now());
+      if(isRunning&&!isPaused&&!bridge.isExecuting()) {
+        simulator.stop();setIsRunning(false);
+        finishScore(bridge.getCompletionReason()==='time-limit'?'Hết 2 phút · STOP':'C++ đã kết thúc');
       }
-    }
-    simulatorRef.current.setSpeedMultiplier(multiplier);
-    setSpeedMultiplier(multiplier);
+      setSpeedMultiplier(simulator.getSpeedMultiplier());
+    } catch(error) {handleStop();addLog(`[ERROR] ${error instanceof Error?error.message:String(error)}`);}
   };
 
 

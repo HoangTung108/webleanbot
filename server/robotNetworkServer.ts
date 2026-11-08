@@ -1,3 +1,4 @@
+import {isFinitePose,separateRobots} from '../src/simulator/robotCollision';
 /**
  * Multi-Robot WebSocket Server
  * Handles room management and robot state synchronization
@@ -25,6 +26,8 @@ interface ClientConnection {
     motorLeft: number;
     motorRight: number;
     timestamp: number;
+    supported?:boolean;
+    gripper?:{left:number;right:number};
   };
 }
 
@@ -219,23 +222,31 @@ class RobotNetworkServer {
   }
 
   private handleRobotStateUpdate(client: ClientConnection, message: Message, room: Room) {
-    if (!message.state) return;
-
-    client.lastState = message.state;
-
-    // Broadcast state to all other clients in room
-    const syncMessage = {
-      type: 'state-sync',
-      peerId: client.id,
-      robotId: client.robotId,
-      state: message.state,
+    if (!isFinitePose(message.state?.pose)) return;
+    const state=message.state;
+    const grip=state.gripper;
+    client.lastState={
+      pose:{...state.pose},motorLeft:Number.isFinite(state.motorLeft)?Math.max(-65,Math.min(65,state.motorLeft)):0,
+      motorRight:Number.isFinite(state.motorRight)?Math.max(-65,Math.min(65,state.motorRight)):0,
+      timestamp:Date.now(),supported:state.supported!==false,
+      gripper:grip&&[grip.left,grip.right].every(Number.isFinite)?{left:Math.max(0,Math.min(90,grip.left)),right:Math.max(0,Math.min(90,grip.right))}:undefined,
     };
-
-    room.clients.forEach((c, id) => {
-      if (id !== client.id && c.ws.readyState === WebSocket.OPEN) {
-        c.ws.send(JSON.stringify(syncMessage));
+    const corrected=new Set<ClientConnection>();
+    if(client.lastState.supported)for(let pass=0;pass<4;pass++) {
+      let changed=false;
+      for(const other of room.clients.values()) {
+        if(other===client||!other.lastState||other.lastState.supported===false)continue;
+        const separated=separateRobots(client.lastState.pose,other.lastState.pose);if(!separated)continue;
+        client.lastState.pose=separated.a;other.lastState.pose=separated.b;
+        corrected.add(client);corrected.add(other);changed=true;
       }
-    });
+      if(!changed)break;
+    }
+    for(const subject of corrected)if(subject.ws.readyState===WebSocket.OPEN)subject.ws.send(JSON.stringify({type:'pose-correction',pose:subject.lastState!.pose,peers:[...room.clients.values()].filter(peer=>peer!==subject&&peer.lastState).map(peer=>({peerId:peer.id,state:peer.lastState}))}));
+    // Broadcast canonical positions, including corrections to a stationary peer.
+    for(const subject of new Set([client,...corrected]))for(const recipient of room.clients.values()) {
+      if(recipient!==subject&&recipient.ws.readyState===WebSocket.OPEN)recipient.ws.send(JSON.stringify({type:'state-sync',peerId:subject.id,robotId:subject.robotId,state:subject.lastState}));
+    }
   }
 
   private handleClientDisconnect(client: ClientConnection, roomId: string) {

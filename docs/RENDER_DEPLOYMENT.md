@@ -26,3 +26,10 @@ Sau khi đẩy thay đổi lên GitHub, triển khai lại commit mới. Kiểm 
 Lỗi `Command "start" not found` xảy ra sau khi build đã thành công: thiếu script
 khởi động, không phải cảnh báo kích thước bundle Vite. Thông báo `npm audit` là
 vấn đề riêng, không phải nguyên nhân tiến trình thoát trong log này.
+
+## Cập nhật va chạm hai robot
+
+Sau khi cập nhật code va chạm, deploy lại dịch vụ Render bằng `npm run build:network`
+và `npm start`, đồng thời deploy frontend GitHub Pages. Server mới phát
+`pose-correction` (vị trí local và snapshot peer) khi hai hitbox chồng nhau.
+Cả hai client cần tải bản giao diện mới để áp dụng hiệu chỉnh và đồng bộ tay gắp.

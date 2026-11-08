@@ -32,7 +32,7 @@ class LeanbotSimulator2D {
     this.robotRadius = LeanbotCpp.LEANBOT_APPEARANCE.collisionRadius; // conservative footprint radius, mm
     this.boardImage = new Image();
     this.boardImage.onload = () => this.render();
-    this.boardImage.src = new URL('../simulator/synapse-city.svg?v=measured-325-v1', document.baseURI || 'http://localhost/leanbot-ide/').href;
+    this.boardImage.src = new URL('../simulator/synapse-city.svg?v=crl-green-full-v2', document.baseURI || 'http://localhost/leanbot-ide/').href;
     this.speedL = 0;
     this.speedR = 0;
     this.time = 0;

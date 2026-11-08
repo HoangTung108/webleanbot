@@ -110,3 +110,16 @@ describe('multi-robot WebSocket connection', () => {
     expect(Socket.instances).toHaveLength(1)
     manager.disconnect()
   })
+
+it('applies atomic collision snapshots and emits only valid local pose corrections',async()=>{
+  const manager=new RobotNetworkManager(),corrected=vi.fn();manager.on('pose-correction',corrected);
+  const connecting=manager.connectToRoom('CITY'),socket=Socket.instances[0];socket.open();await connecting;
+  socket.message({type:'peer-joined',peerId:'other',robotId:'Robot-2'});
+  expect(manager.getPeerState('other')?.supported).toBe(false);
+  const state={pose:{x:780,y:600,heading:0},motorLeft:0,motorRight:0,timestamp:1,gripper:{left:60,right:70},supported:true};
+  socket.message({type:'pose-correction',pose:{x:600,y:600,heading:0},peers:[{peerId:'other',state}]});
+  expect(corrected).toHaveBeenCalledWith(expect.objectContaining({data:{pose:{x:600,y:600,heading:0}}}));
+  expect(manager.getPeerState('other')).toMatchObject({pose:state.pose,gripper:state.gripper,supported:true});
+  socket.message({type:'pose-correction',pose:{x:null,y:0,heading:0}});
+  expect(corrected).toHaveBeenCalledTimes(1);manager.disconnect();
+});

@@ -1,3 +1,4 @@
+import {isFinitePose,robotContact,robotRayDistance} from './robotCollision';
 import { MissionWorld } from './missionWorld';
 import { LEANBOT_APPEARANCE } from './robotAppearance';
 /**
@@ -45,6 +46,7 @@ export class RobotSimulator {
   private timestep: number = 10; // ms
   private simulationTime: number = 0;
   private lastUpdateTime: number = 0;
+  private remotePoses:Pose[]=[];
   private fall = { status: 'supported' as 'supported' | 'falling' | 'fallen', drop: 0, velocityZ: 0, vx: 0, vy: 0 };
   getFallState() { return { ...this.fall }; }
 
@@ -179,6 +181,34 @@ export class RobotSimulator {
     this.state.sensorReadings = this.readSensors();
   }
 
+  getBoard():BoardConfig {return this.board;}
+
+  setRemoteRobots(robots:{pose:Pose;supported?:boolean}[]):void {
+    this.remotePoses=robots.filter(r=>r.supported!==false&&isFinitePose(r.pose)).map(r=>({...r.pose}));
+    if(this.resolveRobotContacts())this.mission.syncPose(this.getRobotPose());
+    this.state.sensorReadings=this.readSensors();
+  }
+
+  applyNetworkPose(pose:Pose):void {
+    if(!isFinitePose(pose)||this.fall.status!=='supported')return;
+    this.state.robotState.pose={...pose,heading:((pose.heading%360)+360)%360};
+    this.mission.syncPose(this.getRobotPose());this.state.sensorReadings=this.readSensors();
+  }
+
+  private resolveRobotContacts():boolean {
+    if(this.fall.status!=='supported')return false;
+    let collided=false;
+    for(let pass=0;pass<4;pass++) {
+      let changed=false;
+      for(const remote of this.remotePoses){
+        const pose=this.state.robotState.pose,hit=robotContact(pose,remote);if(!hit)continue;
+        pose.x-=hit.nx*(hit.depth+.01);pose.y-=hit.ny*(hit.depth+.01);changed=collided=true;
+      }
+      if(!changed)break;
+    }
+    return collided;
+  }
+
   setHeading(heading: number): void {
     if (this.state.isRunning || !Number.isFinite(heading)) return;
     this.state.robotState.pose.heading = ((heading % 360) + 360) % 360;
@@ -264,6 +294,7 @@ export class RobotSimulator {
 
   private advancePhysicsStep(deltaMilliseconds:number):void {
     const wasSupported=this.fall.status==='supported';
+    const before={...this.state.robotState.pose};
     if(wasSupported)this.advanceGripper(deltaMilliseconds);
     const deltaTime = deltaMilliseconds / 1000;
     this.simulationTime += deltaMilliseconds;
@@ -273,6 +304,7 @@ export class RobotSimulator {
 
     // Check collisions
     if (this.fall.status === 'supported') this.checkCollisions();
+    const robotCollision=this.resolveRobotContacts();
     const pose = this.state.robotState.pose;
     // Approximate centre of mass lies behind the drive axle, inside the PCB.
     const angle = pose.heading*Math.PI/180;
@@ -291,7 +323,8 @@ export class RobotSimulator {
       if (this.fall.drop >= 750) { this.fall.drop = 750; this.fall.status = 'fallen'; this.state.isRunning = false; }
     }
 
-    this.mission.step(deltaTime, this.getRobotPose(), this.state.robotState.velocityLeft, this.state.robotState.velocityRight);
+    const stationaryContact=robotCollision&&Math.hypot(pose.x-before.x,pose.y-before.y)<1e-7&&Math.abs(pose.heading-before.heading)<1e-7;
+    this.mission.step(deltaTime,this.getRobotPose(),stationaryContact?0:this.state.robotState.velocityLeft,stationaryContact?0:this.state.robotState.velocityRight);
 
     // Read sensors
     this.state.sensorReadings = this.readSensors();
@@ -549,6 +582,8 @@ export class RobotSimulator {
     const rayEndY = pose.y + rayLength * Math.sin(headingRad);
 
     let minDistance = this.mission.distance(pose, rayLength);
+    const sensor={x:pose.x+40*Math.cos(headingRad),y:pose.y+40*Math.sin(headingRad)};
+    for(const remote of this.remotePoses)minDistance=Math.min(minDistance,robotRayDistance(sensor,pose.heading,remote,rayLength));
 
     // Check distance to walls
     for (const wall of this.board.walls) {

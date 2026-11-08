@@ -95,6 +95,14 @@ export class CppSimulatorBridge {
     this.commandQueue.isExecuting = this.isExecuting();
   }
 
+  /** Change scheduling rate at a single clock boundary; never restart the
+   * interpreter, rescale wheel commands, or reset the turn's encoder origin. */
+  setPlaybackSpeed(multiplier:number,currentTime:number,maxWorkMs=8):void {
+    if(!Number.isFinite(multiplier)||!Number.isFinite(currentTime))return;
+    if(this.isExecuting())this.executeStep(currentTime,maxWorkMs);
+    this.simulator.setSpeedMultiplier(multiplier);
+  }
+
   resetClock(currentTime?:number): void { this.lastTick = currentTime; }
 
   isExecuting(): boolean { return (this.runtime?.running ?? false) || (this.simulator.getFallState().status === 'falling' && this.simulator.getSimulationState().isRunning); }

@@ -1,3 +1,4 @@
+import {isFinitePose} from '../simulator/robotCollision';
 /**
  * Robot Network Manager - Multi-robot online synchronization
  * Handles WebSocket connection, room management, and state sync
@@ -10,6 +11,8 @@ export interface RobotPeerState {
   motorLeft: number;
   motorRight: number;
   timestamp: number;
+  supported?:boolean;
+  gripper?:{left:number;right:number};
 }
 
 export interface RoomConfig {
@@ -18,7 +21,7 @@ export interface RoomConfig {
   maxPeers: number;
 }
 
-export type NetworkEventType = 'connected' | 'disconnected' | 'peer-joined' | 'peer-left' | 'state-sync' | 'error';
+export type NetworkEventType = 'connected' | 'disconnected' | 'peer-joined' | 'peer-left' | 'state-sync' | 'pose-correction' | 'error';
 
 export interface NetworkEvent {
   type: NetworkEventType;
@@ -55,7 +58,7 @@ export class RobotNetworkManager {
   }
 
   private initializeListeners() {
-    const eventTypes: NetworkEventType[] = ['connected', 'disconnected', 'peer-joined', 'peer-left', 'state-sync', 'error'];
+    const eventTypes: NetworkEventType[] = ['connected', 'disconnected', 'peer-joined', 'peer-left', 'state-sync', 'pose-correction', 'error'];
     eventTypes.forEach(type => {
       this.listeners.set(type, new Set());
     });
@@ -230,6 +233,7 @@ export class RobotNetworkManager {
           pose: message.pose || { x: 0, y: 0, heading: 0 },
           motorLeft: 0,
           motorRight: 0,
+          supported:isFinitePose(message.pose),
           timestamp: Date.now(),
         });
         this.emit('peer-joined', message);
@@ -245,6 +249,13 @@ export class RobotNetworkManager {
         this.emit('state-sync', { peerId: message.peerId, state: message.state });
         break;
 
+      case 'pose-correction':
+        if(isFinitePose(message.pose)){
+          for(const peer of Array.isArray(message.peers)?message.peers:[])this.updatePeerState(peer.peerId,peer.state);
+          this.emit('pose-correction',{pose:message.pose});
+        }
+        break;
+
       case 'error':
         this.emit('error', undefined, message.message);
         break;
@@ -254,13 +265,14 @@ export class RobotNetworkManager {
   /**
    * Send robot state update
    */
-  sendRobotState(pose: { x: number; y: number; heading: number }, motorLeft: number, motorRight: number): void {
+  sendRobotState(pose: { x: number; y: number; heading: number }, motorLeft: number, motorRight: number, details?:{gripper?:{left:number;right:number};supported?:boolean}): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
 
     this.sendMessage({
       type: 'robot-state',
       clientId: this.clientId,
       state: {
+        ...details,
         pose,
         motorLeft,
         motorRight,
@@ -285,8 +297,10 @@ export class RobotNetworkManager {
    */
   private updatePeerState(peerId: string, state: any): void {
     const peer = this.peers.get(peerId);
-    if (peer) {
-      peer.pose = state.pose;
+    if (peer && isFinitePose(state?.pose)) {
+      peer.pose = {...state.pose};
+      peer.supported=state.supported!==false;
+      peer.gripper=state.gripper&&[state.gripper.left,state.gripper.right].every(Number.isFinite)?{left:Math.max(0,Math.min(90,state.gripper.left)),right:Math.max(0,Math.min(90,state.gripper.right))}:undefined;
       peer.motorLeft = state.motorLeft;
       peer.motorRight = state.motorRight;
       peer.timestamp = state.timestamp;

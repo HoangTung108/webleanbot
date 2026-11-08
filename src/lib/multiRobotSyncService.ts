@@ -4,7 +4,7 @@
  */
 
 import { RobotSimulator } from '../simulator/robotSimulator';
-import { robotNetworkManager, type RobotPeerState } from './robotNetworkManager';
+import { robotNetworkManager, type RobotPeerState, type NetworkEventType, type NetworkEvent } from './robotNetworkManager';
 
 export class MultiRobotSyncService {
   private localRobot: RobotSimulator;
@@ -12,6 +12,7 @@ export class MultiRobotSyncService {
   private syncInterval: NodeJS.Timeout | null = null;
   private syncRate = 50; // ms (20 FPS)
   private enabled = false;
+  private unsubscribers:(()=>void)[]=[];
 
   constructor(localRobot: RobotSimulator) {
     this.localRobot = localRobot;
@@ -22,20 +23,30 @@ export class MultiRobotSyncService {
    * Setup network event listeners
    */
   private setupNetworkListeners() {
-    robotNetworkManager.on('peer-joined', (event) => {
+    const listen=(type:NetworkEventType,callback:(event:NetworkEvent)=>void)=>{
+      robotNetworkManager.on(type,callback);this.unsubscribers.push(()=>robotNetworkManager.off(type,callback));
+    };
+    listen('pose-correction',event=>{
+      for(const peer of robotNetworkManager.getAllPeers())this.updateRemoteRobotState(peer.id,peer);
+      this.localRobot.setRemoteRobots(robotNetworkManager.getAllPeers());this.localRobot.applyNetworkPose(event.data?.pose);
+    });
+    listen('disconnected',()=>{this.remoteRobots.clear();this.localRobot.setRemoteRobots([]);});
+    listen('peer-joined', (event) => {
       console.log('Peer joined:', event.data.peerId);
       const remoteRobot = new RobotSimulator();
       this.remoteRobots.set(event.data.peerId, remoteRobot);
     });
 
-    robotNetworkManager.on('peer-left', (event) => {
+    listen('peer-left', (event) => {
       console.log('Peer left:', event.data.peerId);
       this.remoteRobots.delete(event.data.peerId);
+      this.localRobot.setRemoteRobots(robotNetworkManager.getAllPeers());
     });
 
-    robotNetworkManager.on('state-sync', (event) => {
+    listen('state-sync', (event) => {
       const { peerId, state } = event.data;
       this.updateRemoteRobotState(peerId, state);
+      this.localRobot.setRemoteRobots(robotNetworkManager.getAllPeers());
     });
   }
 
@@ -44,6 +55,7 @@ export class MultiRobotSyncService {
    */
   start() {
     if (this.enabled) return;
+    if(!this.unsubscribers.length)this.setupNetworkListeners();
     this.enabled = true;
 
     this.syncInterval = setInterval(() => {
@@ -53,7 +65,8 @@ export class MultiRobotSyncService {
         robotNetworkManager.sendRobotState(
           pose,
           state.robotState.velocityLeft,
-          state.robotState.velocityRight
+          state.robotState.velocityRight,
+          {gripper:this.localRobot.getGripper(),supported:this.localRobot.getFallState().status==='supported'}
         );
       }
     }, this.syncRate);
@@ -79,6 +92,7 @@ export class MultiRobotSyncService {
 
     remoteRobot.setPose(state.pose);
     remoteRobot.setMotorSpeeds(state.motorLeft || 0, state.motorRight || 0);
+    if(state.gripper&&[state.gripper.left,state.gripper.right].every(Number.isFinite))remoteRobot.setGripper(state.gripper.left,state.gripper.right);
   }
 
   /**
@@ -115,7 +129,8 @@ export class MultiRobotSyncService {
   disconnect() {
     this.stop();
     robotNetworkManager.disconnect();
-    this.remoteRobots.clear();
+    this.remoteRobots.clear();this.localRobot.setRemoteRobots([]);
+    this.unsubscribers.splice(0).forEach(dispose=>dispose());
   }
 
   /**

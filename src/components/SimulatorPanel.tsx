@@ -133,7 +133,7 @@ export const SimulatorPanel: React.FC<SimulatorPanelProps> = ({
 
     const animate = () => {
       try {
-        bridgeRef.current?.executeStep(performance.now());
+        bridgeRef.current?.executeStep(performance.now(),8);
         if (!bridgeRef.current?.isExecuting()) { simulator.stop(); setIsRunning(false); }
       } catch (error) {
         bridgeRef.current?.stopExecution();
@@ -170,7 +170,7 @@ export const SimulatorPanel: React.FC<SimulatorPanelProps> = ({
       const result = bridgeRef.current?.loadCode(cppCode ?? '');
       if (!result?.success) { onStatusChange?.(result?.error ?? 'Chưa có code C++'); return; }
       simulator.start();
-      bridgeRef.current?.startExecution();
+      bridgeRef.current?.startExecution(performance.now());
       setIsRunning(true);
       setIsPaused(false);
       onStatusChange?.('Simulation started');
@@ -190,7 +190,7 @@ export const SimulatorPanel: React.FC<SimulatorPanelProps> = ({
   const handlePause = () => {
     if (simulator) {
       if (isPaused) {
-        bridgeRef.current?.resetClock();
+        bridgeRef.current?.resetClock(performance.now());
         simulator.resume();
         setIsPaused(false);
         onStatusChange?.('Simulation resumed');
@@ -235,8 +235,10 @@ export const SimulatorPanel: React.FC<SimulatorPanelProps> = ({
 
   const handleSpeedChange = (multiplier: number) => {
     if (!simulator) return;
-    simulator.setSpeedMultiplier(multiplier);
-    setSpeedMultiplier(multiplier);
+    try {
+      bridgeRef.current?.setPlaybackSpeed(multiplier,performance.now());
+      setSpeedMultiplier(simulator.getSpeedMultiplier());
+    } catch(error) {handleStop();onStatusChange?.(error instanceof Error?error.message:String(error));}
   };
 
 

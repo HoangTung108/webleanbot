@@ -230,3 +230,34 @@ gian tab bị ẩn. Bắt đầu và tiếp tục dùng mốc thời gian ngay t
 
 `playback.test.ts` kiểm tra thời gian hoãn, ngân sách xử lý, pause/đổi tốc độ,
 đồng hồ không hợp lệ và so sánh nguyên trạng vật lý giữa các FPS/hệ số tua.
+
+Khi đổi mức tua trong lúc đang chạy, cả Demo và SimulatorPanel đều gọi
+`bridge.setPlaybackSpeed(multiplier, performance.now())`. Bridge chốt khoảng
+thời gian trước thao tác ở hệ số cũ rồi đổi hệ số cho khoảng sau; không khởi động
+lại C++, không đặt lại encoder và không thay đổi tốc độ tương đối hai bánh.
+`customPlayback.test.ts` chạy toàn bộ code mẫu có `turn_angle` ở 1×, 10× và chuyển
+sang 10× trong pha quay (200/1800/7600 ms), so sánh góc, quãng đường, thời gian và
+vị trí cuối. Mặt sàn lớn trong test chỉ để tách kiểm tra điều khiển khỏi việc rơi;
+sa bàn thật trong ứng dụng vẫn giữ kích thước đã hiệu chỉnh.
+
+## Tỷ lệ và va chạm khi chạy online
+
+`MultiRobotRenderer` dùng lại `SimulatorRenderer`, cùng sa bàn 1219,2 mm, chiều Y
+hướng xuống, scale theo viewport và DPR. Cả hai robot dùng `drawLeanbot` với kích
+thước 180 × 120 × 70 mm; khung online lấy theo cùng envelope, không dùng hình tròn
+bán kính 100 mm hoặc scale cố định 0,5 px/mm. Góc hai càng được gửi cùng trạng thái.
+
+`robotCollision.ts` dùng envelope chữ nhật 180 × 120 mm xoay theo hướng robot.
+Đây là hitbox bảo thủ, chưa mô phỏng riêng từng răng càng. Client chặn xuyên ở mỗi
+bước vật lý; server giải chồng lấn theo hai robot cùng khối lượng và gửi vị trí hiệu
+chỉnh kèm snapshot peer cho cả hai bên. Hiệu chỉnh không reset C++/encoder và mang
+khối đang giữ theo robot. Cảm biến khoảng cách cũng đọc hitbox robot còn lại.
+Robot đã rơi và peer đã ngắt kết nối không còn là vật cản.
+
+Đồng bộ qua mạng vẫn ở 20 Hz; độ trễ có thể tạo hiệu chỉnh vị trí nhỏ. Đây là mô
+phỏng 2,5D kinematic, chưa phải giải lực/biến dạng cứng đầy đủ hoặc mô phỏng từng
+bộ phận tay gắp khi hai robot va nhau.
+
+Cần triển khai lại cả frontend GitHub Pages và backend Render, sau đó tải lại cả
+hai máy. Backend cũ không phát thông điệp `pose-correction`, nên không thể hiệu
+chỉnh va chạm hai phía chỉ bằng việc cập nhật giao diện.

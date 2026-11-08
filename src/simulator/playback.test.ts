@@ -62,3 +62,20 @@ describe('bounded playback with deterministic physics',()=>{
     for(const [frame,multiplier] of [[16.6666667,1],[37.3,2],[33.3333333,5],[125.3,10]])expect(run(frame,multiplier)).toEqual(reference);
   });
 });
+
+describe('speed changes inside a turn',()=>{
+  it('preserves the current turn and applies 10x only after the click timestamp',()=>{
+    const {robot,bridge}=setup('void loop(){LbMotion.runLR(2000,-2000);LbMotion.waitRotationDeg(90);LbMotion.stopAndWait();LbMotion.runLR(2000,2000);LbDelay(100);LbMission.end();}');
+    bridge.executeStep(200);const before=robot.getRobotPose();
+    bridge.setPlaybackSpeed(10,235,Infinity);
+    expect(robot.getSimulationState().currentTime).toBe(235);
+    expect(robot.getRobotPose().heading).toBeGreaterThan(before.heading);
+    expect(robot.getSimulationState().robotState.velocityLeft).toBe(65);
+    expect(robot.getSimulationState().robotState.velocityRight).toBe(-65);
+    bridge.executeStep(400);
+    expect(bridge.isExecuting()).toBe(false);
+    expect(robot.getRobotPose().heading).toBeCloseTo(90,5);
+    expect(robot.getRobotPose().x).toBeCloseTo(600,5);
+    expect(robot.getRobotPose().y).toBeCloseTo(906.5,5);
+  });
+});
