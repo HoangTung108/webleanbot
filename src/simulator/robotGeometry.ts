@@ -13,12 +13,14 @@ export const LEANBOT_GEOMETRY = {
   graspOffset: 75,
   body: { x: -27, y: 0, length: 130, width: 70 },
   wheel: { length: 32.5, width: 20 },
-  gripper: { pivotX: 53, pivotY: 35, openAngle: 0.75, closedAngle: -0.98 },
+  gripper: { pivotX: 53, pivotY: 35, openAngle: 0, closedAngle: -0.98 },
 } as const;
 
 // Fork outline in servo-local coordinates. Both jaws use the same mirrored shape.
 // The fork notch faces the centreline, not the outside of the robot.
-const FINGER = [[0,5],[21,5],[32,1],[33,-4],[26,-9],[19,-3],[15,-3],[22,-14],[18,-18],[9,-13],[1,-4]] as const;
+// Open jaws point forward, as in the supplied overhead photograph IMG_5459.
+// Narrow wooden fork, 35 mm from servo pivot to tip; dimensions remain estimates.
+const FINGER = [[0,3],[26,3],[35,0],[35,-4],[29,-8],[23,-3],[17,-3],[23,-11],[19,-14],[10,-11],[1,-3]] as const;
 export function gripperJaw(side: -1|1, degrees: number) {
   const g=LEANBOT_GEOMETRY.gripper;
   const t=Math.max(0,Math.min(90,degrees))/90,a=g.openAngle+(g.closedAngle-g.openAngle)*t;

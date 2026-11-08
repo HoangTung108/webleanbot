@@ -62,13 +62,13 @@ export function drawLeanbot(ctx: CanvasRenderingContext2D, leftGrip = 0, rightGr
       ctx.strokeStyle=colour;ctx.lineWidth=1.3;ctx.beginPath();ctx.moveTo(1,side*21);ctx.bezierCurveTo(-8,side*(39+offset),19,side*(47+offset),33,side*34);ctx.stroke();
     }
     // Front red bracket and transparent-blue SG90-style servo case.
-    ctx.fillStyle='#b91d2d';ctx.fillRect(34,side*35-11,28,22);
-    ctx.fillStyle='#164790';ctx.fillRect(37,side*35-9,22,18);
-    ctx.fillStyle='#2d77b4';ctx.fillRect(39,side*35-8,13,16);
-    ctx.strokeStyle='#8cb4d6';ctx.lineWidth=.7;ctx.strokeRect(37,side*35-9,22,18);
-    ctx.fillStyle='#a7c7db';ctx.fillRect(40,side*35-6,3,12);
-    ctx.fillStyle='#df629b';ctx.fillRect(54,side*35-10,3,4);
-    ctx.fillStyle='#ece9d6';ctx.beginPath();ctx.arc(53,side*35,4,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#b91d2d';ctx.fillRect(34,side*LEANBOT_GEOMETRY.gripper.pivotY-11,28,22);
+    ctx.fillStyle='#164790';ctx.fillRect(37,side*LEANBOT_GEOMETRY.gripper.pivotY-9,22,18);
+    ctx.fillStyle='#2d77b4';ctx.fillRect(39,side*LEANBOT_GEOMETRY.gripper.pivotY-8,13,16);
+    ctx.strokeStyle='#8cb4d6';ctx.lineWidth=.7;ctx.strokeRect(37,side*LEANBOT_GEOMETRY.gripper.pivotY-9,22,18);
+    ctx.fillStyle='#a7c7db';ctx.fillRect(40,side*LEANBOT_GEOMETRY.gripper.pivotY-6,3,12);
+    ctx.fillStyle='#df629b';ctx.fillRect(54,side*LEANBOT_GEOMETRY.gripper.pivotY-10,3,4);
+    ctx.fillStyle='#ece9d6';ctx.beginPath();ctx.arc(LEANBOT_GEOMETRY.gripper.pivotX,side*LEANBOT_GEOMETRY.gripper.pivotY,4,0,Math.PI*2);ctx.fill();
   }
   // Green sonar PCB with two horizontal silver barrels facing the gripper.
   ctx.fillStyle='#397f6e';ctx.fillRect(19,-27,25,54);
@@ -86,8 +86,8 @@ export function drawLeanbot(ctx: CanvasRenderingContext2D, leftGrip = 0, rightGr
     const jaw=gripperJaw(side,degrees);
     ctx.fillStyle='#eee0c3';ctx.strokeStyle='#b9a886';ctx.lineWidth=.8;
     ctx.beginPath();ctx.moveTo(jaw[0].x,jaw[0].y);for(const p of jaw.slice(1))ctx.lineTo(p.x,p.y);ctx.closePath();ctx.fill();ctx.stroke();
-    ctx.fillStyle='#dce1dc';ctx.beginPath();ctx.arc(53,side*35,2.4,0,Math.PI*2);ctx.fill();
-    ctx.fillStyle='#657d86';ctx.beginPath();ctx.arc(53,side*35,1,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#dce1dc';ctx.beginPath();ctx.arc(LEANBOT_GEOMETRY.gripper.pivotX,side*LEANBOT_GEOMETRY.gripper.pivotY,2.4,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#657d86';ctx.beginPath();ctx.arc(LEANBOT_GEOMETRY.gripper.pivotX,side*LEANBOT_GEOMETRY.gripper.pivotY,1,0,Math.PI*2);ctx.fill();
   }
   ctx.fillStyle='#f9e6d6';ctx.font='bold 5px sans-serif';ctx.fillText('LEANBOT',-59,24);
   ctx.restore();
