@@ -16969,3 +16969,6 @@ node_modules/tsx/node_modules/.bin/esbuild.ps1
 node_modules/tsx/node_modules/@esbuild/win32-x64/esbuild.exe
 node_modules/tsx/node_modules/@esbuild/win32-x64/package.json
 node_modules/tsx/node_modules/@esbuild/win32-x64/README.md
+
+# Generated production network server bundle
+/build-server/

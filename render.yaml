@@ -4,7 +4,7 @@ services:
     runtime: node
     plan: free
     buildCommand: npm ci --include=dev && npm run build:network
-    startCommand: npm run start:network
+    startCommand: npm start
     healthCheckPath: /health
     envVars:
       - key: NODE_ENV

@@ -1,1 +1,1 @@
-web: npx tsx server/robotNetworkServer.ts
+web: npm start
