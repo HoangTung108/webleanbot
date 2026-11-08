@@ -10,6 +10,7 @@
     "build": "npm run build:simulator && tsc -b && vite build",
     "build:simulator": "esbuild src/simulator/cppRuntime.ts --bundle --format=iife --global-name=LeanbotCpp --outfile=public/leanbot-ide/cpp-runtime.js",
     "test": "vitest",
+    "benchmark:simulator": "node --import tsx scripts/benchmark-simulator.ts",
     "test:myblocks": "node scripts/test-myblocks-runtime.cjs",
     "coverage": "vitest run --coverage",
     "preview": "vite preview",

@@ -72,13 +72,19 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
     });
 
     // Network rendering continues while the local program is stopped or paused.
+    let peerSignature = "";
     const networkTimer = setInterval(() => {
       if (robotNetworkManager.isConnected()) {
         const state = simulator.getSimulationState();
         robotNetworkManager.sendRobotState(simulator.getRobotPose(), state.robotState.velocityLeft, state.robotState.velocityRight);
       }
-      renderer.setRemoteRobots(robotNetworkManager.getAllPeers());
-      renderer.render();
+      const peers=robotNetworkManager.getAllPeers();
+      const signature=peers.map(p=>`${p.robotId}:${p.pose.x}:${p.pose.y}:${p.pose.heading}`).join('|');
+      if(signature!==peerSignature) {
+        peerSignature=signature;renderer.setRemoteRobots(peers);
+        const state=simulator.getSimulationState();
+        if(!state.isRunning||state.isPaused)renderer.render();
+      }
     }, 50);
     const bridge = new CppSimulatorBridge(simulator);
 
@@ -121,6 +127,7 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
 
   // Animation loop
   useEffect(() => {
+    let lastStats = -Infinity;
     const animate = () => {
       if (
         !simulatorRef.current ||
@@ -156,17 +163,21 @@ export const SimulatorDemo: React.FC<{ cppCode?: string }> = ({ cppCode }) => {
       // Update stats
       const state = sim.getSimulationState();
       const readings = sim.getSensorReadings();
-      setStats({
-        time: state.currentTime / 1000,
-        frames: state.history.length,
-        posX: state.robotState.pose.x,
-        posY: state.robotState.pose.y,
-        heading: state.robotState.pose.heading,
-        speedL: state.robotState.velocityLeft,
-        speedR: state.robotState.velocityRight,
-        irC: readings.irLine.center,
-        distance: readings.distance || 0,
-      });
+      const now=performance.now();
+      if(now-lastStats>=100||!bridge?.isExecuting()) {
+        lastStats=now;
+        setStats({
+          time: state.currentTime / 1000,
+          frames: state.history.length,
+          posX: state.robotState.pose.x,
+          posY: state.robotState.pose.y,
+          heading: state.robotState.pose.heading,
+          speedL: state.robotState.velocityLeft,
+          speedR: state.robotState.velocityRight,
+          irC: readings.irLine.center,
+          distance: readings.distance || 0,
+        });
+      }
 
       animationRef.current = requestAnimationFrame(animate);
     };

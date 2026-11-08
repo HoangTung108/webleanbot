@@ -24,6 +24,13 @@ export function gripperJaw(side: -1|1, degrees: number) {
   const t=Math.max(0,Math.min(90,degrees))/90,a=g.openAngle+(g.closedAngle-g.openAngle)*t;
   return FINGER.map(([x,y])=>({x:g.pivotX+x*Math.cos(a)-y*Math.sin(a),y:side*(g.pivotY+x*Math.sin(a)+y*Math.cos(a))}));
 }
+// Full-closure sweeps reuse immutable jaw polygons; moving blocks only need
+// rectangle tests. Keep result caching bounded for long sessions.
+const jawSamples = {
+  '-1':Array.from({length:181},(_,i)=>gripperJaw(-1,i/2)),
+  '1':Array.from({length:181},(_,i)=>gripperJaw(1,i/2)),
+};
+const contactCache=new Map<string,{left:number;right:number}>();
 export type GripFootprint={length:number;width:number;rotation:number;x?:number;y?:number};
 function intersects(a:{x:number;y:number}[],b:{x:number;y:number}[]) {
   const inside=(p:{x:number;y:number},poly:{x:number;y:number}[])=>{
@@ -45,8 +52,10 @@ function intersects(a:{x:number;y:number}[],b:{x:number;y:number}[]) {
 /** Limit each finger at its first contact with the entire oriented block. */
 export function fitGripperToBlock(left:number,right:number,width:number,shape?:GripFootprint) {
   const l=Math.max(0,Math.min(90,left)),r=Math.max(0,Math.min(90,right));
-  if(!Number.isFinite(width)||width<=0)return {left:l,right:r};
+  if(!Number.isFinite(width)||width<=0||(l===0&&r===0))return {left:l,right:r};
   const target=shape??{length:15,width,rotation:0};
+  const key=[l,r,target.length,target.width,target.rotation,target.x??LEANBOT_GEOMETRY.graspOffset,target.y??0].map(n=>Math.round(n*1e6)/1e6).join(',');
+  const cached=contactCache.get(key);if(cached)return {...cached};
   const a=target.rotation*Math.PI/180;
   const rectangle=[[-1,-1],[-1,1],[1,1],[1,-1]].map(([x,y])=>({x:(target.x??LEANBOT_GEOMETRY.graspOffset)+x*(target.length+.2)/2*Math.cos(a)-y*(target.width+.2)/2*Math.sin(a),y:(target.y??0)+x*(target.length+.2)/2*Math.sin(a)+y*(target.width+.2)/2*Math.cos(a)}));
   const safe=(t:number,side:-1|1)=>!intersects(gripperJaw(side,t),rectangle);
@@ -54,11 +63,14 @@ export function fitGripperToBlock(left:number,right:number,width:number,shape?:G
     let lo=0,hi=max,found=false;
     for(let step=1;step<=180;step++) {
       const t=max*step/180;
-      if(!safe(t,side)){lo=max*(step-1)/180;hi=t;found=true;break;}
+      if(max===90?intersects(jawSamples[side][step],rectangle):!safe(t,side)){lo=max*(step-1)/180;hi=t;found=true;break;}
     }
     if(!found)return max;
     for(let i=0;i<28;i++){const t=(lo+hi)/2;if(safe(t,side))lo=t;else hi=t;}
     return lo;
   };
-  return {left:firstContact(l,-1),right:firstContact(r,1)};
+  const result={left:firstContact(l,-1),right:firstContact(r,1)};
+  if(contactCache.size>=512)contactCache.clear();
+  contactCache.set(key,result);
+  return {...result};
 }

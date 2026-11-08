@@ -28,8 +28,10 @@ export function mountMissionEditor(host: HTMLElement, world: MissionWorld, optio
   const query=<T extends HTMLElement>(selector:string)=>host.querySelector<T>(selector)!;
   const message=(text:string)=>{query('[data-message]').textContent=text;};
   const guarded=(fn:()=>void)=>{ if(options.locked()) return; try{fn();message('');options.render();}catch(e){message(e instanceof Error?e.message:String(e));} };
+  let lastLocked:boolean|undefined;
   const controls=()=> {
-    host.querySelectorAll<HTMLButtonElement|HTMLInputElement>('button,input').forEach(el=>{el.disabled=options.locked();});
+    const locked=options.locked();lastLocked=locked;
+    host.querySelectorAll<HTMLButtonElement|HTMLInputElement>('button,input').forEach(el=>{if(el.disabled!==locked)el.disabled=locked;});
     query('[data-summary]').textContent=`${world.blocks.filter(b=>b.kind==='pollution').length} pollution · ${world.blocks.filter(b=>b.kind==='neutralizer').length} neutralizers${world.heldBlock?` · Carrying ${world.heldBlock.color} ${world.heldBlock.kind}`:''}`;
     host.querySelectorAll<HTMLButtonElement>('[data-tool],[data-block-kind]').forEach(button=>{
       const selected=typeof tool==='string'?button.dataset.tool===tool:button.dataset.blockKind===tool.kind&&button.dataset.color===tool.color;
@@ -113,7 +115,7 @@ export function mountMissionEditor(host: HTMLElement, world: MissionWorld, optio
     const text=world.serialize();if(text===saved)return;
     try{localStorage.setItem(storageKey,text);saved=text;}catch{message('Mission autosave unavailable. Use Download mission.');}
   };
-  const unsubscribe=world.subscribe(()=>{controls();options.render();persist();});
+  const unsubscribe=world.subscribe(()=>{controls();if(!options.locked())options.render();persist();});
   try {
     const stored=localStorage.getItem(storageKey);
     if(stored&&!world.blocks.length){world.load(stored);saved=world.serialize();}
@@ -122,7 +124,7 @@ export function mountMissionEditor(host: HTMLElement, world: MissionWorld, optio
   } catch { message('Saved mission could not be loaded. Use Open mission or create a new layout.'); }
   const animate=(now:number)=>{
     if(disposed)return;const dt=Math.min(0.1,Math.max(0,(now-lastTime)/1000));lastTime=now;
-    controls();if(!options.locked()&&world.hasMotion){world.step(dt,options.pose());options.render();}
+    if(options.locked()!==lastLocked)controls();if(!options.locked()&&world.hasMotion){world.step(dt,options.pose());options.render();}
     frame=requestAnimationFrame(animate);
   };
   controls();frame=requestAnimationFrame(animate);

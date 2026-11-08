@@ -49,6 +49,11 @@ var LeanbotCpp = (() => {
     const t = Math.max(0, Math.min(90, degrees)) / 90, a = g.openAngle + (g.closedAngle - g.openAngle) * t;
     return FINGER.map(([x, y]) => ({ x: g.pivotX + x * Math.cos(a) - y * Math.sin(a), y: side * (g.pivotY + x * Math.sin(a) + y * Math.cos(a)) }));
   }
+  var jawSamples = {
+    "-1": Array.from({ length: 181 }, (_, i) => gripperJaw(-1, i / 2)),
+    "1": Array.from({ length: 181 }, (_, i) => gripperJaw(1, i / 2))
+  };
+  var contactCache = /* @__PURE__ */ new Map();
   function intersects(a, b) {
     const inside = (p, poly) => {
       let result = false;
@@ -68,8 +73,11 @@ var LeanbotCpp = (() => {
   }
   function fitGripperToBlock(left, right, width, shape) {
     const l = Math.max(0, Math.min(90, left)), r = Math.max(0, Math.min(90, right));
-    if (!Number.isFinite(width) || width <= 0) return { left: l, right: r };
+    if (!Number.isFinite(width) || width <= 0 || l === 0 && r === 0) return { left: l, right: r };
     const target = shape ?? { length: 15, width, rotation: 0 };
+    const key = [l, r, target.length, target.width, target.rotation, target.x ?? LEANBOT_GEOMETRY.graspOffset, target.y ?? 0].map((n) => Math.round(n * 1e6) / 1e6).join(",");
+    const cached = contactCache.get(key);
+    if (cached) return { ...cached };
     const a = target.rotation * Math.PI / 180;
     const rectangle = [[-1, -1], [-1, 1], [1, 1], [1, -1]].map(([x, y]) => ({ x: (target.x ?? LEANBOT_GEOMETRY.graspOffset) + x * (target.length + 0.2) / 2 * Math.cos(a) - y * (target.width + 0.2) / 2 * Math.sin(a), y: (target.y ?? 0) + x * (target.length + 0.2) / 2 * Math.sin(a) + y * (target.width + 0.2) / 2 * Math.cos(a) }));
     const safe = (t, side) => !intersects(gripperJaw(side, t), rectangle);
@@ -77,7 +85,7 @@ var LeanbotCpp = (() => {
       let lo = 0, hi = max, found = false;
       for (let step = 1; step <= 180; step++) {
         const t = max * step / 180;
-        if (!safe(t, side)) {
+        if (max === 90 ? intersects(jawSamples[side][step], rectangle) : !safe(t, side)) {
           lo = max * (step - 1) / 180;
           hi = t;
           found = true;
@@ -92,7 +100,10 @@ var LeanbotCpp = (() => {
       }
       return lo;
     };
-    return { left: firstContact(l, -1), right: firstContact(r, 1) };
+    const result = { left: firstContact(l, -1), right: firstContact(r, 1) };
+    if (contactCache.size >= 512) contactCache.clear();
+    contactCache.set(key, result);
+    return { ...result };
   }
 
   // src/simulator/missionWorld.ts
@@ -101,6 +112,9 @@ var LeanbotCpp = (() => {
   var NEUTRALIZER_COLORS = ["green", "blue", "purple"];
   var RAD = Math.PI / 180;
   var GRAVITY = 9810;
+  var STANDING_FOOTPRINT = { length: BLOCK_SIZE.length, width: BLOCK_SIZE.width };
+  var FALLEN_FOOTPRINT = { length: BLOCK_SIZE.height, width: BLOCK_SIZE.width };
+  var ROBOT_SHAPES = [LEANBOT_GEOMETRY.body, ...[-1, 1].map((side) => ({ x: 0, y: side * LEANBOT_GEOMETRY.wheelBase / 2, ...LEANBOT_GEOMETRY.wheel }))];
   var copy = (blocks) => blocks.map((b) => ({ ...b }));
   var clamp = (n, min, max) => Math.max(min, Math.min(max, n));
   function seededRandom(seed) {
@@ -114,9 +128,17 @@ var LeanbotCpp = (() => {
     };
   }
   function blockFootprint(block) {
+    if (block.tilt === 0) return STANDING_FOOTPRINT;
+    if (block.tilt === Math.PI / 2) return FALLEN_FOOTPRINT;
     return { length: BLOCK_SIZE.length * Math.cos(block.tilt) + BLOCK_SIZE.height * Math.sin(block.tilt), width: BLOCK_SIZE.width };
   }
+  function blockBox(block) {
+    const shape = blockFootprint(block);
+    return { x: block.x, y: block.y, rotation: block.rotation, length: shape.length, width: shape.width };
+  }
   function contact(a, b) {
+    const reach = (a.length + a.width + b.length + b.width) / 2;
+    if (Math.abs(a.x - b.x) > reach || Math.abs(a.y - b.y) > reach) return null;
     const aa = a.rotation * RAD, ba = b.rotation * RAD;
     const axes = [[Math.cos(aa), Math.sin(aa)], [-Math.sin(aa), Math.cos(aa)], [Math.cos(ba), Math.sin(ba)], [-Math.sin(ba), Math.cos(ba)]];
     let depth = Infinity, nx = 0, ny = 0;
@@ -352,7 +374,7 @@ var LeanbotCpp = (() => {
         if (low && (Math.hypot(b.x - point.x, b.y - point.y) > 6 || Math.abs(local.y) > 4)) return false;
         if (low && (Math.abs(Math.cos(local.rotation * RAD)) < 0.96 || Math.hypot(b.vx, b.vy) > 5 || Math.abs(b.spin) > 5 || Math.max(Math.abs(motorLeft), Math.abs(motorRight)) > 10)) return false;
         const body = LEANBOT_GEOMETRY.body, a = pose.heading * RAD;
-        const hit = contact({ ...body, x: pose.x + body.x * Math.cos(a), y: pose.y + body.x * Math.sin(a), rotation: pose.heading }, { ...b, ...blockFootprint(b) });
+        const hit = contact({ ...body, x: pose.x + body.x * Math.cos(a), y: pose.y + body.x * Math.sin(a), rotation: pose.heading }, blockBox(b));
         if (hit && hit.depth > 1) return false;
         return touchesBoth(b);
       }).sort((a, b) => Math.hypot(a.x - point.x, a.y - point.y) - Math.hypot(b.x - point.x, b.y - point.y));
@@ -420,6 +442,8 @@ var LeanbotCpp = (() => {
           held.spin = omega / RAD;
         }
       }
+      const cos = Math.cos(angle), sin = Math.sin(angle);
+      const robotBoxes = ROBOT_SHAPES.map((shape) => ({ ...shape, x: pose.x + shape.x * cos - shape.y * sin, y: pose.y + shape.x * sin + shape.y * cos, rotation: pose.heading }));
       for (const b of this.blocks) {
         if (b.held) continue;
         if (!b.offBoard && (b.x < 0 || b.y < 0 || b.x > this.board.width || b.y > this.board.height)) {
@@ -475,10 +499,8 @@ var LeanbotCpp = (() => {
             this.changed();
           }
         }
-        const robotShapes = [LEANBOT_GEOMETRY.body, ...[-1, 1].map((side) => ({ x: 0, y: side * LEANBOT_GEOMETRY.wheelBase / 2, ...LEANBOT_GEOMETRY.wheel }))];
-        for (const shape of robotShapes) {
-          const box = { ...shape, x: pose.x + shape.x * Math.cos(angle) - shape.y * Math.sin(angle), y: pose.y + shape.x * Math.sin(angle) + shape.y * Math.cos(angle), rotation: pose.heading };
-          const hit = contact(box, { ...b, ...blockFootprint(b) });
+        for (const box of robotBoxes) {
+          const hit = contact(box, blockBox(b));
           if (!hit) continue;
           b.x += hit.nx * (hit.depth + 0.01);
           b.y += hit.ny * (hit.depth + 0.01);
@@ -501,7 +523,9 @@ var LeanbotCpp = (() => {
       for (let i = 0; i < this.blocks.length; i++) for (let j = i + 1; j < this.blocks.length; j++) {
         const a = this.blocks[i], b = this.blocks[j];
         if (a.offBoard || b.offBoard) continue;
-        const hit = contact({ ...a, ...blockFootprint(a) }, { ...b, ...blockFootprint(b) });
+        const sa = blockFootprint(a), sb = blockFootprint(b), reach = (sa.length + sa.width + sb.length + sb.width) / 2;
+        if (Math.abs(a.x - b.x) > reach || Math.abs(a.y - b.y) > reach) continue;
+        const hit = contact(blockBox(a), blockBox(b));
         if (!hit) continue;
         let closing = (b.vx - a.vx) * hit.nx + (b.vy - a.vy) * hit.ny;
         const carried = a.held ? a : b.held ? b : void 0, free = a.held ? b : a;
@@ -621,9 +645,12 @@ var LeanbotCpp = (() => {
         message(e instanceof Error ? e.message : String(e));
       }
     };
+    let lastLocked;
     const controls = () => {
+      const locked = options.locked();
+      lastLocked = locked;
       host.querySelectorAll("button,input").forEach((el) => {
-        el.disabled = options.locked();
+        if (el.disabled !== locked) el.disabled = locked;
       });
       query("[data-summary]").textContent = `${world.blocks.filter((b) => b.kind === "pollution").length} pollution \xB7 ${world.blocks.filter((b) => b.kind === "neutralizer").length} neutralizers${world.heldBlock ? ` \xB7 Carrying ${world.heldBlock.color} ${world.heldBlock.kind}` : ""}`;
       host.querySelectorAll("[data-tool],[data-block-kind]").forEach((button) => {
@@ -807,7 +834,7 @@ var LeanbotCpp = (() => {
     };
     const unsubscribe = world.subscribe(() => {
       controls();
-      options.render();
+      if (!options.locked()) options.render();
       persist();
     });
     try {
@@ -825,7 +852,7 @@ var LeanbotCpp = (() => {
       if (disposed) return;
       const dt = Math.min(0.1, Math.max(0, (now - lastTime) / 1e3));
       lastTime = now;
-      controls();
+      if (options.locked() !== lastLocked) controls();
       if (!options.locked() && world.hasMotion) {
         world.step(dt, options.pose());
         options.render();

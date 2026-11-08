@@ -15,6 +15,9 @@ export interface MissionBlock {
 interface Slot { id: string; x: number; y: number; rotation: number }
 interface Box { x: number; y: number; rotation: number; length: number; width: number }
 const RAD = Math.PI / 180, GRAVITY = 9810;
+const STANDING_FOOTPRINT={length:BLOCK_SIZE.length,width:BLOCK_SIZE.width};
+const FALLEN_FOOTPRINT={length:BLOCK_SIZE.height,width:BLOCK_SIZE.width};
+const ROBOT_SHAPES=[LEANBOT_GEOMETRY.body,...[-1,1].map(side=>({x:0,y:side*LEANBOT_GEOMETRY.wheelBase/2,...LEANBOT_GEOMETRY.wheel}))];
 const copy = (blocks: MissionBlock[]) => blocks.map(b => ({ ...b }));
 const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
 export function seededRandom(seed: number) {
@@ -22,9 +25,18 @@ export function seededRandom(seed: number) {
   return () => { state += 0x6D2B79F5; let x = state; x = Math.imul(x ^ x >>> 15, x | 1); x ^= x + Math.imul(x ^ x >>> 7, x | 61); return ((x ^ x >>> 14) >>> 0) / 4294967296; };
 }
 export function blockFootprint(block: MissionBlock): { length: number; width: number } {
+  if(block.tilt===0)return STANDING_FOOTPRINT;
+  if(block.tilt===Math.PI/2)return FALLEN_FOOTPRINT;
   return { length: BLOCK_SIZE.length * Math.cos(block.tilt) + BLOCK_SIZE.height * Math.sin(block.tilt), width: BLOCK_SIZE.width };
 }
+function blockBox(block:MissionBlock):Box {
+  const shape=blockFootprint(block);
+  return {x:block.x,y:block.y,rotation:block.rotation,length:shape.length,width:shape.width};
+}
 function contact(a: Box, b: Box) {
+  // Conservative axis bounds reject distant pairs before allocating SAT axes.
+  const reach=(a.length+a.width+b.length+b.width)/2;
+  if(Math.abs(a.x-b.x)>reach||Math.abs(a.y-b.y)>reach)return null;
   const aa = a.rotation * RAD, ba = b.rotation * RAD;
   const axes = [[Math.cos(aa), Math.sin(aa)], [-Math.sin(aa), Math.cos(aa)], [Math.cos(ba), Math.sin(ba)], [-Math.sin(ba), Math.cos(ba)]];
   let depth = Infinity, nx = 0, ny = 0;
@@ -203,7 +215,7 @@ export class MissionWorld {
       if(low&&(Math.hypot(b.x-point.x,b.y-point.y)>6||Math.abs(local.y)>4))return false;
       if(low&&(Math.abs(Math.cos(local.rotation*RAD))<.96||Math.hypot(b.vx,b.vy)>5||Math.abs(b.spin)>5||Math.max(Math.abs(motorLeft),Math.abs(motorRight))>10))return false;
       const body=LEANBOT_GEOMETRY.body,a=pose.heading*RAD;
-      const hit=contact({...body,x:pose.x+body.x*Math.cos(a),y:pose.y+body.x*Math.sin(a),rotation:pose.heading},{...b,...blockFootprint(b)});
+      const hit=contact({...body,x:pose.x+body.x*Math.cos(a),y:pose.y+body.x*Math.sin(a),rotation:pose.heading},blockBox(b));
       if(hit&&hit.depth>1)return false;
       return touchesBoth(b);
     }).sort((a,b)=>Math.hypot(a.x-point.x,a.y-point.y)-Math.hypot(b.x-point.x,b.y-point.y));
@@ -257,6 +269,8 @@ export class MissionWorld {
       if(force>this.gripLimit(held))this.release(pose);
       else { held.vx=v.x;held.vy=v.y;held.spin=omega/RAD; }
     }
+    const cos=Math.cos(angle),sin=Math.sin(angle);
+    const robotBoxes=ROBOT_SHAPES.map(shape=>({...shape,x:pose.x+shape.x*cos-shape.y*sin,y:pose.y+shape.x*sin+shape.y*cos,rotation:pose.heading}));
     for (const b of this.blocks) {
       if (b.held) continue;
       if(!b.offBoard&&(b.x<0||b.y<0||b.x>this.board.width||b.y>this.board.height)) { b.offBoard=true;b.elevation=0;b.verticalVelocity=0;b.slotId=undefined;this.changed(); }
@@ -282,10 +296,8 @@ export class MissionWorld {
         b.x += Math.cos(b.rotation*RAD)*shift; b.y += Math.sin(b.rotation*RAD)*shift;
         if (b.tilt === Math.PI/2) { b.state = 'fallen'; b.tipSpeed = 0; this.changed(); }
       }
-      const robotShapes = [LEANBOT_GEOMETRY.body, ...[-1,1].map(side => ({x:0,y:side*LEANBOT_GEOMETRY.wheelBase/2,...LEANBOT_GEOMETRY.wheel}))];
-      for (const shape of robotShapes) {
-        const box = { ...shape, x: pose.x+shape.x*Math.cos(angle)-shape.y*Math.sin(angle), y: pose.y+shape.x*Math.sin(angle)+shape.y*Math.cos(angle), rotation: pose.heading };
-        const hit = contact(box,{ ...b,...blockFootprint(b) });
+      for (const box of robotBoxes) {
+        const hit = contact(box,blockBox(b));
         if (!hit) continue;
         b.x += hit.nx*(hit.depth+0.01); b.y += hit.ny*(hit.depth+0.01); b.slotId = undefined;
         const rvx = this.velocity.x - omega*(b.y-pose.y), rvy = this.velocity.y + omega*(b.x-pose.x);
@@ -309,7 +321,9 @@ export class MissionWorld {
     // Carried objects use the actual point velocity, including angular motion.
     for(let i=0;i<this.blocks.length;i++)for(let j=i+1;j<this.blocks.length;j++) {
       const a=this.blocks[i],b=this.blocks[j];if(a.offBoard||b.offBoard)continue;
-      const hit=contact({...a,...blockFootprint(a)},{...b,...blockFootprint(b)});if(!hit)continue;
+      const sa=blockFootprint(a),sb=blockFootprint(b),reach=(sa.length+sa.width+sb.length+sb.width)/2;
+      if(Math.abs(a.x-b.x)>reach||Math.abs(a.y-b.y)>reach)continue;
+      const hit=contact(blockBox(a),blockBox(b));if(!hit)continue;
       let closing=(b.vx-a.vx)*hit.nx+(b.vy-a.vy)*hit.ny;
       const carried=a.held?a:b.held?b:undefined,free=a.held?b:a;
       if(carried&&closing<0&&free.mass*(-closing)*(1+this.restitution)/dt/1000>this.gripLimit(carried))this.release(pose);

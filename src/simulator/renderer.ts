@@ -54,6 +54,7 @@ export class SimulatorRenderer {
   private viewportWidth = 800;
   private viewportHeight = 600;
   private boardImage?: HTMLImageElement;
+  private boardRaster?: HTMLCanvasElement;
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -78,7 +79,7 @@ export class SimulatorRenderer {
     this.fitBoardToCanvas();
     if (board.backgroundImage) {
       this.boardImage = new Image();
-      this.boardImage.onload = () => this.render();
+      this.boardImage.onload = () => { this.boardRaster=undefined;this.render(); };
       this.boardImage.src = `${import.meta.env.BASE_URL}${board.backgroundImage.replace(/^\//, '')}?v=measured-325-v1`;
     }
   }
@@ -277,8 +278,14 @@ export class SimulatorRenderer {
    */
   private drawBoard(): void {
     if (this.boardImage?.complete && this.boardImage.naturalWidth) {
-      this.context.drawImage(this.boardImage, this.offsetX, this.offsetY,
-        this.board.width * this.scale, this.board.height * this.scale);
+      const width=this.board.width*this.scale,height=this.board.height*this.scale;
+      if(!this.boardRaster) {
+        const raster=document.createElement('canvas'),ratio=Math.max(1,window.devicePixelRatio||1);
+        raster.width=Math.max(1,Math.round(width*ratio));raster.height=Math.max(1,Math.round(height*ratio));
+        const ctx=raster.getContext('2d');
+        if(ctx) {ctx.drawImage(this.boardImage,0,0,raster.width,raster.height);this.boardRaster=raster;}
+      }
+      this.context.drawImage(this.boardRaster??this.boardImage,this.offsetX,this.offsetY,width,height);
     }
 
     // Draw grid if enabled
@@ -532,6 +539,7 @@ export class SimulatorRenderer {
    * Resize canvas
    */
   resizeCanvas(width: number, height: number): void {
+    this.boardRaster=undefined;
     this.viewportWidth = Math.max(1, width);
     this.viewportHeight = Math.max(1, height);
     const ratio = Math.max(1, window.devicePixelRatio || 1);

@@ -191,3 +191,24 @@ mũ theo thời gian, thay vì chia thay đổi vận tốc cho bước cập nh
 Điều này tránh lực giật giả làm tuột khối chỉ vì chương trình dùng `LbDelay(1)`.
 Vận tốc khối khi thả vẫn lấy từ chuyển động thật tại điểm giữ. Padding tiếp xúc
 hình học còn 0,1 mm mỗi mặt để hai càng khép sát khối hơn.
+
+## Hiệu năng giả lập
+
+- Loại cặp vật thể xa bằng giới hạn bảo thủ trước khi kiểm tra SAT; chỉ tạo box
+  với các thuộc tính hình học cần thiết. Tái sử dụng hình thân/bánh trong mỗi bước.
+- Cache tối đa 512 kết quả tiếp xúc càng và các polygon quét cố định. Tọa độ,
+  kích thước, hướng và góc lệnh đều tham gia khóa cache.
+- Sa bàn SVG được raster hóa theo mật độ điểm ảnh màn hình, dùng lại cho từng
+  khung hình và tạo lại khi đổi kích thước. Không giảm độ phân giải sa bàn.
+- React cập nhật số liệu tối đa 10 Hz; canvas vẫn dùng requestAnimationFrame.
+  Không vẽ lại từ bộ đếm mạng khi không có thay đổi hoặc vòng vẽ đang chạy.
+- Lịch sử đường đi lấy mẫu 50 Hz, tối đa 6001 điểm. Chỉ dữ liệu hiển thị được lấy
+  mẫu: C++/encoder, cảm biến và vật lý vẫn cập nhật theo bước mô phỏng gốc.
+- Bảng quản lý khối cập nhật khóa điều khiển khi trạng thái chạy thay đổi, không
+  ghi lại toàn bộ DOM mỗi khung hình.
+
+Chạy `npm run benchmark:simulator`: ba lượt, mỗi lượt 10 giây mô phỏng với bước
+1 ms, 14 khối và robot đang mang khối. Thời gian CPU được báo riêng, không phải FPS.
+Kiểm tra Edge headless trên máy phát triển với 14 khối, tua 10×, DPR 2 trong 5 giây:
+median khung hình 16,7 ms, P95 17,3 ms; P95 vẽ canvas 0,7 ms. Kết quả phụ thuộc máy,
+trình duyệt, mã C++ và cảnh đang chạy; không phải cam kết FPS cho mọi thiết bị.

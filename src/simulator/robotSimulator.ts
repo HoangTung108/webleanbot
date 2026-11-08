@@ -288,8 +288,9 @@ export class RobotSimulator {
     // Read sensors
     this.state.sensorReadings = this.readSensors();
 
-    // Store history
-    this.state.history.push({
+    // History is a display trace, not the encoder/physics clock. Sample at 50 Hz.
+    const previous=this.state.history[this.state.history.length-1];
+    if(!previous||this.simulationTime-previous.timestamp>=20) this.state.history.push({
       timestamp: this.simulationTime,
       robotPose: { ...this.state.robotState.pose },
       sensorReadings: { ...this.state.sensorReadings },
@@ -299,6 +300,7 @@ export class RobotSimulator {
       },
     });
 
+    if(this.state.history.length>6001)this.state.history.splice(0,this.state.history.length-6001);
     this.state.currentTime = this.simulationTime;
   }
 
