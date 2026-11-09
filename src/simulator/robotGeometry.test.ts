@@ -1,5 +1,5 @@
 import {describe,expect,it} from 'vitest';
-import {fitGripperToBlock,gripperJaw,LEANBOT_GEOMETRY} from './robotGeometry';
+import {fitGripperToBlock,gripperJaw,LEANBOT_GEOMETRY,polygonsIntersect,jawBlockContact} from './robotGeometry';
 import {RobotSimulator} from './robotSimulator';
 import {MissionWorld} from './missionWorld';
 import {SYNAPSE_CITY} from './boardConfigs';
@@ -20,13 +20,15 @@ describe('video-referenced Leanbot geometry',()=>{
     const normal=fitGripperToBlock(90,90,25,{length:15,width:25,rotation:0});
     expect(normal.left).toBeLessThan(90);expect(normal.right).toBeLessThan(90);
   });
-  it('requires actual jaw closure rather than capturing a block at 55 degrees',()=>{
+  it('requires bilateral polygon contact and releases when either finger opens',()=>{
     const world=new MissionWorld(SYNAPSE_CITY),site=world.slots('pollution')[0];
     const block=world.place('pollution','red',site.x,site.y),pose={x:site.x-75,y:site.y,heading:0};
-    world.setGripper(55,55,pose);expect(block.held).toBe(false);
+    const contact=fitGripperToBlock(90,90,25,{length:15,width:25,rotation:block.rotation});
+    const open=Math.min(contact.left,contact.right)-2;
+    world.setGripper(open,open,pose);expect(block.held).toBe(false);
     world.setGripper(90,0,pose);expect(block.held).toBe(false);
     world.setGripper(90,90,pose);expect(block.held).toBe(true);
-    world.setGripper(55,55,pose);expect(block.held).toBe(false);
+    world.setGripper(open,open,pose);expect(block.held).toBe(false);
     block.rotation=90;world.setGripper(90,90,pose);expect(block.held).toBe(true); // deeper closure reaches both sides of the narrow face
   });
   it('stops both fingers at contact with a rotated/wider block',()=>{
@@ -55,6 +57,32 @@ describe('video-referenced Leanbot geometry',()=>{
     const b=world.place('pollution','red',site.x,site.y);Object.assign(b,{x:639,y:900,rotation:0});
     world.step(.005,{x:600,y:900,heading:0},70,70);
     expect(b.vx).toBeCloseTo(72.4705882353,5);
+  });
+});
+
+describe('precise finger and block hitboxes',()=>{
+  it('pushes an unheld block intersecting an open finger rather than passing through it',()=>{
+    const world=new MissionWorld(SYNAPSE_CITY),site=world.slots('pollution')[0];
+    const b=world.place('pollution','red',site.x,site.y);
+    Object.assign(b,{x:680,y:935,rotation:0});
+    world.step(.005,{x:600,y:900,heading:0});
+    expect(Math.hypot(b.x-680,b.y-935)).toBeGreaterThan(0.1);
+    expect(b.held).toBe(false);
+  });
+  it('recognizes edge contact and resolves overlap with the concave finger',()=>{
+    const square=(x:number,y:number,size:number)=>[{x,y},{x:x+size,y},{x:x+size,y:y+size},{x,y:y+size}];
+    expect(polygonsIntersect(square(0,0,10),square(10,0,10))).toBe(true);
+    expect(polygonsIntersect(square(0,0,10),square(10.1,0,10))).toBe(false);
+    const jaw=gripperJaw(1,0),block=square(75,34,4),hit=jawBlockContact(jaw,block)!;
+    expect(hit).not.toBeNull();
+    expect(polygonsIntersect(jaw,block.map(p=>({x:p.x+hit.nx*(hit.depth+.01),y:p.y+hit.ny*(hit.depth+.01)})))).toBe(false);
+    expect(jawBlockContact(jaw,square(73,-4,8))).toBeNull();
+  });
+  it('does not select beyond the actual rotated block footprint',()=>{
+    const world=new MissionWorld(SYNAPSE_CITY),site=world.slots('pollution')[0];
+    const b=world.place('pollution','red',site.x,site.y);b.rotation=0;
+    expect(world.hit(b.x+9,b.y)).toBeUndefined();expect(world.hit(b.x+7,b.y)).toBe(b);
+    b.rotation=90;expect(world.hit(b.x,b.y+9)).toBeUndefined();
   });
 });
 

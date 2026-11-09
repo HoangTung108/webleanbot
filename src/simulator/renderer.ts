@@ -55,6 +55,7 @@ export class SimulatorRenderer {
   private scale: number = 1;
   private viewportWidth = 800;
   private viewportHeight = 600;
+  private renderRatio = 1;
   private boardImage?: HTMLImageElement;
   private boardRaster?: HTMLCanvasElement;
 
@@ -75,8 +76,7 @@ export class SimulatorRenderer {
     this.options = { ...DEFAULT_RENDERER_OPTIONS, ...options };
 
     // Set canvas size
-    this.canvas.width = 800;
-    this.canvas.height = 600;
+    this.resizeCanvas(800, 600);
 
     this.fitBoardToCanvas();
     if (board.backgroundImage) {
@@ -235,6 +235,9 @@ export class SimulatorRenderer {
   /**
    * Render a single frame
    */
+  plannedRoute: { x: number; y: number; heading: number }[] = [];
+  selectedRoutePoint: number | null = null;
+
   render(): void {
     this.clearCanvas();
     this.drawBoard();
@@ -243,6 +246,25 @@ export class SimulatorRenderer {
     this.context.scale(this.scale, this.scale);
     drawMissionBlocks(this.context, this.simulator.mission);
     this.context.restore();
+    if (this.plannedRoute.length) {
+      const ctx = this.context;
+      ctx.save(); ctx.strokeStyle = '#0284c7'; ctx.fillStyle = '#0284c7'; ctx.lineWidth = 3;
+      ctx.beginPath();
+      this.plannedRoute.forEach((p, i) => { const c = this.boardToCanvas(p.x, p.y); if (i) ctx.lineTo(c.x, c.y); else ctx.moveTo(c.x, c.y); });
+      ctx.stroke(); ctx.font = 'bold 12px sans-serif';
+      this.plannedRoute.forEach((p, i) => {
+        const c = this.boardToCanvas(p.x, p.y);
+        ctx.fillStyle = i === this.selectedRoutePoint ? '#ea580c' : '#0284c7';
+        ctx.beginPath(); ctx.arc(c.x, c.y, i === this.selectedRoutePoint ? 7 : 4, 0, Math.PI * 2); ctx.fill(); ctx.fillText(String(i), c.x + 8, c.y - 8);
+      });
+      const selected = this.selectedRoutePoint === null ? undefined : this.plannedRoute[this.selectedRoutePoint];
+      if (selected) {
+        const c = this.boardToCanvas(selected.x, selected.y), angle = selected.heading * Math.PI / 180;
+        ctx.save(); ctx.translate(c.x, c.y); ctx.rotate(angle); ctx.strokeStyle = '#ea580c';
+        ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(28, 0); ctx.lineTo(20, -5); ctx.moveTo(28, 0); ctx.lineTo(20, 5); ctx.stroke(); ctx.restore();
+      }
+      ctx.restore();
+    }
     this.drawRobot();
     for (const robot of this.remoteRobots) {
       const center = this.boardToCanvas(robot.pose.x, robot.pose.y);
@@ -288,10 +310,12 @@ export class SimulatorRenderer {
     if (this.boardImage?.complete && this.boardImage.naturalWidth) {
       const width=this.board.width*this.scale,height=this.board.height*this.scale;
       if(!this.boardRaster) {
-        const raster=document.createElement('canvas'),ratio=Math.max(1,window.devicePixelRatio||1);
+        const raster=document.createElement('canvas');
+        // Match the supersampled viewport; bound cache allocation when zoomed in.
+        const ratio=Math.min(this.renderRatio, 8192 / Math.max(width, height), Math.sqrt(16_000_000 / (width * height)));
         raster.width=Math.max(1,Math.round(width*ratio));raster.height=Math.max(1,Math.round(height*ratio));
         const ctx=raster.getContext('2d');
-        if(ctx) {ctx.drawImage(this.boardImage,0,0,raster.width,raster.height);this.boardRaster=raster;}
+        if(ctx) {ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';ctx.drawImage(this.boardImage,0,0,raster.width,raster.height);this.boardRaster=raster;}
       }
       this.context.drawImage(this.boardRaster??this.boardImage,this.offsetX,this.offsetY,width,height);
     }
@@ -552,7 +576,12 @@ export class SimulatorRenderer {
     this.boardRaster=undefined;
     this.viewportWidth = Math.max(1, width);
     this.viewportHeight = Math.max(1, height);
-    const ratio = Math.max(1, window.devicePixelRatio || 1);
+    // Supersample standard displays too, so fine SVG text and diagonal edges
+    // remain crisp after browser compositing. Cap the backing store at 16 MP.
+    const ratio = Math.min(Math.max(2, window.devicePixelRatio || 1),
+      8192 / Math.max(this.viewportWidth, this.viewportHeight),
+      Math.sqrt(16_000_000 / (this.viewportWidth * this.viewportHeight)));
+    this.renderRatio = ratio;
     this.canvas.width = Math.round(this.viewportWidth * ratio);
     this.canvas.height = Math.round(this.viewportHeight * ratio);
     this.context.setTransform(ratio, 0, 0, ratio, 0, 0);

@@ -1,3 +1,6 @@
+import { HeadingDial } from './HeadingDial';
+import { SimulatorDock } from './SimulatorDock';
+import { RoutePlannerPanel } from './RoutePlannerPanel';
 import type {OnlineCompetitionState,OnlineCommand} from './onlineCompetition';
 import {CompetitionFlow,COMPETITION_PHASE_LABELS} from './competitionFlow';
 import {CompetitionPanel,type CompetitionAction} from './CompetitionPanel';
@@ -13,7 +16,7 @@ import { mountMissionEditor } from './missionEditor';
  * Standalone demo showing all simulator features
  */
 
-import { Play, Pause, Square, RotateCcw, Terminal, Trash2, Maximize2, Settings2, CircleAlert, Info, CircleCheck, Code2, MapPin, Gauge, MousePointer2 } from 'lucide-react';
+import { Play, Pause, Square, RotateCcw, Terminal, Trash2, Maximize2, Minimize2, Settings2, CircleAlert, Info, CircleCheck, MapPin, Gauge, MousePointer2 } from 'lucide-react';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   RobotSimulator,
@@ -23,6 +26,10 @@ import {
 } from '../simulator';
 
 export const SimulatorDemo: React.FC<{ cppCode?: string;visible?:boolean;onCodeLockChange?:(locked:boolean)=>void }> = ({ cppCode,visible=true,onCodeLockChange }) => {
+  const [activeDock, setActiveDock] = useState<string | null>(null);
+  const [routeToolsHost, setRouteToolsHost] = useState<HTMLDivElement | null>(null);
+  const [routePreviewHost, setRoutePreviewHost] = useState<HTMLDivElement | null>(null);
+  const activeDockRef = useRef<string | null>(null);
   const missionHostRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const simulatorRef = useRef<RobotSimulator | null>(null);
@@ -55,6 +62,13 @@ export const SimulatorDemo: React.FC<{ cppCode?: string;visible?:boolean;onCodeL
   const [followLogs, setFollowLogs] = useState(true);
   const logViewRef = useRef<HTMLDivElement>(null);
   const fieldRef = useRef<HTMLDivElement>(null);
+  const [fieldFullscreen, setFieldFullscreen] = useState(false);
+  useEffect(() => {
+    const syncFullscreen = () => setFieldFullscreen(document.fullscreenElement === fieldRef.current);
+    document.addEventListener('fullscreenchange', syncFullscreen);
+    syncFullscreen();
+    return () => document.removeEventListener('fullscreenchange', syncFullscreen);
+  }, []);
   useEffect(() => { if (followLogs && logViewRef.current) logViewRef.current.scrollTop = logViewRef.current.scrollHeight; }, [logs, followLogs]);
   const [stats, setStats] = useState({
     time: 0,
@@ -170,7 +184,7 @@ export const SimulatorDemo: React.FC<{ cppCode?: string;visible?:boolean;onCodeL
     const detachMission = missionHostRef.current ? mountMissionEditor(missionHostRef.current, simulator.mission, {
       canvas: canvasRef.current,
       toBoard: (x,y) => renderer.clientToBoard(x,y),
-      locked: () => competitionEnabled.current||simulator.getSimulationState().isRunning,
+      locked: () => activeDockRef.current !== 'mission'||competitionEnabled.current||simulator.getSimulationState().isRunning,
       pose: () => simulator.getRobotPose(), render: () => renderer.render(),
     }) : () => {};
     const detachScoring = simulator.mission.subscribe(() => {if(!onlineRef.current)setScoreResult(null);});
@@ -281,7 +295,7 @@ export const SimulatorDemo: React.FC<{ cppCode?: string;visible?:boolean;onCodeL
     addLog(`Raw Score: ${result.total} · ${reason}`);
   };
 
-  const handleStart = () => {
+  const handleStart = (routeCode?: string, routeStart?: Pose) => {
     if(onlineRef.current){sendOnline({action:onlineRef.current.phase==='ready'?'start':'practice-run',code:cppCode??''});return;}
     if (!simulatorRef.current || !bridgeRef.current) return;
 
@@ -290,7 +304,7 @@ export const SimulatorDemo: React.FC<{ cppCode?: string;visible?:boolean;onCodeL
     const official=competitionEnabled.current&&flowRef.current.phase==='ready';
     if(competitionEnabled.current&&!['preparation','ready'].includes(flowRef.current.phase)){addLog('[ERROR] Hoàn tất công bố cấu hình và cách ly trước khi Chạy.');return;}
     if(official&&robotNetworkManager.getAllPeers().length+1>SCORE_CATEGORIES[flowRef.current.category].robots){addLog('[ERROR] Số robot trong phòng vượt giới hạn hạng mục.');return;}
-    const code = official?flowRef.current.frozenCode:(cppCode ?? '');
+    const code = official?flowRef.current.frozenCode:(routeCode ?? cppCode ?? '');
     if (!code.trim()) { addLog('Chưa có code C++. Hãy mở hoặc viết code trong IDE.'); return; }
     const result = bridgeRef.current.loadCode(code);
 
@@ -299,6 +313,10 @@ export const SimulatorDemo: React.FC<{ cppCode?: string;visible?:boolean;onCodeL
       return;
     }
 
+    if (routeStart && !competitionEnabled.current) {
+      simulatorRef.current.reset(routeStart);
+      setRobotHeading(routeStart.heading);
+    }
     if(official) {
       const round=flowRef.current.start(simulatorRef.current.mission);
       simulatorRef.current.reset(round.pose);refreshFlow();
@@ -422,55 +440,58 @@ export const SimulatorDemo: React.FC<{ cppCode?: string;visible?:boolean;onCodeL
       <div className="sim-toolbar" role="toolbar" aria-label="Điều khiển mô phỏng">
         <MultiRobotConnector />
         <div className="sim-playback">
-          <button className="sim-button primary" onClick={handleStart} disabled={isRunning||(competitionMode&&!['preparation','ready'].includes(flowRef.current.phase))||(!!onlineRef.current&&(flowRef.current.phase==='ready'?!robotNetworkManager.isHost():flowRef.current.localCodeLocked))}><Play size={15} />Chạy</button>
+          <button className="sim-button primary" onClick={() => handleStart()} disabled={isRunning||(competitionMode&&!['preparation','ready'].includes(flowRef.current.phase))||(!!onlineRef.current&&(flowRef.current.phase==='ready'?!robotNetworkManager.isHost():flowRef.current.localCodeLocked))}><Play size={15} />Chạy</button>
           <button className="sim-button" onClick={handlePause} disabled={!isRunning||!!onlineRef.current||(competitionMode&&flowRef.current.phase==='running')}>{isPaused ? <Play size={15} /> : <Pause size={15} />}{isPaused ? 'Tiếp tục' : 'Tạm dừng'}</button>
           <button className="sim-button stop" onClick={handleStop} disabled={!isRunning}><Square size={14} />Dừng</button>
           <button className="sim-button icon-only" onClick={handleReset} disabled={competitionMode&&!['setup','preparation'].includes(flowRef.current.phase)} title="Đặt lại mô phỏng" aria-label="Đặt lại mô phỏng"><RotateCcw size={16} /></button>
           {/* Speed multiplier controls */}
           <div className="sim-speed" role="group" aria-label="Tốc độ mô phỏng"><span>Tua</span>{[1,2,5,10].map(speed => <button key={speed} className="sim-button" aria-pressed={speedMultiplier === speed} disabled={!!onlineRef.current&&!robotNetworkManager.isHost()} onClick={() => handleSpeedChange(speed)} title={`Tốc độ ${speed} lần`}>{speed}×</button>)}</div>
         </div>
-        <label className="sim-heading-input">Hướng robot <input aria-label="Góc robot" type="number" min="0" max="359" value={robotHeading} disabled={isRunning||flowRef.current.localCodeLocked||(competitionMode&&!['setup','preparation'].includes(flowRef.current.phase))} onChange={e => {
-          if (e.target.value === '') return;
-          if(onlineRef.current){const pose=simulatorRef.current?.getRobotPose();if(pose)sendOnline({action:'place-robot',pose:{...pose,heading:Number(e.target.value)}});return;}
+        <HeadingDial value={robotHeading} disabled={isRunning||flowRef.current.localCodeLocked||(competitionMode&&!['setup','preparation'].includes(flowRef.current.phase))} onChange={value => {
+          if(onlineRef.current){const pose=simulatorRef.current?.getRobotPose();if(pose)sendOnline({action:'place-robot',pose:{...pose,heading:value}});return;}
           setScoreResult(null);
-          simulatorRef.current?.setHeading(Number(e.target.value));
+          simulatorRef.current?.setHeading(value);
           const heading = simulatorRef.current?.getRobotPose().heading ?? 0;
           setRobotHeading(heading);
           setStats(prev => ({...prev,heading}));
           rendererRef.current?.render();
-        }} /><span>°</span></label>
+        }} />
         <span className="sim-toolbar-note">Còn {Math.ceil(Math.max(0,ROUND_LIMIT_MS/1000-stats.time))} s / 120 s</span>
       </div>
-      <div className="sim-layout">
-        <div className="sim-main">
-          <section className="sim-field" ref={fieldRef} aria-label="Sa bàn Synapse City">
-            <div className="sim-section-heading"><div><MapPin size={15} /><strong>Synapse City · 4 ft × 4 ft</strong></div><button className="sim-button icon-only" title="Toàn màn hình sa bàn" aria-label="Toàn màn hình sa bàn" onClick={() => { void fieldRef.current?.requestFullscreen?.().catch(() => addLog('[ERROR] Không mở được toàn màn hình.')); }}><Maximize2 size={15} /></button></div>
-            <div className="sim-canvas-wrap"><canvas ref={canvasRef} aria-label="Sa bàn và robot" /></div>
-            <div className="sim-field-caption"><MousePointer2 size={13} /><span>Kéo để đặt robot · Đi qua mép sa bàn có thể rơi</span><span>2000 = 32,5 cm / 5 giây</span></div>
-          </section>
-          <section className="sim-log-panel" aria-label="Nhật ký mô phỏng">
-            <div className="sim-section-heading"><div><Terminal size={15} /><strong>Nhật ký</strong><span className="sim-count">{logs.length}</span></div><div><label className="sim-follow"><input type="checkbox" checked={followLogs} onChange={e => setFollowLogs(e.target.checked)} />Theo dõi</label><button className="sim-button icon-only" aria-label="Xóa nhật ký" title="Xóa nhật ký" disabled={!logs.length} onClick={() => setLogs([])}><Trash2 size={14} /></button></div></div>
-            <div className="sim-log-entries" ref={logViewRef} role="log" aria-live="polite" aria-relevant="additions">
-              {logs.length === 0 ? <p className="sim-empty-log">Chưa có hoạt động. Chạy chương trình để xem kết quả tại đây.</p> : logs.map((log, i) => <div className={`sim-log-row ${log.level}`} key={`${log.time}-${i}`}><time>{log.time}</time>{log.level === 'error' ? <CircleAlert size={13} /> : log.level === 'success' ? <CircleCheck size={13} /> : <Info size={13} />}<span>{log.message}</span></div>)}
-            </div>
-          </section>
-        </div>
-        <aside className="sim-inspector" aria-label="Thiết lập mô phỏng">
-          <CompetitionPanel key={competitionMode?'competition':'practice'} flow={flowRef.current} enabled={competitionMode} running={isRunning} onMode={handleCompetitionMode} onAction={handleCompetitionAction} online={onlineRef.current} clientId={robotNetworkManager.getClientId()} isHost={robotNetworkManager.isHost()}/>
+<SimulatorDock logEvent={logs.at(-1)} onPanelChange={id => { activeDockRef.current = id; setActiveDock(id); if (id === 'logs' && followLogs) requestAnimationFrame(() => { if (logViewRef.current) logViewRef.current.scrollTop = logViewRef.current.scrollHeight; }); }} panels={[
+{ id: 'route', label: 'Lộ trình', icon: <MousePointer2 size={20} />, content: <><div ref={setRouteToolsHost} /><div ref={setRoutePreviewHost} /></> },
+{ id: 'mission', label: 'Nhiệm vụ', icon: <MapPin size={20} />, content: <><details className="sim-settings" open><summary><MapPin size={15} />Khối nhiệm vụ</summary><div ref={missionHostRef} /></details></> },
+{ id: 'competition', label: 'Thi đấu', icon: <CircleCheck size={20} />, content: <><CompetitionPanel key={competitionMode?'competition':'practice'} flow={flowRef.current} enabled={competitionMode} running={isRunning} onMode={handleCompetitionMode} onAction={handleCompetitionAction} online={onlineRef.current} clientId={robotNetworkManager.getClientId()} isHost={robotNetworkManager.isHost()}/>
           <ScorePanel configurationLocked={competitionMode&&(flowRef.current.phase!=='setup'||flowRef.current.round>1||(!!onlineRef.current&&!robotNetworkManager.isHost()))} actionsLocked={competitionMode} key={scoreCategory} category={scoreCategory} result={scoreResult} reason={scoreReason} running={isRunning} onCategory={value=>{if(onlineRef.current){sendOnline({action:'category',category:value});return;}setScoreCategory(value);setScoreResult(null)}} onCalculate={()=>finishScore('Chấm hiện trạng thủ công')} onGenerate={()=>{
             const sim=simulatorRef.current;if(!sim)return;
             handleReset();createScoringMission(sim.mission,scoreCategory,Math.floor(Math.random()*4294967296));
             setScoreResult(null);rendererRef.current?.render();addLog(`Đã tạo nhiệm vụ ${scoreCategory}`);
           }}/>
 
-          <section className="sim-telemetry"><div className="sim-section-heading"><div><Gauge size={15} /><strong>Trạng thái robot</strong></div><span>Trực tiếp</span></div>
+          </> },
+{ id: 'display', label: 'Hiển thị', icon: <Settings2 size={20} />, content: <><details className="sim-settings" open><summary><Settings2 size={15} />Hiển thị sa bàn</summary><div className="sim-options"><label><input type="checkbox" checked={showGrid} onChange={e => setShowGrid(e.target.checked)} />Lưới tọa độ</label><label><input type="checkbox" checked={showTrajectory} onChange={e => setShowTrajectory(e.target.checked)} />Đường di chuyển</label><label><input type="checkbox" checked={showSensorDebug} onChange={e => setShowSensorDebug(e.target.checked)} />Cảm biến</label></div></details></> },
+{ id: 'logs', label: 'Logs', icon: <Terminal size={20} />, content: <>          <section className="sim-log-panel" aria-label="Nhật ký mô phỏng">
+            <div className="sim-section-heading"><div><Terminal size={15} /><strong>Logs</strong><span className="sim-count">{logs.length}</span></div><div><label className="sim-follow"><input type="checkbox" checked={followLogs} onChange={e => setFollowLogs(e.target.checked)} />Theo dõi</label><button className="sim-button icon-only" aria-label="Xóa nhật ký" title="Xóa nhật ký" disabled={!logs.length} onClick={() => setLogs([])}><Trash2 size={14} /></button></div></div>
+            <div className="sim-log-entries" ref={logViewRef} role="log" aria-live="polite" aria-relevant="additions">
+              {logs.length === 0 ? <p className="sim-empty-log">Chưa có hoạt động. Chạy chương trình để xem kết quả tại đây.</p> : logs.map((log, i) => <div className={`sim-log-row ${log.level}`} key={`${log.time}-${i}`}><time>{log.time}</time>{log.level === 'error' ? <CircleAlert size={13} /> : log.level === 'success' ? <CircleCheck size={13} /> : <Info size={13} />}<span>{log.message}</span></div>)}
+            </div>
+          </section></> }
+]}>
+          <section className="sim-field" ref={fieldRef} aria-label="Sa bàn Synapse City">
+            <div className="sim-section-heading"><div><MapPin size={15} /><strong>Synapse City · 4 ft × 4 ft</strong></div><button className="sim-button icon-only" title={fieldFullscreen ? 'Thu nhỏ sa bàn' : 'Toàn màn hình sa bàn'} aria-label={fieldFullscreen ? 'Thu nhỏ sa bàn' : 'Toàn màn hình sa bàn'} aria-pressed={fieldFullscreen} onClick={async () => {
+              try {
+                if (document.fullscreenElement === fieldRef.current) await document.exitFullscreen();
+                else await fieldRef.current?.requestFullscreen();
+              } catch { addLog('[ERROR] Không thay đổi được chế độ toàn màn hình.'); }
+            }}>{fieldFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}</button></div>
+            <RoutePlannerPanel toolsHost={routeToolsHost} previewHost={routePreviewHost} toolsVisible={activeDock === 'route'} simulator={simulatorRef.current} renderer={rendererRef.current} canvas={canvasRef.current} locked={isRunning || competitionMode} onRun={handleStart}>
+            <div className="sim-canvas-wrap"><canvas ref={canvasRef} aria-label="Sa bàn và robot" /><section className="sim-telemetry sim-telemetry-overlay"><div className="sim-section-heading"><div><Gauge size={15} /><strong>Trạng thái robot</strong></div><span>Trực tiếp</span></div>
             <p className="sim-robot-specs">{LEANBOT_GEOMETRY.length} × {LEANBOT_GEOMETRY.width} × {LEANBOT_GEOMETRY.height} mm · {LEANBOT_GEOMETRY.mass*1000} g</p><dl className="sim-metrics"><div><dt>Thời gian</dt><dd>{stats.time.toFixed(1)}<small>s</small></dd></div><div><dt>Hướng</dt><dd>{stats.heading.toFixed(0)}<small>°</small></dd></div><div><dt>Vị trí X / Y</dt><dd>{stats.posX.toFixed(0)} / {stats.posY.toFixed(0)}<small>mm</small></dd></div><div><dt>Tốc độ trái / phải</dt><dd>{stats.speedL.toFixed(0)} / {stats.speedR.toFixed(0)}<small>mm/s</small></dd></div></dl>
+          </section></div>
+            </RoutePlannerPanel>
+            <div className="sim-field-caption"><MousePointer2 size={13} /><span>Kéo để đặt robot · Đi qua mép sa bàn có thể rơi</span><span>2000 = 32,5 cm / 5 giây</span></div>
           </section>
-          <details className="sim-settings" open><summary><Settings2 size={15} />Hiển thị sa bàn</summary><div className="sim-options"><label><input type="checkbox" checked={showGrid} onChange={e => setShowGrid(e.target.checked)} />Lưới tọa độ</label><label><input type="checkbox" checked={showTrajectory} onChange={e => setShowTrajectory(e.target.checked)} />Đường di chuyển</label><label><input type="checkbox" checked={showSensorDebug} onChange={e => setShowSensorDebug(e.target.checked)} />Cảm biến</label></div></details>
-          <details className="sim-settings" open><summary><MapPin size={15} />Khối nhiệm vụ</summary><div ref={missionHostRef} /></details>
-          <details className="sim-settings"><summary><Code2 size={15} />Chương trình C++</summary><pre className="sim-code">{competitionMode&&flowRef.current.locked?flowRef.current.frozenCode:(cppCode?.trim()?cppCode:'Chưa có code C++. Mở hoặc viết code trong IDE.')}</pre></details>
-        </aside>
-      </div>
+</SimulatorDock>
     </div>
   );
 };

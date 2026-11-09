@@ -34,7 +34,7 @@ const jawSamples = {
 };
 const contactCache=new Map<string,{left:number;right:number}>();
 export type GripFootprint={length:number;width:number;rotation:number;x?:number;y?:number};
-function intersects(a:{x:number;y:number}[],b:{x:number;y:number}[]) {
+export function polygonsIntersect(a:{x:number;y:number}[],b:{x:number;y:number}[]) {
   const inside=(p:{x:number;y:number},poly:{x:number;y:number}[])=>{
     let result=false;
     for(let i=0,j=poly.length-1;i<poly.length;j=i++) {
@@ -44,9 +44,11 @@ function intersects(a:{x:number;y:number}[],b:{x:number;y:number}[]) {
     return result;
   };
   const cross=(p:{x:number;y:number},q:{x:number;y:number},r:{x:number;y:number})=>(q.x-p.x)*(r.y-p.y)-(q.y-p.y)*(r.x-p.x);
+  const onSegment=(p:{x:number;y:number},q:{x:number;y:number},r:{x:number;y:number})=>Math.abs(cross(p,q,r))<1e-8&&r.x>=Math.min(p.x,q.x)-1e-8&&r.x<=Math.max(p.x,q.x)+1e-8&&r.y>=Math.min(p.y,q.y)-1e-8&&r.y<=Math.max(p.y,q.y)+1e-8;
   if(a.some(p=>inside(p,b))||b.some(p=>inside(p,a)))return true;
   for(let i=0;i<a.length;i++)for(let j=0;j<b.length;j++) {
     const p=a[i],q=a[(i+1)%a.length],r=b[j],t=b[(j+1)%b.length];
+    if(onSegment(p,q,r)||onSegment(p,q,t)||onSegment(r,t,p)||onSegment(r,t,q))return true;
     if(cross(p,q,r)*cross(p,q,t)<-1e-9&&cross(r,t,p)*cross(r,t,q)<-1e-9)return true;
   }
   return false;
@@ -60,12 +62,13 @@ export function fitGripperToBlock(left:number,right:number,width:number,shape?:G
   const cached=contactCache.get(key);if(cached)return {...cached};
   const a=target.rotation*Math.PI/180;
   const rectangle=[[-1,-1],[-1,1],[1,1],[1,-1]].map(([x,y])=>({x:(target.x??LEANBOT_GEOMETRY.graspOffset)+x*(target.length+.2)/2*Math.cos(a)-y*(target.width+.2)/2*Math.sin(a),y:(target.y??0)+x*(target.length+.2)/2*Math.sin(a)+y*(target.width+.2)/2*Math.cos(a)}));
-  const safe=(t:number,side:-1|1)=>!intersects(gripperJaw(side,t),rectangle);
+  const safe=(t:number,side:-1|1)=>!polygonsIntersect(gripperJaw(side,t),rectangle);
   const firstContact=(max:number,side:-1|1)=>{
+    if(!safe(0,side))return 0;
     let lo=0,hi=max,found=false;
     for(let step=1;step<=180;step++) {
       const t=max*step/180;
-      if(max===90?intersects(jawSamples[side][step],rectangle):!safe(t,side)){lo=max*(step-1)/180;hi=t;found=true;break;}
+      if(max===90?polygonsIntersect(jawSamples[side][step],rectangle):!safe(t,side)){lo=max*(step-1)/180;hi=t;found=true;break;}
     }
     if(!found)return max;
     for(let i=0;i<28;i++){const t=(lo+hi)/2;if(safe(t,side))lo=t;else hi=t;}
@@ -75,4 +78,24 @@ export function fitGripperToBlock(left:number,right:number,width:number,shape?:G
   if(contactCache.size>=512)contactCache.clear();
   contactCache.set(key,result);
   return {...result};
+}
+
+/** Exact overlap test for the concave finger, then separate along rectangle axes.
+ * Do not use a convex hull: it would fill the visible fork notch. */
+export function jawBlockContact(jaw:{x:number;y:number}[], rectangle:{x:number;y:number}[]) {
+  if(!polygonsIntersect(jaw,rectangle))return null;
+  let best={depth:Infinity,nx:0,ny:0};
+  for(let i=0;i<2;i++) {
+    const p=rectangle[i],q=rectangle[i+1],length=Math.hypot(q.x-p.x,q.y-p.y);
+    for(const sign of [-1,1]) {
+      const nx=sign*(q.x-p.x)/length,ny=sign*(q.y-p.y)/length;
+      let lo=0,hi=Math.max(...jaw.map(p=>p.x*nx+p.y*ny))-Math.min(...rectangle.map(p=>p.x*nx+p.y*ny))+.001;
+      for(let j=0;j<18;j++) {
+        const distance=(lo+hi)/2;
+        if(polygonsIntersect(jaw,rectangle.map(p=>({x:p.x+nx*distance,y:p.y+ny*distance}))))lo=distance;else hi=distance;
+      }
+      if(hi<best.depth)best={depth:hi,nx,ny};
+    }
+  }
+  return best;
 }

@@ -15,6 +15,15 @@ function setup() {
   return {host,canvas,world,pointer,lock:()=>{locked=true;world.changed();}};
 }
 describe('mission setup controls',()=>{
+  it('edits, validates and resets contact parameters',()=>{
+    const {host,world}=setup();
+    const field=host.querySelector<HTMLInputElement>('input[type="number"][data-contact="gripFriction"]')!;
+    fireEvent.input(field,{target:{value:'0.5'}});
+    expect(world.gripFriction).toBe(0.5);
+    expect(host.querySelector<HTMLInputElement>('input[type="range"][data-contact="gripFriction"]')!.value).toBe('0.5');
+    fireEvent.input(field,{target:{value:'3'}});expect(world.gripFriction).toBe(0.5);
+    fireEvent.click(host.querySelector('[data-action="reset-contact"]')!);expect(world.gripFriction).toBe(1);expect(field.value).toBe('1');
+  });
   it('creates and moves custom blocks using canvas placement without moving the robot',()=>{
     const {host,canvas,world,pointer}=setup(),site=world.slots('pollution')[0],next=world.slots('pollution')[1];
     const robotHandler=vi.fn();canvas.addEventListener('pointerdown',robotHandler);

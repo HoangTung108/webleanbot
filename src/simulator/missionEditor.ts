@@ -1,5 +1,6 @@
 import { BLOCK_COLORS, NEUTRALIZER_COLORS, MissionWorld, type BlockColor, type BlockKind } from './missionWorld';
 import type { Pose } from './types';
+import { CONTACT_SETTINGS, type ContactSetting } from './missionWorld';
 
 interface EditorOptions {
   canvas: HTMLCanvasElement; toBoard(x: number,y: number): { x: number;y: number };
@@ -16,7 +17,16 @@ export function mountMissionEditor(host: HTMLElement, world: MissionWorld, optio
     <small>15 × 25 × 75 mm. Pollution: one per city, sites 1–4. Neutralizers: Storage S1–S6.</small>
     <div class="mission-counts"><label>Pollution <input data-count="pollution" aria-label="Pollution count" type="number" min="0" max="8" value="8"></label><label>Neutralizers <input data-count="neutralizer" aria-label="Neutralizer count" type="number" min="0" max="6" value="3"></label><label>Seed <input data-seed aria-label="Mission seed" type="number" step="1" placeholder="random"></label></div>
     <div class="mission-tools"><button type="button" data-action="random">Randomize layout</button><button type="button" data-action="clear">Clear blocks</button></div>
-    <label>Friction <input data-friction aria-label="Block friction" type="range" min="0" max="1" step="0.05" value="${world.friction}"><output data-friction-value>${world.friction.toFixed(2)}</output></label>
+    <details class="mission-contact" open><summary>Hiệu chỉnh ma sát & va chạm</summary>
+    ${(Object.keys(CONTACT_SETTINGS) as ContactSetting[]).map(key => {
+      const spec=CONTACT_SETTINGS[key];
+      return `<div class="mission-contact-control"><label>${spec.label}<input data-contact="${key}" aria-label="${spec.label}" type="number" min="${spec.min}" max="${spec.max}" step="${spec.step}" value="${world[key]}"></label>
+        <input data-contact="${key}" ${key==='friction'?'data-friction':''} aria-label="${key==='friction'?'Block friction':spec.label+' thanh trượt'}" type="range" min="${spec.min}" max="${spec.max}" step="${spec.step}" value="${world[key]}">
+        <small>${spec.help}</small></div>`;
+    }).join('')}
+    <output data-friction-value hidden>${world.friction.toFixed(2)}</output>
+    <button type="button" data-action="reset-contact">Khôi phục ma sát mặc định</button>
+    <small>Thông số ước lượng cho khối vật và tay gắp; không thay đổi độ bám bánh xe.</small></details>
     <div class="mission-tools"><button type="button" data-action="save">Download mission</button><button type="button" data-action="open">Open mission</button></div>
     <input data-file type="file" accept=".json" hidden>
     <small>2.5D physics approximation. Block mass: 25 g (estimated). Reset restores this layout.</small>
@@ -31,6 +41,7 @@ export function mountMissionEditor(host: HTMLElement, world: MissionWorld, optio
   let lastLocked:boolean|undefined;
   const controls=()=> {
     const locked=options.locked();lastLocked=locked;
+    host.querySelectorAll<HTMLInputElement>('[data-contact]').forEach(el => { el.value=String(world[el.dataset.contact as ContactSetting]); });
     host.querySelectorAll<HTMLButtonElement|HTMLInputElement>('button,input').forEach(el=>{if(el.disabled!==locked)el.disabled=locked;});
     query('[data-summary]').textContent=`${world.blocks.filter(b=>b.kind==='pollution').length} pollution · ${world.blocks.filter(b=>b.kind==='neutralizer').length} neutralizers${world.heldBlock?` · Carrying ${world.hidePollutionColors&&world.heldBlock.kind==='pollution'?'unknown':world.heldBlock.color} ${world.heldBlock.kind}`:''}`;
     host.querySelectorAll<HTMLButtonElement>('[data-tool],[data-block-kind]').forEach(button=>{
@@ -53,6 +64,7 @@ export function mountMissionEditor(host: HTMLElement, world: MissionWorld, optio
     if(button.dataset.tool)tool=button.dataset.tool as 'robot'|'erase';
     if(button.dataset.blockKind)tool={kind:button.dataset.blockKind as BlockKind,color:button.dataset.color as BlockColor};
     switch(button.dataset.action){
+      case 'reset-contact':guarded(()=>world.resetContactSettings());break;
       case 'random':guarded(()=>world.randomize(Number(query<HTMLInputElement>('[data-count="pollution"]').value),Number(query<HTMLInputElement>('[data-count="neutralizer"]').value),query<HTMLInputElement>('[data-seed]').value.trim() ? Number(query<HTMLInputElement>('[data-seed]').value) : Math.floor(Math.random()*4294967296)));break;
       case 'clear':guarded(()=>world.clear());break;
       case 'open':query<HTMLInputElement>('[data-file]').click();break;
@@ -65,7 +77,12 @@ export function mountMissionEditor(host: HTMLElement, world: MissionWorld, optio
   const input=(event:Event)=>{
     if(options.locked())return;
     const target=event.target as HTMLInputElement;
-    if(target.hasAttribute('data-friction')){world.friction=Number(target.value);query('[data-friction-value]').textContent=world.friction.toFixed(2);world.changed();}
+    if(target.dataset.contact){
+      const key=target.dataset.contact as ContactSetting;
+      if(target.value==='' || !target.validity.valid){message('Nhập giá trị trong khoảng cho phép.');return;}
+      guarded(()=>world.setContactSetting(key,Number(target.value)));
+      query('[data-friction-value]').textContent=world.friction.toFixed(2);
+    }
   };
   const fileChange=async(event:Event)=>{
     const target=event.target as HTMLInputElement;if(!target.hasAttribute('data-file'))return;

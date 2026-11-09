@@ -110,6 +110,7 @@ class Parser {
 }
 
 export interface RuntimeHost {
+  lineMask?(): number;
   motors(left: number, right: number): void;
   advance(seconds: number): void;
   log?(message: string): void;
@@ -131,7 +132,7 @@ export class CppRuntime {
     const builtins = new Set(['Leanbot.begin', 'LbMission.begin', 'LbMission.end', 'LbMotion.runLR', 'LbMotion.runLRrpm', 'LbMotion.stopAndWait', 'LbMotion.setZeroOrigin', 'LbMotion.getDistanceMm', 'LbMotion.getRotationDeg', 'LbMotion.waitDistanceMm', 'LbMotion.waitRotationDeg', 'LbDelay', 'delay', 'millis', 'isfinite', 'fabsf', 'fabs', 'abs', 'lroundf', 'round', 'min', 'max', 'constrain', 'strcmp', 'Serial.begin', 'Serial.println', 'Serial.print', 'LbGripper.open', 'LbGripper.close', 'LbGripper.moveToLR', 'LbGripper.moveTo', 'Leanbot.pingCm', 'Leanbot.pingMm', 'Leanbot.tone', 'LbRGB.show']);
     const validate = (n: any) => {
       if (!n || typeof n !== 'object') return;
-      if (n.k === 'call' && !this.functions.has(n.name) && !builtins.has(n.name)) throw new Error(`Hàm chưa hỗ trợ trong giả lập: ${n.name}`);
+      if (n.k === 'call' && !this.functions.has(n.name) && !builtins.has(n.name) && !['LbIRLine.read', 'LbIRLine.setThreshold'].includes(n.name)) throw new Error(`Hàm chưa hỗ trợ trong giả lập: ${n.name}`);
       for (const v of Object.values(n)) if (Array.isArray(v)) v.forEach(validate); else if (typeof v === 'object') validate(v);
     };
     this.nodes.forEach(validate);
@@ -188,6 +189,8 @@ export class CppRuntime {
       finally { this.scopes.pop(); } return null;
     }
     switch (name) {
+      case 'LbIRLine.setThreshold': return null; // Board geometry supplies digital black/white readings.
+      case 'LbIRLine.read': return this.host.lineMask?.() ?? 0;
       case 'Leanbot.begin': case 'LbMission.begin': case 'Serial.begin': case 'LbRGB.show': return null;
       case 'LbMission.end': this.motors(0, 0); yield { end: true }; return null;
       case 'LbMotion.runLR': this.motors(Math.max(-2000,Math.min(2000,a)) * 65 / 2000, Math.max(-2000,Math.min(2000,b)) * 65 / 2000); return null;

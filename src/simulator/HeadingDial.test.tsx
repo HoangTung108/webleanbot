@@ -1,0 +1,23 @@
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, expect, it, vi } from 'vitest';
+import { HeadingDial } from './HeadingDial';
+afterEach(cleanup);
+it('maps the dial to board directions and closes when controls lock', () => {
+  const onChange = vi.fn();
+  const view = render(<HeadingDial value={270} disabled={false} onChange={onChange} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Chỉnh hướng robot' }));
+  const dial = screen.getByRole('slider');
+  vi.spyOn(dial, 'getBoundingClientRect').mockReturnValue({ left: 0, top: 0, width: 200, height: 200 } as DOMRect);
+  fireEvent(dial, new MouseEvent('pointerdown', { bubbles: true, button: 0, clientX: 190, clientY: 100 }));
+  expect(onChange).toHaveBeenLastCalledWith(0);
+  fireEvent(dial, new MouseEvent('pointermove', { bubbles: true, clientX: 100, clientY: 190 }));
+  expect(onChange).toHaveBeenLastCalledWith(90);
+  fireEvent(dial, new MouseEvent('pointerup', { bubbles: true, clientX: 10, clientY: 100 }));
+  expect(onChange).toHaveBeenLastCalledWith(180);
+  fireEvent.keyDown(document, { key: 'Escape' });
+  expect(screen.queryByRole('dialog')).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Chỉnh hướng robot' }));
+  view.rerender(<HeadingDial value={270} disabled onChange={onChange} />);
+  expect(screen.queryByRole('dialog')).toBeNull();
+  expect(screen.getByRole('button', { name: 'Chỉnh hướng robot' })).toBeDisabled();
+});

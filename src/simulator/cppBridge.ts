@@ -56,6 +56,7 @@ export class CppSimulatorBridge {
         },
         gripper: (left, right, duration) => this.simulator.setGripper(left, right, duration),
         sensors: () => this.simulator.getSensorReadings(),
+        lineMask: () => this.simulator.getLineMask(),
         log: message => this.logs.push(message),
       });
       this.commandQueue = { commands: [], currentIndex: 0, isExecuting: false };

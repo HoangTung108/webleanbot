@@ -538,6 +538,11 @@ export class RobotSimulator {
   /**
    * Simulate IR line sensor reading
    */
+  getLineMask(): number {
+    const pose = this.getRobotPose();
+    return [-24, -6, 6, 24].reduce((mask, y, i) => mask | (this.readIRSensor(pose, pose.heading * Math.PI / 180, { x: 50, y }) > 0 ? 1 << (3 - i) : 0), 0);
+  }
+
   private readIRSensor(pose: Pose, headingRad: number, offset: Vector2D): number {
     // Rotate offset by robot heading
     const rotatedX =

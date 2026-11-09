@@ -1,4 +1,4 @@
-import { fitGripperToBlock, LEANBOT_GEOMETRY } from './robotGeometry';
+import { fitGripperToBlock, gripperJaw, jawBlockContact, LEANBOT_GEOMETRY } from './robotGeometry';
 import type { BoardConfig, Pose } from './types';
 
 export type BlockKind = 'pollution' | 'neutralizer';
@@ -15,6 +15,13 @@ export interface MissionBlock {
 interface Slot { id: string; x: number; y: number; rotation: number }
 interface Box { x: number; y: number; rotation: number; length: number; width: number }
 const RAD = Math.PI / 180, GRAVITY = 9810;
+export const CONTACT_SETTINGS = {
+  friction: { label: 'Ma sát trượt', min: 0, max: 1, step: 0.01, default: 0.35, help: 'Khối vật – sa bàn. Tăng để khối trượt chậm và dừng sớm hơn.' },
+  spinFriction: { label: 'Hệ số cản xoay', min: 0, max: 3, step: 0.05, default: 1, help: 'Nhân với ma sát trượt. Tăng để khối ngừng xoay nhanh hơn.' },
+  gripFriction: { label: 'Hệ số bám tay gắp', min: 0, max: 2, step: 0.05, default: 1, help: 'Nhân với lực giữ tay gắp. Giảm để vật dễ tuột khi tăng tốc hoặc va chạm.' },
+  restitution: { label: 'Độ nảy va chạm', min: 0, max: 1, step: 0.01, default: 0.1, help: '0: không nảy; 1: va chạm đàn hồi lý tưởng.' },
+} as const;
+export type ContactSetting = keyof typeof CONTACT_SETTINGS;
 const STANDING_FOOTPRINT={length:BLOCK_SIZE.length,width:BLOCK_SIZE.width};
 const FALLEN_FOOTPRINT={length:BLOCK_SIZE.height,width:BLOCK_SIZE.width};
 const ROBOT_SHAPES=[LEANBOT_GEOMETRY.body,...[-1,1].map(side=>({x:0,y:side*LEANBOT_GEOMETRY.wheelBase/2,...LEANBOT_GEOMETRY.wheel}))];
@@ -56,7 +63,18 @@ export class MissionWorld {
   hidePollutionColors=false;
   integrateFreeBodies=true;
   friction = 0.35;
+  spinFriction = 1;
+  gripFriction = 1;
   restitution = 0.1;
+  setContactSetting(key: ContactSetting, value: number) {
+    const spec = CONTACT_SETTINGS[key];
+    if (!Number.isFinite(value) || value < spec.min || value > spec.max) throw new Error(`${spec.label}: ${spec.min}–${spec.max}`);
+    this[key] = value; this.changed();
+  }
+  resetContactSettings() {
+    for (const key of Object.keys(CONTACT_SETTINGS) as ContactSetting[]) this[key] = CONTACT_SETTINGS[key].default;
+    this.changed();
+  }
   private initial: MissionBlock[] = [];
   private listeners = new Set<() => void>();
   private serial = 0;
@@ -124,7 +142,7 @@ export class MissionWorld {
   hit(x: number, y: number) {
     return [...this.blocks].reverse().find(b => {
       const a = -b.rotation * RAD, dx = x-b.x, dy = y-b.y, shape = blockFootprint(b);
-      return Math.abs(dx*Math.cos(a)-dy*Math.sin(a)) <= Math.max(12,shape.length/2) && Math.abs(dx*Math.sin(a)+dy*Math.cos(a)) <= Math.max(12,shape.width/2);
+      return !b.offBoard && Math.abs(dx*Math.cos(a)-dy*Math.sin(a)) <= shape.length/2 && Math.abs(dx*Math.sin(a)+dy*Math.cos(a)) <= shape.width/2;
     });
   }
   syncPose(pose: Pose) {
@@ -203,7 +221,7 @@ export class MissionWorld {
       // Find the actual contact independently of the requested endpoint. At contact,
       // commands need not push through the object to count as a closed grasp.
       const c=this.fingerContact(b,pose,90,90),tolerance=.5;
-      return c.left<90-1e-4&&c.right<90-1e-4
+      return c.left>1e-4&&c.right>1e-4&&c.left<90-1e-4&&c.right<90-1e-4
         &&c.left<=this.gripper.left+tolerance&&c.right<=this.gripper.right+tolerance
         &&c.left<=stops.left+tolerance&&c.right<=stops.right+tolerance;
     };
@@ -247,7 +265,7 @@ export class MissionWorld {
   }
   private gripLimit(block:MissionBlock) {
     const height=BLOCK_SIZE.height*Math.cos(block.tilt)+BLOCK_SIZE.length*Math.sin(block.tilt);
-    return 1.5*clamp((height-12)/30,.1,1); // N; estimated contact/servo strength
+    return 1.5*this.gripFriction*clamp((height-12)/30,.1,1); // N; estimated contact/servo strength
   }
   private substep(dt: number, pose: Pose, velocity:{x:number;y:number;omega:number}) {
     const angle=pose.heading*RAD,omega=velocity.omega;
@@ -273,6 +291,8 @@ export class MissionWorld {
     }
     const cos=Math.cos(angle),sin=Math.sin(angle);
     const robotBoxes=ROBOT_SHAPES.map(shape=>({...shape,x:pose.x+shape.x*cos-shape.y*sin,y:pose.y+shape.x*sin+shape.y*cos,rotation:pose.heading}));
+    const grip=this.getGripperAngles(pose);
+    const jaws=([-1,1] as const).map(side=>gripperJaw(side,side===-1?grip.left:grip.right).map(p=>({x:pose.x+p.x*cos-p.y*sin,y:pose.y+p.x*sin+p.y*cos})));
     for (const b of this.blocks) {
       if (b.held) continue;
       if(this.integrateFreeBodies) {
@@ -288,7 +308,7 @@ export class MissionWorld {
       }
       const speed = Math.hypot(b.vx,b.vy), next = Math.max(0,speed - this.friction*GRAVITY*dt);
       if (speed > 0) { b.vx *= next/speed; b.vy *= next/speed; }
-      b.spin *= Math.max(0,1-this.friction*30*dt);
+      b.spin *= Math.max(0,1-this.friction*this.spinFriction*30*dt);
       b.x += b.vx*dt; b.y += b.vy*dt; b.rotation += b.spin*dt;
       if(b.x<0||b.y<0||b.x>this.board.width||b.y>this.board.height){b.offBoard=true;b.elevation=0;b.verticalVelocity=0;b.slotId=undefined;this.changed();continue;}
       if (b.state === 'falling') {
@@ -301,6 +321,15 @@ export class MissionWorld {
       }
       }
       if(b.offBoard)continue;
+      if(Math.hypot(b.x-pose.x,b.y-pose.y)<150) for(const jaw of jaws) {
+        const shape=blockFootprint(b),a=b.rotation*RAD,c=Math.cos(a),s=Math.sin(a);
+        const rectangle=[[-1,-1],[-1,1],[1,1],[1,-1]].map(([x,y])=>({x:b.x+x*shape.length/2*c-y*shape.width/2*s,y:b.y+x*shape.length/2*s+y*shape.width/2*c}));
+        const hit=jawBlockContact(jaw,rectangle);if(!hit)continue;
+        b.x+=hit.nx*(hit.depth+.01);b.y+=hit.ny*(hit.depth+.01);b.slotId=undefined;
+        const v=this.pointVelocity(b,pose),closing=Math.max(0,(v.x-b.vx)*hit.nx+(v.y-b.vy)*hit.ny);
+        const impulse=closing*(1+this.restitution)/(1/LEANBOT_GEOMETRY.mass+1/b.mass);
+        b.vx+=hit.nx*impulse/b.mass;b.vy+=hit.ny*impulse/b.mass;
+      }
       for (const box of robotBoxes) {
         const hit = contact(box,blockBox(b));
         if (!hit) continue;
@@ -347,10 +376,16 @@ export class MissionWorld {
     for(const b of this.blocks)if(!b.held&&!b.offBoard&&Math.hypot(b.vx,b.vy)>.1)b.slotId=undefined;
   }
 
-  serialize() { return JSON.stringify({ version: 1, friction: this.friction, blocks: this.initial }); }
+  serialize() { return JSON.stringify({ version: 1, friction: this.friction, spinFriction: this.spinFriction, gripFriction: this.gripFriction, restitution: this.restitution, blocks: this.initial }); }
   load(text: string) {
     const value = JSON.parse(text);
     if (value.version !== 1 || !Array.isArray(value.blocks) || value.blocks.length > 38 || !Number.isFinite(value.friction) || value.friction < 0 || value.friction > 1) throw new Error('Invalid mission layout.');
+    const settings = {} as Record<ContactSetting, number>;
+    for (const key of Object.keys(CONTACT_SETTINGS) as ContactSetting[]) {
+      const spec = CONTACT_SETTINGS[key], input = value[key] === undefined ? spec.default : value[key];
+      if (!Number.isFinite(input) || input < spec.min || input > spec.max) throw new Error(`Invalid ${key}.`);
+      settings[key] = input;
+    }
     const seen = new Set<string>(),seenZones=new Set<string>();
     const next = value.blocks.map((input: MissionBlock) => {
       if (!['pollution','neutralizer'].includes(input.kind)) throw new Error('Invalid block type.');
@@ -361,7 +396,7 @@ export class MissionWorld {
       if(block.originZone) { if(seenZones.has(block.originZone))throw new Error('V6: chỉ một pollution mỗi thành phố.');seenZones.add(block.originZone); }
       return block;
     });
-    this.blocks=next; this.friction=value.friction; this.commitLayout();
+    this.blocks=next; Object.assign(this, settings); this.commitLayout();
   }
 }
 
@@ -375,7 +410,8 @@ export function drawMissionBlocks(ctx: CanvasRenderingContext2D, world: MissionW
     const hidden=world.hidePollutionColors&&b.kind==='pollution';
     ctx.fillStyle=hidden?'#9ca8ae':BLOCK_COLORS[b.color]; ctx.strokeStyle=b.held?'#fff':'#26333a'; ctx.lineWidth=b.held?2:0.8;
     ctx.fillRect(-shape.length/2,-shape.width/2,shape.length,shape.width);
-    ctx.strokeRect(-shape.length/2,-shape.width/2,shape.length,shape.width);
+    // Keep the visible outline inside the physical footprint, including held blocks.
+    ctx.strokeRect(-shape.length/2+ctx.lineWidth/2,-shape.width/2+ctx.lineWidth/2,shape.length-ctx.lineWidth,shape.width-ctx.lineWidth);
     ctx.fillStyle='rgba(255,255,255,.2)'; ctx.fillRect(-shape.length/2,-shape.width/2,shape.length,Math.min(3,shape.width));
     if (hidden||b.color==='mystery') { ctx.fillStyle='#344357';ctx.font='bold 14px sans-serif';ctx.textAlign='center';ctx.fillText('?',0,4); }
     // A symbolic white band stays inside the shared top-down footprint.

@@ -9,6 +9,24 @@ function oneBlock() {
   return { world, block: world.place('pollution','red',slot.x,slot.y) };
 }
 describe('mission layout', () => {
+  it('persists contact settings and loads older missions with defaults', () => {
+    const {world}=oneBlock();
+    world.setContactSetting('spinFriction',2);world.setContactSetting('gripFriction',0.5);world.setContactSetting('restitution',0.6);
+    const loaded=new MissionWorld(SYNAPSE_CITY);loaded.load(world.serialize());
+    expect([loaded.spinFriction,loaded.gripFriction,loaded.restitution]).toEqual([2,0.5,0.6]);
+    const old=JSON.parse(world.serialize());delete old.spinFriction;delete old.gripFriction;delete old.restitution;
+    loaded.load(JSON.stringify(old));expect([loaded.spinFriction,loaded.gripFriction,loaded.restitution]).toEqual([1,1,0.1]);
+    const before=loaded.serialize();expect(()=>loaded.load(JSON.stringify({...old,gripFriction:-1}))).toThrow();expect(loaded.serialize()).toBe(before);
+  });
+  it('applies the extra spin friction to block motion independently of sliding', () => {
+    const slow=oneBlock(),fast=oneBlock();
+    slow.world.setContactSetting('spinFriction',0);fast.world.setContactSetting('spinFriction',3);
+    slow.block.spin=100;fast.block.spin=100;
+    slow.world.step(0.1,pose);fast.world.step(0.1,pose);
+    expect(slow.block.spin).toBe(100);expect(fast.block.spin).toBeLessThan(50);
+    expect(()=>fast.world.setContactSetting('friction',NaN)).toThrow();
+    fast.world.resetContactSettings();expect(fast.world.spinFriction).toBe(1);
+  });
   it('places all requested blocks at unique legal sites with type-specific colors', () => {
     const world = new MissionWorld(SYNAPSE_CITY); world.randomize(8,6,123);
     expect(world.blocks).toHaveLength(14);
