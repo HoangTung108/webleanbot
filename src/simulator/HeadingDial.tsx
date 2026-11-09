@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type PointerEvent } from 'react';
 
-export function HeadingDial({ value, disabled, onChange }: { value: number; disabled: boolean; onChange(value: number): void }) {
+export function HeadingDial({ value, disabled, onChange, label = 'Hướng robot', inline = false }: { value: number; disabled: boolean; onChange(value: number): void; label?: string; inline?: boolean }) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -21,11 +21,11 @@ export function HeadingDial({ value, disabled, onChange }: { value: number; disa
     if (Math.hypot(x, y) < 8) return;
     onChange(normalize(Math.round(Math.atan2(y, x) * 180 / Math.PI)));
   };
-  return <div className="sim-heading-dial" ref={root}>
-    <button ref={trigger} className="sim-button" disabled={disabled} aria-label="Chỉnh hướng robot" aria-expanded={open} aria-haspopup="dialog" onClick={() => setOpen(!open)}>
-      Hướng robot <strong>{Math.round(normalize(value))}°</strong><span aria-hidden="true" style={{ display: 'inline-block', transform: `rotate(${value}deg)` }}>➜</span>
+  return <div className={`sim-heading-dial${inline ? ' heading-dial-inline' : ''}`} ref={root}>
+    <button ref={trigger} className="sim-button" disabled={disabled} aria-label={label === 'Hướng robot' ? 'Chỉnh hướng robot' : `Chỉnh ${label.toLowerCase()}`} aria-expanded={open} aria-haspopup="dialog" onClick={() => setOpen(!open)}>
+      {label} <strong>{Math.round(normalize(value))}°</strong><span aria-hidden="true" style={{ display: 'inline-block', transform: `rotate(${value}deg)` }}>➜</span>
     </button>
-    {open && <div className="heading-dial-popover" role="dialog" aria-label="Chọn hướng robot">
+    {open && <div className="heading-dial-popover" role="dialog" aria-label={`Chọn ${label.toLowerCase()}`}>
       <div className="heading-dial-face" role="slider" tabIndex={0} aria-label="Góc robot" aria-valuemin={0} aria-valuemax={359} aria-valuenow={Math.round(normalize(value))} aria-valuetext={`${Math.round(normalize(value))} độ`}
         onPointerDown={e => { if (e.button !== 0) return; e.preventDefault(); e.currentTarget.focus(); dragging.current = e.pointerId; e.currentTarget.setPointerCapture?.(e.pointerId); point(e); }}
         onPointerMove={e => { if (dragging.current === e.pointerId) point(e); }}

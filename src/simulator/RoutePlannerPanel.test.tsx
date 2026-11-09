@@ -25,7 +25,8 @@ it('selects, drags, sets arrival heading and deletes a waypoint without placing 
   expect(screen.getByLabelText('Tọa độ Y')).toHaveValue(500);
   fireEvent.change(screen.getByLabelText('Tọa độ Y'), { target: { value: '400' } });
   fireEvent.click(screen.getByLabelText('Quay khi đến điểm'));
-  fireEvent.change(screen.getByLabelText('Hướng tại điểm'), { target: { value: '90' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Chỉnh hướng tại điểm' }));
+  fireEvent.change(screen.getByLabelText('Nhập góc robot'), { target: { value: '90' } });
   const preview = screen.getByLabelText('Code C++ lộ trình') as HTMLTextAreaElement;
   expect(preview.value).toBe('move_tank(2000, 2000, 10.000);\nturn_two_wheels(2000, 90.00);\nturn_two_wheels(2000, -90.00);\nmove_tank(2000, 2000, 10.000);');
   expect(placement).not.toHaveBeenCalled();

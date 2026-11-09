@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { HeadingDial } from './HeadingDial';
 import { generateRouteCode, generateRouteCommands, routePoses, type RouteStep } from './routePlanner';
 import type { Pose } from './types';
 import type { RobotSimulator } from './robotSimulator';
@@ -98,19 +99,26 @@ export function RoutePlannerPanel({ simulator, renderer, canvas, locked, onRun, 
     return () => canvas.removeEventListener('pointerdown', down, true);
   }, [canvas, renderer, drawing, locked, start, follow]);
   const controls = <>
-    <fieldset hidden={!showTools} className="route-toolbar" disabled={locked} aria-label="Công cụ vẽ lộ trình">
+    <fieldset hidden={!showTools} className="route-toolbar route-organized" disabled={locked} aria-label="Công cụ vẽ lộ trình">
+      <div className="route-control-group"><span className="route-group-title">Đường đi</span><div className="route-button-row">
       <button className="sim-button" onClick={() => { setEditing(false); setSelected(null); if (!steps.length && simulator) setStart({ ...simulator.getRobotPose() }); setDrawing(!drawing); }} aria-pressed={drawing}>{drawing ? 'Dừng vẽ' : 'Vẽ đường'}</button>
       <button className="sim-button" aria-pressed={editing} onClick={() => { setDrawing(false); setEditing(!editing); }}>Sửa điểm</button>
+      </div>
       <label className="route-follow"><input type="checkbox" checked={follow} onChange={e => setFollow(e.target.checked)} /> Dò line</label>
-      <span className="route-divider" />
-      <label className="route-angle"><input aria-label="Góc xoay lộ trình" title="Góc tương đối: dương quay phải, âm quay trái" type="number" value={angle} onChange={e => setAngle(Number(e.target.value))} />°</label>
+      </div>
+      <div className="route-control-group"><span className="route-group-title">Thêm hành động</span><div className="route-button-row">
+      <label className="route-angle">Góc <input aria-label="Góc xoay lộ trình" title="Góc tương đối: dương quay phải, âm quay trái" type="number" value={angle} onChange={e => setAngle(Number(e.target.value))} />°</label>
       <button className="sim-button" onClick={() => append({ kind: 'turn', angle })} disabled={!Number.isFinite(angle)}>Xoay</button>
+      </div><div className="route-button-row">
       <button className="sim-button" onClick={() => append({ kind: 'grab' })}>Gắp</button>
       <button className="sim-button" onClick={() => append({ kind: 'release' })}>Thả</button>
-      <span className="route-divider" />
+      </div></div>
+      <div className="route-control-group route-manage"><div className="route-button-row">
       <button className="sim-button" disabled={!steps.length} onClick={() => removeStep(steps.length - 1)} title="Xóa bước cuối">Hoàn tác</button>
       <button className="sim-button" disabled={!steps.length} onClick={() => { setSteps([]); setSelected(null); setDrawing(false); if (simulator) setStart({ ...simulator.getRobotPose() }); }}>Xóa</button>
+      </div>
       <button className="sim-button primary" disabled={!steps.length || !!generated.error} onClick={() => { setDrawing(false); onRun(generateRouteCode(start, steps), start); }}>Chạy lộ trình</button>
+      </div>
     </fieldset>
     {editing && <fieldset className="route-toolbar route-point-editor" disabled={locked} aria-label="Hiệu chỉnh điểm">
       <label>Điểm <select aria-label="Điểm cần sửa" value={selected ?? ''} onChange={e => setSelected(e.target.value === '' ? null : Number(e.target.value))}>
@@ -120,7 +128,7 @@ export function RoutePlannerPanel({ simulator, renderer, canvas, locked, onRun, 
       {point ? <>
         {(['x', 'y'] as const).map(axis => <label key={axis}>{axis.toUpperCase()} <input aria-label={`Tọa độ ${axis.toUpperCase()}`} type="number" min="0" max="1219.2" step="0.1" value={Number(point[axis].toFixed(1))} onChange={e => { if (e.target.value !== '' && Number.isFinite(e.target.valueAsNumber)) updatePoint({ [axis]: Math.max(0, Math.min(1219.2, e.target.valueAsNumber)) }); }} /> mm</label>)}
         <label><input type="checkbox" checked={point.heading !== undefined} disabled={selected === -1} onChange={e => updatePoint({ heading: e.target.checked ? routePoses(start, steps)[selected! + 1].heading : undefined })} /> Quay khi đến điểm</label>
-        {point.heading !== undefined && <label>Hướng <input aria-label="Hướng tại điểm" type="number" step="1" value={Number(point.heading.toFixed(1))} onChange={e => { if (e.target.value !== '' && Number.isFinite(e.target.valueAsNumber)) updatePoint({ heading: ((e.target.valueAsNumber % 360) + 360) % 360 }); }} />°</label>}
+        {point.heading !== undefined && <HeadingDial key={selected} label="Hướng tại điểm" inline value={point.heading} disabled={locked} onChange={heading => updatePoint({ heading })} />}
         <button className="sim-button" disabled={selected === -1} onClick={() => removeStep(selected!)}>Xóa điểm</button>
         <span>0° phải · 90° xuống · 180° trái · 270° lên</span>
       </> : <span>Bấm chọn hoặc kéo điểm trên sa bàn để hiệu chỉnh.</span>}
