@@ -38,11 +38,14 @@ describe('grasp contact and rigid attachment regressions',()=>{
     expect(block.state).toBe('standing');world.syncPose({x:900,y:500,heading:0});world.step(1,{x:900,y:500,heading:0});
     expect(block.state).toBe('standing');expect(Math.hypot(block.vx,block.vy)).toBe(0);
   });
-  it('allows a low grip to slip when the robot accelerates abruptly',()=>{
+  it('keeps a held block attached through abrupt motor changes and rotation',()=>{
     const {world,block}=scene(675,900);Object.assign(block,{state:'fallen',tilt:Math.PI/2});
     world.setGripper(90,90,pose);expect(block.held).toBe(true);
-    world.step(.005,pose,70,70);expect(block.held).toBe(false);
-    world.step(.02,pose);expect(block.held).toBe(false);
+    world.step(.005,pose,70,70);expect(block.held).toBe(true);
+    world.step(.02,{x:605,y:900,heading:90},-70,70);
+    expect(block.held).toBe(true);
+    expect(block.x).toBeCloseTo(605);
+    expect(block.y).toBeCloseTo(975);
   });
   it('does not bounce an unsupported released block back onto the mat',()=>{
     const {world,block}=scene(675,900);world.setGripper(90,90,pose);
