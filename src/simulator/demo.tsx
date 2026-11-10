@@ -141,12 +141,13 @@ export const SimulatorDemo: React.FC<{ cppCode?: string;visible?:boolean;onCodeL
       bridgeRef.current?.stopExecution();
       competitionEnabled.current=true;setCompetitionMode(true);
       const me=state.players.find(p=>p.id===robotNetworkManager.getClientId());
-      if(me)simulator.presentOnline(me,state.elapsedMs);
+      const displayTimeMs=state.phase==='preparation'?(me?.simulationTimeMs??0):state.elapsedMs;
+      if(me)simulator.presentOnline(me,displayTimeMs);
       simulator.mission.blocks=state.blocks.map(b=>({...b}));simulator.mission.hidePollutionColors=state.hiddenColors;
       simulator.mission.changed();updatePeers(false);
       setIsRunning(state.phase==='running'||state.players.some(p=>p.programRunning));setIsPaused(false);
       setSpeedMultiplier(state.rate);
-      if(me){setRobotHeading(me.pose.heading);setStats(prev=>({...prev,time:state.elapsedMs/1000,posX:me.pose.x,posY:me.pose.y,heading:me.pose.heading,speedL:me.motorLeft,speedR:me.motorRight}));}
+      if(me){setRobotHeading(me.pose.heading);setStats(prev=>({...prev,time:displayTimeMs/1000,posX:me.pose.x,posY:me.pose.y,heading:me.pose.heading,speedL:me.motorLeft,speedR:me.motorRight}));}
       if(!previous||previous.sessionId!==state.sessionId||previous.revision!==state.revision){
         const flow=new CompetitionFlow();flow.phase=state.phase;flow.round=state.round;flow.category=state.category;
         flow.layout=state.layout;flow.records=state.records;flow.localCodeLocked=me?.locked??false;flow.frozenCode=frozenOnlineCode.current;
@@ -456,7 +457,7 @@ export const SimulatorDemo: React.FC<{ cppCode?: string;visible?:boolean;onCodeL
           setStats(prev => ({...prev,heading}));
           rendererRef.current?.render();
         }} />
-        <span className="sim-toolbar-note">Còn {Math.ceil(Math.max(0,ROUND_LIMIT_MS/1000-stats.time))} s / 120 s</span>
+        <span className="sim-toolbar-note">{competitionMode&&['ready','running','finished','complete'].includes(flowRef.current.phase)?`Còn ${Math.ceil(Math.max(0,ROUND_LIMIT_MS/1000-stats.time))} s / 120 s`:`Luyện tập · ${stats.time.toFixed(1)} s · Không giới hạn 120 s`}</span>
       </div>
 <SimulatorDock logEvent={logs.at(-1)} onPanelChange={id => { activeDockRef.current = id; setActiveDock(id); if (id === 'logs' && followLogs) requestAnimationFrame(() => { if (logViewRef.current) logViewRef.current.scrollTop = logViewRef.current.scrollHeight; }); }} panels={[
 { id: 'route', label: 'Lộ trình', icon: <MousePointer2 size={20} />, content: <><div ref={setRouteToolsHost} /><div ref={setRoutePreviewHost} /></> },

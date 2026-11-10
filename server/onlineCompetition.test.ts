@@ -70,3 +70,13 @@ it('resolves two moving robots on the authoritative shared field',()=>{
  const [a,b]=s.snapshot().players;expect(b.pose.x-a.pose.x).toBeGreaterThanOrEqual(175.99);
  expect(a.pose.x).toBeGreaterThan(500);expect(b.pose.x).toBeLessThan(780);
 });
+
+it('does not truncate long online preparation programs at 120 seconds',()=>{
+ const s=new OnlineCompetition('a',['a']);command(s,'a',{action:'announce'});
+ const start=s.snapshot().players[0].pose;
+ command(s,'a',{action:'practice-run',code:'void loop(){LbDelay(125000);LbMotion.runLR(2000,2000);LbDelay(1000);LbMission.end();}'});
+ s.advanceWall(0,Infinity);s.advanceWall(126000,Infinity);
+ const player=s.snapshot().players[0];expect(player.programRunning).toBe(false);
+ expect(player.pose.y).toBeCloseTo(start.y-65,4);expect(player.simulationTimeMs).toBe(126000);expect(s.flow.phase).toBe('preparation');
+ expect(s.flow.records).toHaveLength(0);expect(s.elapsedMs).toBe(0);
+},20000);

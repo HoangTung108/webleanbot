@@ -93,7 +93,8 @@ export class OnlineCompetition {
   const delta=this.lastWall===undefined?0:Math.max(0,now-this.lastWall);this.lastWall=now;
   const active=this.flow.phase==='running'||(this.flow.phase==='preparation'&&([...this.players.values()].some(p=>p.runtime?.running)||this.world.hasMotion));
   if(!active){this.pending=0;return;}
-  this.pending=Math.min(this.pending+delta*this.rate,ROUND_LIMIT_MS-this.elapsedMs);
+  const remaining=this.flow.phase==='running'?ROUND_LIMIT_MS-this.elapsedMs:Infinity;
+  this.pending=Math.min(this.pending+delta*this.rate,remaining);
   const deadline=Number.isFinite(maxWorkMs)?performance.now()+maxWorkMs:Infinity;
   while(this.pending>=1&&performance.now()<deadline){
    this.step();this.pending--;if(this.flow.phase==='running'){this.elapsedMs++;if(this.elapsedMs>=ROUND_LIMIT_MS){this.finish('Hết 120 giây · STOP cả đội');break;}}
@@ -129,7 +130,7 @@ export class OnlineCompetition {
   const layout=JSON.parse(this.flow.layout||this.world.serialize());if(hidden)for(const b of layout.blocks)if(b.kind==='pollution')b.color='mystery';
   return {sessionId:this.sessionId,revision:this.revision,frame:this.frame,ownerId:this.ownerId,round:this.flow.round,category:this.flow.category,phase:this.flow.phase,elapsedMs:this.elapsedMs,rate:this.rate,layout:JSON.stringify(layout),hiddenColors:hidden,notice:this.notice,
    blocks:this.world.blocks.map(b=>({...b,color:hidden&&b.kind==='pollution'?'mystery':b.color})),
-   players:[...this.players.values()].map(p=>{const s=p.robot.getSimulationState();return{id:p.id,pose:p.robot.getRobotPose(),motorLeft:s.robotState.velocityLeft,motorRight:s.robotState.velocityRight,gripper:p.robot.getGripper(),fall:p.robot.getFallState(),supported:p.robot.getFallState().status==='supported',locked:p.locked,programRunning:p.runtime?.running??false,connected:p.connected};}),records:this.flow.records.map(r=>({...r,score:{...r.score}}))};
+   players:[...this.players.values()].map(p=>{const s=p.robot.getSimulationState();return{simulationTimeMs:s.currentTime,id:p.id,pose:p.robot.getRobotPose(),motorLeft:s.robotState.velocityLeft,motorRight:s.robotState.velocityRight,gripper:p.robot.getGripper(),fall:p.robot.getFallState(),supported:p.robot.getFallState().status==='supported',locked:p.locked,programRunning:p.runtime?.running??false,connected:p.connected};}),records:this.flow.records.map(r=>({...r,score:{...r.score}}))};
  }
  dispose(){for(const p of this.players.values())p.runtime?.stop();}
 }

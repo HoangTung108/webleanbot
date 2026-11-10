@@ -61,11 +61,11 @@ describe('editor code bridge', () => {
     expect(bridge.isExecuting()).toBe(false);
   });
 
-  it.each([1,10])('enforces the 120-second simulation limit at %sx', multiplier => {
+  it.each([1,10])('enforces the 120-second official competition limit at %sx', multiplier => {
     const robot=new RobotSimulator(),bridge=new CppSimulatorBridge(robot);
     robot.setSpeedMultiplier(multiplier);
     expect(bridge.loadCode('void loop(){ LbDelay(1000000); }').success).toBe(true);
-    robot.start();bridge.startExecution();
+    robot.start();bridge.startExecution(undefined,{keepRoundClock:true});
     for(let wall=0;wall<=125000&&bridge.isExecuting();wall+=1000)bridge.executeStep(wall);
     expect(bridge.isExecuting()).toBe(false);
     expect(bridge.getCompletionReason()).toBe('time-limit');
@@ -108,4 +108,15 @@ describe('editor code bridge', () => {
     robot.reset();expect(robot.mission.blocks[0].x).toBe(site.x);
   });
 
+});
+
+it.each([1,10])('finishes a free-practice program longer than 120 seconds at %sx',multiplier=>{
+ const robot=new RobotSimulator(),bridge=new CppSimulatorBridge(robot);
+ robot.reset({x:400,y:600,heading:0});robot.setSpeedMultiplier(multiplier);
+ expect(bridge.loadCode('void loop(){LbDelay(125000);LbMotion.runLR(2000,2000);LbDelay(5000);LbMission.end();}').success).toBe(true);
+ robot.start();bridge.startExecution(0);
+ for(let wall=0;wall<=131000/multiplier&&bridge.isExecuting();wall+=1000)bridge.executeStep(wall);
+ expect(bridge.getCompletionReason()).toBe('program');expect(bridge.isExecuting()).toBe(false);
+ expect(robot.getSimulationState().currentTime).toBeCloseTo(130000,5);
+ expect(robot.getRobotPose().x).toBeCloseTo(725,5);
 });

@@ -28,6 +28,7 @@ export class CppSimulatorBridge {
   private lastTick?: number;
   private pendingTime = 0;
   private roundClockActive=false;
+  private executionLimitMs=Infinity;
   private logs: string[] = [];
   private elapsed = 0;
   private completionReason: 'program' | 'time-limit' | undefined;
@@ -74,12 +75,12 @@ export class CppSimulatorBridge {
     if(this.lastTick!==undefined&&currentTime<this.lastTick)return;
     const delta = this.lastTick === undefined ? 0 : currentTime-this.lastTick;
     this.lastTick = currentTime;
-    this.pendingTime=Math.min(this.pendingTime+delta*this.simulator.getSpeedMultiplier(),Math.max(0,ROUND_LIMIT_MS-this.elapsed));
+    this.pendingTime=Math.min(this.pendingTime+delta*this.simulator.getSpeedMultiplier(),Math.max(0,this.executionLimitMs-this.elapsed));
     const deadline=Number.isFinite(maxWorkMs)?performance.now()+Math.max(0,maxWorkMs):Infinity;
     // Prime commands without advancing time, including zero-duration programs.
     if(this.runtime?.running)this.runtime.tick(0);
     while(this.isExecuting()) {
-      const slice=Math.min(5,Math.max(0,ROUND_LIMIT_MS-this.elapsed));
+      const slice=Math.min(5,Math.max(0,this.executionLimitMs-this.elapsed));
       if(slice<=1e-8) {this.runtime?.stop();this.simulator.stop();this.completionReason='time-limit';this.roundClockActive=false;break;}
       if(this.pendingTime+1e-8<slice||performance.now()>=deadline)break;
       const before=this.simulator.getSimulationState().currentTime;
@@ -87,7 +88,7 @@ export class CppSimulatorBridge {
       else this.runtime?.tick(slice);
       this.pendingTime=Math.max(0,this.pendingTime-slice);
       this.elapsed+=this.simulator.getSimulationState().currentTime-before;
-      if(this.elapsed>=ROUND_LIMIT_MS-1e-6) {this.runtime?.stop();this.simulator.stop();this.completionReason='time-limit';this.roundClockActive=false;break;}
+      if(this.elapsed>=this.executionLimitMs-1e-6) {this.runtime?.stop();this.simulator.stop();this.completionReason='time-limit';this.roundClockActive=false;break;}
     }
     if (!this.runtime?.running && !this.isExecuting() && !this.completionReason) this.completionReason='program';
     if (this.simulator.getFallState().status === 'fallen') {
@@ -116,6 +117,7 @@ export class CppSimulatorBridge {
    */
   startExecution(currentTime?:number,options?:{keepRoundClock?:boolean}): void {
     this.roundClockActive=options?.keepRoundClock??false;
+    this.executionLimitMs=this.roundClockActive?ROUND_LIMIT_MS:Infinity;
     this.elapsed=0;this.pendingTime=0;this.completionReason=undefined;
     this.runtime?.start();
     this.lastTick = currentTime;

@@ -116,7 +116,7 @@ Xem đối chiếu chi tiết tại `docs/SYNAPSE_SCORING_V6.md`.
 - Return 40/robot bắt đầu và kết thúc trong CRL, không bị rơi. Bản này theo dõi 1 robot.
 - Một pollution mỗi thành phố, tối đa 8. Metadata `originZone` luôn giữ nguyên khi robot
   di chuyển khối; thay vị trí bố trí trước lượt chạy sẽ cập nhật thành phố xuất phát.
-- Chốt điểm khi gọi STOP, C++ kết thúc, hoặc hết 120 giây mô phỏng. Sau STOP khối thả
+- Luyện tập chốt điểm khi STOP hoặc C++ kết thúc; thi đấu chốt khi STOP hoặc hết 120 giây. Sau STOP khối thả
   được chạy vật lý thêm tối đa 5 giây để về vị trí nghỉ trước khi ghi kết quả.
 - Normalized Score = Raw / trung bình Top 5 cùng vòng/cấu hình × 1000; không giới hạn 1000.
 - Đặt lại là mở lượt tập mới; chưa có Reset/Tries giữ nguyên đồng hồ trong cùng lượt thi,
@@ -302,3 +302,12 @@ Server cập nhật vật lý mỗi 20 ms theo đồng hồ mô phỏng, tiếp 
 Vòng `turn_angle` dùng `sqrtf(ratio)` để giảm tốc theo căn bậc hai của góc còn lại thay vì tuyến tính. Mô hình này giữ tốc độ cao hơn trong phần phanh, tránh bò chậm ở các góc nhỏ của đường vẽ. Tốc độ tối đa, tăng tốc, góc đích, hệ số hiệu chuẩn và điều kiện stall/timeout giữ nguyên. Runtime hỗ trợ `sqrt`/`sqrtf` cho cùng C++ khi chạy local, online và IDE HTML.
 
 Bài đo bằng code sinh từ lộ trình ở 1×: quay 22° giảm từ khoảng 1.355 ms xuống 943 ms; quay 90° từ 2.550 ms xuống 2.098 ms. Đây là thời gian mô phỏng của thao tác quay, không gồm thời gian mở tay gắp ban đầu, và không phải số đo robot thật. Code lộ trình sinh mới tự lấy cập nhật; chương trình C++ đã lưu vẫn giữ công thức cũ cho đến khi được sửa hoặc sinh lại.
+
+
+### Quãng đường dài và giới hạn thời gian
+
+Luyện tập local và chuẩn bị online không tự ngắt ở 120 giây; chỉ lượt thi chính thức áp dụng giới hạn này. Thanh thời gian phân biệt thời gian đã chạy trong luyện tập với đồng hồ đếm ngược của lượt thi. Chương trình dài có thể tiếp tục đến `LbMission.end()` hoặc nút Dừng, không bị cắt mất phần cuối.
+
+Giữ mốc quãng đường 325 mm / 5 s và sa bàn 1219,2 mm. `move_tank` vẫn chủ động dừng trước đích `MOVE_BRAKE_LEAD_MM = 3`; 20 lệnh sẽ có tổng khoảng 60 mm phanh sớm nếu không mô phỏng thêm chuyển động khi phanh. Không tự biến sai lệch đó thành hệ số phóng to sa bàn. Mốc `originDist` dùng float để không vứt phần lẻ encoder mỗi lần gọi hàm; phần này không làm thay đổi mốc đọc integer của phần cứng.
+
+Để khớp sai số còn lại của robot thật cần đo quãng đường thực tế sau cùng một chương trình, gồm cả các lần phanh/quay. Chưa tự thêm hệ số trượt, quán tính hoặc tăng tốc độ khi chưa có số đo tương ứng.

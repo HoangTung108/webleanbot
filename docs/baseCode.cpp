@@ -193,7 +193,9 @@ void move_tank(int motor_L, int motor_R, float distance_cm) {
 
   LbMotion.stopAndWait();
   resetMotionState();
-  const long originDist = LbMotion.getDistanceMm();
+  // Preserve fractional origins in simulation; integer hardware readings remain
+  // unchanged. Truncating each origin makes short decimal-distance moves drift.
+  const float originDist = (float)LbMotion.getDistanceMm();
   const long originRot = LbMotion.getRotationDeg();
   unsigned long started = millis(), lastAdvance = started, lastRamp = started;
   float bestProgress = 0.0f;
