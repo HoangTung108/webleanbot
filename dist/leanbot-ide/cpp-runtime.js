@@ -41,9 +41,9 @@ var LeanbotCpp = (() => {
     graspOffset: 75,
     body: { x: -27, y: 0, length: 130, width: 70 },
     wheel: { length: 32.5, width: 20 },
-    gripper: { pivotX: 53, pivotY: 35, openAngle: 0.75, closedAngle: -0.98 }
+    gripper: { pivotX: 53, pivotY: 35, openAngle: 0, closedAngle: -0.98 }
   };
-  var FINGER = [[0, 5], [21, 5], [32, 1], [33, -4], [26, -9], [19, -3], [15, -3], [22, -14], [18, -18], [9, -13], [1, -4]];
+  var FINGER = [[0, 3], [26, 3], [35, 0], [35, -4], [29, -8], [23, -3], [17, -3], [23, -11], [19, -14], [10, -11], [1, -3]];
   function gripperJaw(side, degrees) {
     const g = LEANBOT_GEOMETRY.gripper;
     const t = Math.max(0, Math.min(90, degrees)) / 90, a = g.openAngle + (g.closedAngle - g.openAngle) * t;
@@ -54,7 +54,7 @@ var LeanbotCpp = (() => {
     "1": Array.from({ length: 181 }, (_, i) => gripperJaw(1, i / 2))
   };
   var contactCache = /* @__PURE__ */ new Map();
-  function intersects(a, b) {
+  function polygonsIntersect(a, b) {
     const inside = (p, poly) => {
       let result = false;
       for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
@@ -64,9 +64,11 @@ var LeanbotCpp = (() => {
       return result;
     };
     const cross = (p, q, r) => (q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x);
+    const onSegment = (p, q, r) => Math.abs(cross(p, q, r)) < 1e-8 && r.x >= Math.min(p.x, q.x) - 1e-8 && r.x <= Math.max(p.x, q.x) + 1e-8 && r.y >= Math.min(p.y, q.y) - 1e-8 && r.y <= Math.max(p.y, q.y) + 1e-8;
     if (a.some((p) => inside(p, b)) || b.some((p) => inside(p, a))) return true;
     for (let i = 0; i < a.length; i++) for (let j = 0; j < b.length; j++) {
       const p = a[i], q = a[(i + 1) % a.length], r = b[j], t = b[(j + 1) % b.length];
+      if (onSegment(p, q, r) || onSegment(p, q, t) || onSegment(r, t, p) || onSegment(r, t, q)) return true;
       if (cross(p, q, r) * cross(p, q, t) < -1e-9 && cross(r, t, p) * cross(r, t, q) < -1e-9) return true;
     }
     return false;
@@ -80,12 +82,13 @@ var LeanbotCpp = (() => {
     if (cached) return { ...cached };
     const a = target.rotation * Math.PI / 180;
     const rectangle = [[-1, -1], [-1, 1], [1, 1], [1, -1]].map(([x, y]) => ({ x: (target.x ?? LEANBOT_GEOMETRY.graspOffset) + x * (target.length + 0.2) / 2 * Math.cos(a) - y * (target.width + 0.2) / 2 * Math.sin(a), y: (target.y ?? 0) + x * (target.length + 0.2) / 2 * Math.sin(a) + y * (target.width + 0.2) / 2 * Math.cos(a) }));
-    const safe = (t, side) => !intersects(gripperJaw(side, t), rectangle);
+    const safe = (t, side) => !polygonsIntersect(gripperJaw(side, t), rectangle);
     const firstContact = (max, side) => {
+      if (!safe(0, side)) return 0;
       let lo = 0, hi = max, found = false;
       for (let step = 1; step <= 180; step++) {
         const t = max * step / 180;
-        if (max === 90 ? intersects(jawSamples[side][step], rectangle) : !safe(t, side)) {
+        if (max === 90 ? polygonsIntersect(jawSamples[side][step], rectangle) : !safe(t, side)) {
           lo = max * (step - 1) / 180;
           hi = t;
           found = true;
@@ -105,6 +108,24 @@ var LeanbotCpp = (() => {
     contactCache.set(key, result);
     return { ...result };
   }
+  function jawBlockContact(jaw, rectangle) {
+    if (!polygonsIntersect(jaw, rectangle)) return null;
+    let best = { depth: Infinity, nx: 0, ny: 0 };
+    for (let i = 0; i < 2; i++) {
+      const p = rectangle[i], q = rectangle[i + 1], length = Math.hypot(q.x - p.x, q.y - p.y);
+      for (const sign of [-1, 1]) {
+        const nx = sign * (q.x - p.x) / length, ny = sign * (q.y - p.y) / length;
+        let lo = 0, hi = Math.max(...jaw.map((p2) => p2.x * nx + p2.y * ny)) - Math.min(...rectangle.map((p2) => p2.x * nx + p2.y * ny)) + 1e-3;
+        for (let j = 0; j < 18; j++) {
+          const distance = (lo + hi) / 2;
+          if (polygonsIntersect(jaw, rectangle.map((p2) => ({ x: p2.x + nx * distance, y: p2.y + ny * distance })))) lo = distance;
+          else hi = distance;
+        }
+        if (hi < best.depth) best = { depth: hi, nx, ny };
+      }
+    }
+    return best;
+  }
 
   // src/simulator/missionWorld.ts
   var BLOCK_COLORS = { green: "#83a73e", blue: "#278fa9", purple: "#795272", red: "#bd3d2f", yellow: "#d8b721", mystery: "#cbd0d5" };
@@ -112,6 +133,12 @@ var LeanbotCpp = (() => {
   var NEUTRALIZER_COLORS = ["green", "blue", "purple"];
   var RAD = Math.PI / 180;
   var GRAVITY = 9810;
+  var CONTACT_SETTINGS = {
+    friction: { label: "Ma s\xE1t tr\u01B0\u1EE3t", min: 0, max: 1, step: 0.01, default: 0.35, help: "Kh\u1ED1i v\u1EADt \u2013 sa b\xE0n. T\u0103ng \u0111\u1EC3 kh\u1ED1i tr\u01B0\u1EE3t ch\u1EADm v\xE0 d\u1EEBng s\u1EDBm h\u01A1n." },
+    spinFriction: { label: "H\u1EC7 s\u1ED1 c\u1EA3n xoay", min: 0, max: 3, step: 0.05, default: 1, help: "Nh\xE2n v\u1EDBi ma s\xE1t tr\u01B0\u1EE3t. T\u0103ng \u0111\u1EC3 kh\u1ED1i ng\u1EEBng xoay nhanh h\u01A1n." },
+    gripFriction: { label: "H\u1EC7 s\u1ED1 b\xE1m tay g\u1EAFp", min: 0, max: 2, step: 0.05, default: 1, help: "Nh\xE2n v\u1EDBi l\u1EF1c gi\u1EEF tay g\u1EAFp. Gi\u1EA3m \u0111\u1EC3 v\u1EADt d\u1EC5 tu\u1ED9t khi t\u0103ng t\u1ED1c ho\u1EB7c va ch\u1EA1m." },
+    restitution: { label: "\u0110\u1ED9 n\u1EA3y va ch\u1EA1m", min: 0, max: 1, step: 0.01, default: 0.1, help: "0: kh\xF4ng n\u1EA3y; 1: va ch\u1EA1m \u0111\xE0n h\u1ED3i l\xFD t\u01B0\u1EDFng." }
+  };
   var STANDING_FOOTPRINT = { length: BLOCK_SIZE.length, width: BLOCK_SIZE.width };
   var FALLEN_FOOTPRINT = { length: BLOCK_SIZE.height, width: BLOCK_SIZE.width };
   var ROBOT_SHAPES = [LEANBOT_GEOMETRY.body, ...[-1, 1].map((side) => ({ x: 0, y: side * LEANBOT_GEOMETRY.wheelBase / 2, ...LEANBOT_GEOMETRY.wheel }))];
@@ -164,14 +191,25 @@ var LeanbotCpp = (() => {
     hidePollutionColors = false;
     integrateFreeBodies = true;
     friction = 0.35;
+    spinFriction = 1;
+    gripFriction = 1;
     restitution = 0.1;
+    setContactSetting(key, value) {
+      const spec = CONTACT_SETTINGS[key];
+      if (!Number.isFinite(value) || value < spec.min || value > spec.max) throw new Error(`${spec.label}: ${spec.min}\u2013${spec.max}`);
+      this[key] = value;
+      this.changed();
+    }
+    resetContactSettings() {
+      for (const key of Object.keys(CONTACT_SETTINGS)) this[key] = CONTACT_SETTINGS[key].default;
+      this.changed();
+    }
     initial = [];
     listeners = /* @__PURE__ */ new Set();
     serial = 0;
     heldAnchor = { x: LEANBOT_GEOMETRY.graspOffset, y: 0, rotation: 0 };
     gripper = { left: 0, right: 0 };
     velocity = { x: 0, y: 0, omega: 0 };
-    gripVelocity = { x: 0, y: 0 };
     lastPose;
     regripBlocked = /* @__PURE__ */ new Set();
     subscribe(fn) {
@@ -270,7 +308,7 @@ var LeanbotCpp = (() => {
     hit(x, y) {
       return [...this.blocks].reverse().find((b) => {
         const a = -b.rotation * RAD, dx = x - b.x, dy = y - b.y, shape = blockFootprint(b);
-        return Math.abs(dx * Math.cos(a) - dy * Math.sin(a)) <= Math.max(12, shape.length / 2) && Math.abs(dx * Math.sin(a) + dy * Math.cos(a)) <= Math.max(12, shape.width / 2);
+        return !b.offBoard && Math.abs(dx * Math.cos(a) - dy * Math.sin(a)) <= shape.length / 2 && Math.abs(dx * Math.sin(a) + dy * Math.cos(a)) <= shape.width / 2;
       });
     }
     syncPose(pose) {
@@ -364,7 +402,7 @@ var LeanbotCpp = (() => {
       const stops = this.getGripperAngles(pose);
       const touchesBoth = (b) => {
         const c = this.fingerContact(b, pose, 90, 90), tolerance = 0.5;
-        return c.left < 90 - 1e-4 && c.right < 90 - 1e-4 && c.left <= this.gripper.left + tolerance && c.right <= this.gripper.right + tolerance && c.left <= stops.left + tolerance && c.right <= stops.right + tolerance;
+        return c.left > 1e-4 && c.right > 1e-4 && c.left < 90 - 1e-4 && c.right < 90 - 1e-4 && c.left <= this.gripper.left + tolerance && c.right <= this.gripper.right + tolerance && c.left <= stops.left + tolerance && c.right <= stops.right + tolerance;
       };
       if (this.heldBlock) {
         if (!touchesBoth(this.heldBlock)) this.release(pose, !opening);
@@ -374,7 +412,7 @@ var LeanbotCpp = (() => {
       const candidates = this.blocks.filter((b) => {
         if (b.held || b.offBoard || this.regripBlocked.has(b.id) || b.state === "falling" || (b.elevation ?? 0) > 0) return false;
         const local = this.local(b, pose), height = BLOCK_SIZE.height * Math.cos(b.tilt) + BLOCK_SIZE.length * Math.sin(b.tilt), low = height < 30;
-        if (height < 12 || local.x < 40 || local.x > 110 || Math.abs(local.y) > 50) return false;
+        if (height < 12 || local.x < 40 || local.x > 110 || Math.abs(local.y) > 5) return false;
         if (low && (Math.hypot(b.x - point.x, b.y - point.y) > 6 || Math.abs(local.y) > 4)) return false;
         if (low && (Math.abs(Math.cos(local.rotation * RAD)) < 0.96 || Math.hypot(b.vx, b.vy) > 5 || Math.abs(b.spin) > 5 || Math.max(Math.abs(motorLeft), Math.abs(motorRight)) > 10)) return false;
         const body = LEANBOT_GEOMETRY.body, a = pose.heading * RAD;
@@ -392,7 +430,6 @@ var LeanbotCpp = (() => {
       block.vx = v.x;
       block.vy = v.y;
       block.spin = this.velocity.omega / RAD;
-      this.gripVelocity = { ...v };
       this.lastPose = { ...pose };
       this.changed();
     }
@@ -421,7 +458,7 @@ var LeanbotCpp = (() => {
     }
     gripLimit(block) {
       const height = BLOCK_SIZE.height * Math.cos(block.tilt) + BLOCK_SIZE.length * Math.sin(block.tilt);
-      return 1.5 * clamp((height - 12) / 30, 0.1, 1);
+      return 1.5 * this.gripFriction * clamp((height - 12) / 30, 0.1, 1);
     }
     substep(dt, pose, velocity) {
       const angle = pose.heading * RAD, omega = velocity.omega;
@@ -434,21 +471,15 @@ var LeanbotCpp = (() => {
       const held = this.heldBlock;
       if (held) {
         this.syncHeld(pose);
-        const v = this.pointVelocity(held, pose), response = 0.02;
-        const accel = Math.hypot(v.x - this.gripVelocity.x, v.y - this.gripVelocity.y) / response;
-        const blend = 1 - Math.exp(-dt / response);
-        this.gripVelocity.x += (v.x - this.gripVelocity.x) * blend;
-        this.gripVelocity.y += (v.y - this.gripVelocity.y) * blend;
-        const force = held.mass * (accel / 1e3 + (Math.hypot(v.x, v.y) > 0.1 ? this.friction * 9.81 : 0));
-        if (force > this.gripLimit(held)) this.release(pose);
-        else {
-          held.vx = v.x;
-          held.vy = v.y;
-          held.spin = omega / RAD;
-        }
+        const v = this.pointVelocity(held, pose);
+        held.vx = v.x;
+        held.vy = v.y;
+        held.spin = omega / RAD;
       }
       const cos = Math.cos(angle), sin = Math.sin(angle);
       const robotBoxes = ROBOT_SHAPES.map((shape) => ({ ...shape, x: pose.x + shape.x * cos - shape.y * sin, y: pose.y + shape.x * sin + shape.y * cos, rotation: pose.heading }));
+      const grip = this.getGripperAngles(pose);
+      const jaws = [-1, 1].map((side) => gripperJaw(side, side === -1 ? grip.left : grip.right).map((p) => ({ x: pose.x + p.x * cos - p.y * sin, y: pose.y + p.x * sin + p.y * cos })));
       for (const b of this.blocks) {
         if (b.held) continue;
         if (this.integrateFreeBodies) {
@@ -480,7 +511,7 @@ var LeanbotCpp = (() => {
             b.vx *= next / speed;
             b.vy *= next / speed;
           }
-          b.spin *= Math.max(0, 1 - this.friction * 30 * dt);
+          b.spin *= Math.max(0, 1 - this.friction * this.spinFriction * 30 * dt);
           b.x += b.vx * dt;
           b.y += b.vy * dt;
           b.rotation += b.spin * dt;
@@ -507,6 +538,19 @@ var LeanbotCpp = (() => {
           }
         }
         if (b.offBoard) continue;
+        if (Math.hypot(b.x - pose.x, b.y - pose.y) < 150) for (const jaw of jaws) {
+          const shape = blockFootprint(b), a = b.rotation * RAD, c = Math.cos(a), s = Math.sin(a);
+          const rectangle = [[-1, -1], [-1, 1], [1, 1], [1, -1]].map(([x, y]) => ({ x: b.x + x * shape.length / 2 * c - y * shape.width / 2 * s, y: b.y + x * shape.length / 2 * s + y * shape.width / 2 * c }));
+          const hit = jawBlockContact(jaw, rectangle);
+          if (!hit) continue;
+          b.x += hit.nx * (hit.depth + 0.01);
+          b.y += hit.ny * (hit.depth + 0.01);
+          b.slotId = void 0;
+          const v = this.pointVelocity(b, pose), closing = Math.max(0, (v.x - b.vx) * hit.nx + (v.y - b.vy) * hit.ny);
+          const impulse = closing * (1 + this.restitution) / (1 / LEANBOT_GEOMETRY.mass + 1 / b.mass);
+          b.vx += hit.nx * impulse / b.mass;
+          b.vy += hit.ny * impulse / b.mass;
+        }
         for (const box of robotBoxes) {
           const hit = contact(box, blockBox(b));
           if (!hit) continue;
@@ -562,11 +606,17 @@ var LeanbotCpp = (() => {
       for (const b of this.blocks) if (!b.held && !b.offBoard && Math.hypot(b.vx, b.vy) > 0.1) b.slotId = void 0;
     }
     serialize() {
-      return JSON.stringify({ version: 1, friction: this.friction, blocks: this.initial });
+      return JSON.stringify({ version: 1, friction: this.friction, spinFriction: this.spinFriction, gripFriction: this.gripFriction, restitution: this.restitution, blocks: this.initial });
     }
     load(text) {
       const value = JSON.parse(text);
       if (value.version !== 1 || !Array.isArray(value.blocks) || value.blocks.length > 38 || !Number.isFinite(value.friction) || value.friction < 0 || value.friction > 1) throw new Error("Invalid mission layout.");
+      const settings = {};
+      for (const key of Object.keys(CONTACT_SETTINGS)) {
+        const spec = CONTACT_SETTINGS[key], input = value[key] === void 0 ? spec.default : value[key];
+        if (!Number.isFinite(input) || input < spec.min || input > spec.max) throw new Error(`Invalid ${key}.`);
+        settings[key] = input;
+      }
       const seen = /* @__PURE__ */ new Set(), seenZones = /* @__PURE__ */ new Set();
       const next = value.blocks.map((input) => {
         if (!["pollution", "neutralizer"].includes(input.kind)) throw new Error("Invalid block type.");
@@ -581,7 +631,7 @@ var LeanbotCpp = (() => {
         return block;
       });
       this.blocks = next;
-      this.friction = value.friction;
+      Object.assign(this, settings);
       this.commitLayout();
     }
   };
@@ -603,7 +653,7 @@ var LeanbotCpp = (() => {
       ctx.strokeStyle = b.held ? "#fff" : "#26333a";
       ctx.lineWidth = b.held ? 2 : 0.8;
       ctx.fillRect(-shape.length / 2, -shape.width / 2, shape.length, shape.width);
-      ctx.strokeRect(-shape.length / 2, -shape.width / 2, shape.length, shape.width);
+      ctx.strokeRect(-shape.length / 2 + ctx.lineWidth / 2, -shape.width / 2 + ctx.lineWidth / 2, shape.length - ctx.lineWidth, shape.width - ctx.lineWidth);
       ctx.fillStyle = "rgba(255,255,255,.2)";
       ctx.fillRect(-shape.length / 2, -shape.width / 2, shape.length, Math.min(3, shape.width));
       if (hidden || b.color === "mystery") {
@@ -633,7 +683,16 @@ var LeanbotCpp = (() => {
     <small>15 \xD7 25 \xD7 75 mm. Pollution: one per city, sites 1\u20134. Neutralizers: Storage S1\u2013S6.</small>
     <div class="mission-counts"><label>Pollution <input data-count="pollution" aria-label="Pollution count" type="number" min="0" max="8" value="8"></label><label>Neutralizers <input data-count="neutralizer" aria-label="Neutralizer count" type="number" min="0" max="6" value="3"></label><label>Seed <input data-seed aria-label="Mission seed" type="number" step="1" placeholder="random"></label></div>
     <div class="mission-tools"><button type="button" data-action="random">Randomize layout</button><button type="button" data-action="clear">Clear blocks</button></div>
-    <label>Friction <input data-friction aria-label="Block friction" type="range" min="0" max="1" step="0.05" value="${world.friction}"><output data-friction-value>${world.friction.toFixed(2)}</output></label>
+    <details class="mission-contact" open><summary>Hi\u1EC7u ch\u1EC9nh ma s\xE1t & va ch\u1EA1m</summary>
+    ${Object.keys(CONTACT_SETTINGS).map((key) => {
+      const spec = CONTACT_SETTINGS[key];
+      return `<div class="mission-contact-control"><label>${spec.label}<input data-contact="${key}" aria-label="${spec.label}" type="number" min="${spec.min}" max="${spec.max}" step="${spec.step}" value="${world[key]}"></label>
+        <input data-contact="${key}" ${key === "friction" ? "data-friction" : ""} aria-label="${key === "friction" ? "Block friction" : spec.label + " thanh tr\u01B0\u1EE3t"}" type="range" min="${spec.min}" max="${spec.max}" step="${spec.step}" value="${world[key]}">
+        <small>${spec.help}</small></div>`;
+    }).join("")}
+    <output data-friction-value hidden>${world.friction.toFixed(2)}</output>
+    <button type="button" data-action="reset-contact">Kh\xF4i ph\u1EE5c ma s\xE1t m\u1EB7c \u0111\u1ECBnh</button>
+    <small>Th\xF4ng s\u1ED1 \u01B0\u1EDBc l\u01B0\u1EE3ng cho kh\u1ED1i v\u1EADt v\xE0 tay g\u1EAFp; kh\xF4ng thay \u0111\u1ED5i \u0111\u1ED9 b\xE1m b\xE1nh xe.</small></details>
     <div class="mission-tools"><button type="button" data-action="save">Download mission</button><button type="button" data-action="open">Open mission</button></div>
     <input data-file type="file" accept=".json" hidden>
     <small>2.5D physics approximation. Block mass: 25 g (estimated). Reset restores this layout.</small>
@@ -660,6 +719,9 @@ var LeanbotCpp = (() => {
     const controls = () => {
       const locked = options.locked();
       lastLocked = locked;
+      host.querySelectorAll("[data-contact]").forEach((el) => {
+        el.value = String(world[el.dataset.contact]);
+      });
       host.querySelectorAll("button,input").forEach((el) => {
         if (el.disabled !== locked) el.disabled = locked;
       });
@@ -692,6 +754,9 @@ var LeanbotCpp = (() => {
       if (button.dataset.tool) tool = button.dataset.tool;
       if (button.dataset.blockKind) tool = { kind: button.dataset.blockKind, color: button.dataset.color };
       switch (button.dataset.action) {
+        case "reset-contact":
+          guarded(() => world.resetContactSettings());
+          break;
         case "random":
           guarded(() => world.randomize(Number(query('[data-count="pollution"]').value), Number(query('[data-count="neutralizer"]').value), query("[data-seed]").value.trim() ? Number(query("[data-seed]").value) : Math.floor(Math.random() * 4294967296)));
           break;
@@ -718,10 +783,14 @@ var LeanbotCpp = (() => {
     const input = (event) => {
       if (options.locked()) return;
       const target = event.target;
-      if (target.hasAttribute("data-friction")) {
-        world.friction = Number(target.value);
+      if (target.dataset.contact) {
+        const key = target.dataset.contact;
+        if (target.value === "" || !target.validity.valid) {
+          message("Nh\u1EADp gi\xE1 tr\u1ECB trong kho\u1EA3ng cho ph\xE9p.");
+          return;
+        }
+        guarded(() => world.setContactSetting(key, Number(target.value)));
         query("[data-friction-value]").textContent = world.friction.toFixed(2);
-        world.changed();
       }
     };
     const fileChange = async (event) => {
@@ -1028,21 +1097,21 @@ var LeanbotCpp = (() => {
         ctx.stroke();
       }
       ctx.fillStyle = "#b91d2d";
-      ctx.fillRect(34, side * 35 - 11, 28, 22);
+      ctx.fillRect(34, side * LEANBOT_GEOMETRY.gripper.pivotY - 11, 28, 22);
       ctx.fillStyle = "#164790";
-      ctx.fillRect(37, side * 35 - 9, 22, 18);
+      ctx.fillRect(37, side * LEANBOT_GEOMETRY.gripper.pivotY - 9, 22, 18);
       ctx.fillStyle = "#2d77b4";
-      ctx.fillRect(39, side * 35 - 8, 13, 16);
+      ctx.fillRect(39, side * LEANBOT_GEOMETRY.gripper.pivotY - 8, 13, 16);
       ctx.strokeStyle = "#8cb4d6";
       ctx.lineWidth = 0.7;
-      ctx.strokeRect(37, side * 35 - 9, 22, 18);
+      ctx.strokeRect(37, side * LEANBOT_GEOMETRY.gripper.pivotY - 9, 22, 18);
       ctx.fillStyle = "#a7c7db";
-      ctx.fillRect(40, side * 35 - 6, 3, 12);
+      ctx.fillRect(40, side * LEANBOT_GEOMETRY.gripper.pivotY - 6, 3, 12);
       ctx.fillStyle = "#df629b";
-      ctx.fillRect(54, side * 35 - 10, 3, 4);
+      ctx.fillRect(54, side * LEANBOT_GEOMETRY.gripper.pivotY - 10, 3, 4);
       ctx.fillStyle = "#ece9d6";
       ctx.beginPath();
-      ctx.arc(53, side * 35, 4, 0, Math.PI * 2);
+      ctx.arc(LEANBOT_GEOMETRY.gripper.pivotX, side * LEANBOT_GEOMETRY.gripper.pivotY, 4, 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.fillStyle = "#397f6e";
@@ -1080,11 +1149,11 @@ var LeanbotCpp = (() => {
       ctx.stroke();
       ctx.fillStyle = "#dce1dc";
       ctx.beginPath();
-      ctx.arc(53, side * 35, 2.4, 0, Math.PI * 2);
+      ctx.arc(LEANBOT_GEOMETRY.gripper.pivotX, side * LEANBOT_GEOMETRY.gripper.pivotY, 2.4, 0, Math.PI * 2);
       ctx.fill();
       ctx.fillStyle = "#657d86";
       ctx.beginPath();
-      ctx.arc(53, side * 35, 1, 0, Math.PI * 2);
+      ctx.arc(LEANBOT_GEOMETRY.gripper.pivotX, side * LEANBOT_GEOMETRY.gripper.pivotY, 1, 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.fillStyle = "#f9e6d6";
@@ -1375,7 +1444,7 @@ var LeanbotCpp = (() => {
       const builtins = /* @__PURE__ */ new Set(["Leanbot.begin", "LbMission.begin", "LbMission.end", "LbMotion.runLR", "LbMotion.runLRrpm", "LbMotion.stopAndWait", "LbMotion.setZeroOrigin", "LbMotion.getDistanceMm", "LbMotion.getRotationDeg", "LbMotion.waitDistanceMm", "LbMotion.waitRotationDeg", "LbDelay", "delay", "millis", "isfinite", "fabsf", "fabs", "abs", "lroundf", "round", "min", "max", "constrain", "strcmp", "Serial.begin", "Serial.println", "Serial.print", "LbGripper.open", "LbGripper.close", "LbGripper.moveToLR", "LbGripper.moveTo", "Leanbot.pingCm", "Leanbot.pingMm", "Leanbot.tone", "LbRGB.show"]);
       const validate = (n) => {
         if (!n || typeof n !== "object") return;
-        if (n.k === "call" && !this.functions.has(n.name) && !builtins.has(n.name)) throw new Error(`H\xE0m ch\u01B0a h\u1ED7 tr\u1EE3 trong gi\u1EA3 l\u1EADp: ${n.name}`);
+        if (n.k === "call" && !this.functions.has(n.name) && !builtins.has(n.name) && !["LbIRLine.read", "LbIRLine.setThreshold"].includes(n.name)) throw new Error(`H\xE0m ch\u01B0a h\u1ED7 tr\u1EE3 trong gi\u1EA3 l\u1EADp: ${n.name}`);
         for (const v of Object.values(n)) if (Array.isArray(v)) v.forEach(validate);
         else if (typeof v === "object") validate(v);
       };
@@ -1519,6 +1588,11 @@ var LeanbotCpp = (() => {
         return null;
       }
       switch (name) {
+        case "LbIRLine.setThreshold":
+          return null;
+        // Board geometry supplies digital black/white readings.
+        case "LbIRLine.read":
+          return this.host.lineMask?.() ?? 0;
         case "Leanbot.begin":
         case "LbMission.begin":
         case "Serial.begin":

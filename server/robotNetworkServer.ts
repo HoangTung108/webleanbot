@@ -53,6 +53,7 @@ class RobotNetworkServer {
   private server: http.Server;
   private port: number;
   private timer?: ReturnType<typeof setInterval>;
+  private snapshotTimer?: ReturnType<typeof setInterval>;
 
   constructor(port: number = 8080) {
     this.port = port;
@@ -321,7 +322,10 @@ class RobotNetworkServer {
     for(const c of room.clients.values())if(c.ws.readyState===WebSocket.OPEN)c.ws.send(data);
   }
   start() {
-    this.timer=setInterval(()=>{for(const room of this.rooms.values())if(room.competition){room.competition.advanceWall(performance.now());this.broadcastCompetition(room);}},50);
+    // Give physics enough CPU opportunities at 10x without increasing snapshot
+    // traffic or asking clients to run their own authoritative simulation.
+    this.timer=setInterval(()=>{for(const room of this.rooms.values())room.competition?.advanceWall(performance.now());},20);
+    this.snapshotTimer=setInterval(()=>{for(const room of this.rooms.values())if(room.competition)this.broadcastCompetition(room);},50);
     this.server.listen(this.port, '0.0.0.0', () => {
       console.log(`Robot Network Server running on ws://localhost:${this.port}`);
       console.log('Waiting for connections...');
@@ -329,7 +333,7 @@ class RobotNetworkServer {
   }
 
   stop() {
-    clearInterval(this.timer);for(const room of this.rooms.values())room.competition?.dispose();
+    clearInterval(this.timer);clearInterval(this.snapshotTimer);for(const room of this.rooms.values())room.competition?.dispose();
     this.wss.close();
     this.server.close();
   }

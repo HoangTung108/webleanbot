@@ -49,6 +49,10 @@ const int TURN_FINISH_SPEED = 120;
 const float TURN_SLOW_ZONE = 30.0f;
 const float TURN_BRAKE_LEAD_DEG = 1.5f;
 const int TURN_ACCEL_INCREMENT = 18;
+// millis() and ramp/stall checks use milliseconds. Poll once per millisecond;
+// 0.1 ms repeats the controller ten times with the same timer value and overloads
+// the simulator. Keep acceleration, braking, speed and target-angle calibration.
+const unsigned long MOTION_FEEDBACK_MS = 1UL;
 
 const int ROUTE_SPEED = 1800;       
 const int LINE_SPEED = 850;         
@@ -152,7 +156,7 @@ void turn_angle(int speed, float angle_deg, TurnMode mode) {
       else LbMotion.runLR(0, -v);
       previousSpeed = currentSpeed;
     }
-    LbDelay(0.1f);
+    LbDelay(MOTION_FEEDBACK_MS);
   }
   LbMotion.stopAndWait();
 }
@@ -223,7 +227,7 @@ void move_tank(int motor_L, int motor_R, float distance_cm) {
       LbMotion.runLR(vL, vR);
       previousL = vL; previousR = vR;
     }
-    LbDelay(0.1);
+    LbDelay(MOTION_FEEDBACK_MS);
   }
   LbMotion.stopAndWait();
 }

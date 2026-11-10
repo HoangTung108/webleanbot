@@ -286,3 +286,12 @@ Tạo/vào cùng phòng, chủ phòng chọn **Thi đấu mô phỏng · 2 vòng
 Server thực thi từng chương trình riêng trên cùng `MissionWorld`, giải quyết va chạm robot, quyền giữ khối và chấm điểm đội. C++ chỉ gửi tới server khi chạy thử/khóa code, không có trong snapshot gửi cho đồng đội. Đồng hồ chính thức vẫn chạy khi C++ kết thúc sớm. Giao diện không tự chạy một bản vật lý thứ hai trong phiên này. Mất kết nối trong lượt thi kết thúc lượt cả đội; robot mất kết nối không được Return.
 
 Cần triển khai **cả backend Render và frontend GitHub Pages** từ cùng phiên bản (`npm run build`, backend `npm start`). Backend cũ không hỗ trợ giao thức phiên thi sẽ được báo rõ trên giao diện. Phiên lưu trong RAM; server restart sẽ mất phòng. Mỗi vòng hiện có một lần chạy, chưa hỗ trợ Reset/Tries giữa lượt.
+
+
+### Vòng phản hồi `baseCode`
+
+`turn_angle` và `move_tank` dùng `MOTION_FEEDBACK_MS = 1UL`. Bước cũ 0,1 ms khiến bộ thông dịch thực thi khoảng 10.000 vòng điều khiển/giây, trong khi `millis()` và các mốc ramp/stall chỉ thay đổi mỗi millisecond. Đổi bước phản hồi không thay đổi tốc độ bánh, tỷ lệ 325 mm / 5 s hoặc hệ số `TURN_SCALE`. Đây là tối ưu chu kỳ điều khiển, không phải tăng tốc vật lý giả tạo.
+
+Lộ trình sinh mới tự lấy hằng số từ `docs/baseCode.cpp`. Code đã lưu trước đó cần đổi hai lệnh `LbDelay(0.1f)` / `LbDelay(0.1)` trong vòng quay/di chuyển thành `LbDelay(1)` hoặc tạo lại code lộ trình. Runtime vẫn giữ nguyên ý nghĩa của các khoảng chờ 0,1 ms nếu chương trình có sử dụng.
+
+Server cập nhật vật lý mỗi 20 ms theo đồng hồ mô phỏng, tiếp tục chia bước tích phân 1 ms; snapshot vẫn gửi mỗi 50 ms. Tua không đổi encoder/góc quay hoặc bỏ thời gian còn chờ.

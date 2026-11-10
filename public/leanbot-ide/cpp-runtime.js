@@ -210,7 +210,6 @@ var LeanbotCpp = (() => {
     heldAnchor = { x: LEANBOT_GEOMETRY.graspOffset, y: 0, rotation: 0 };
     gripper = { left: 0, right: 0 };
     velocity = { x: 0, y: 0, omega: 0 };
-    gripVelocity = { x: 0, y: 0 };
     lastPose;
     regripBlocked = /* @__PURE__ */ new Set();
     subscribe(fn) {
@@ -413,7 +412,7 @@ var LeanbotCpp = (() => {
       const candidates = this.blocks.filter((b) => {
         if (b.held || b.offBoard || this.regripBlocked.has(b.id) || b.state === "falling" || (b.elevation ?? 0) > 0) return false;
         const local = this.local(b, pose), height = BLOCK_SIZE.height * Math.cos(b.tilt) + BLOCK_SIZE.length * Math.sin(b.tilt), low = height < 30;
-        if (height < 12 || local.x < 40 || local.x > 110 || Math.abs(local.y) > 50) return false;
+        if (height < 12 || local.x < 40 || local.x > 110 || Math.abs(local.y) > 5) return false;
         if (low && (Math.hypot(b.x - point.x, b.y - point.y) > 6 || Math.abs(local.y) > 4)) return false;
         if (low && (Math.abs(Math.cos(local.rotation * RAD)) < 0.96 || Math.hypot(b.vx, b.vy) > 5 || Math.abs(b.spin) > 5 || Math.max(Math.abs(motorLeft), Math.abs(motorRight)) > 10)) return false;
         const body = LEANBOT_GEOMETRY.body, a = pose.heading * RAD;
@@ -431,7 +430,6 @@ var LeanbotCpp = (() => {
       block.vx = v.x;
       block.vy = v.y;
       block.spin = this.velocity.omega / RAD;
-      this.gripVelocity = { ...v };
       this.lastPose = { ...pose };
       this.changed();
     }
@@ -473,18 +471,10 @@ var LeanbotCpp = (() => {
       const held = this.heldBlock;
       if (held) {
         this.syncHeld(pose);
-        const v = this.pointVelocity(held, pose), response = 0.02;
-        const accel = Math.hypot(v.x - this.gripVelocity.x, v.y - this.gripVelocity.y) / response;
-        const blend = 1 - Math.exp(-dt / response);
-        this.gripVelocity.x += (v.x - this.gripVelocity.x) * blend;
-        this.gripVelocity.y += (v.y - this.gripVelocity.y) * blend;
-        const force = held.mass * (accel / 1e3 + (Math.hypot(v.x, v.y) > 0.1 ? this.friction * 9.81 : 0));
-        if (force > this.gripLimit(held)) this.release(pose);
-        else {
-          held.vx = v.x;
-          held.vy = v.y;
-          held.spin = omega / RAD;
-        }
+        const v = this.pointVelocity(held, pose);
+        held.vx = v.x;
+        held.vy = v.y;
+        held.spin = omega / RAD;
       }
       const cos = Math.cos(angle), sin = Math.sin(angle);
       const robotBoxes = ROBOT_SHAPES.map((shape) => ({ ...shape, x: pose.x + shape.x * cos - shape.y * sin, y: pose.y + shape.x * sin + shape.y * cos, rotation: pose.heading }));
