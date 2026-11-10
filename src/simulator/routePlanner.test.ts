@@ -15,7 +15,7 @@ describe('route planner', () => {
     expect(code).toContain('move_tank(2000, 2000, 10.000)');
     expect(code).toContain('followLineDistance(100)');
     const mission = code.slice(code.indexOf('void plannedRoute()'));
-    expect(mission.indexOf('close_hand(GRIP_CLOSE_ANGLE)')).toBeLessThan(mission.indexOf('open_hand()'));
+    expect(mission.indexOf('close_hand(90)')).toBeLessThan(mission.indexOf('open_hand()'));
     expect(code).not.toContain('void set_wifi');
     expect(normalizeTurn(350)).toBe(-10);
   });

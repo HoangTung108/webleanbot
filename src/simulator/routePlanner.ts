@@ -78,7 +78,7 @@ export function generateRouteCommands(start: Pose, steps: RouteStep[]): string {
     } else if (step.kind === 'turn') {
       if (!Number.isFinite(step.angle)) throw new Error('Góc không hợp lệ');
       lines.push(`  turn_two_wheels(2000, ${step.angle.toFixed(2)});`);
-    } else lines.push(step.kind === 'grab' ? '  close_hand(GRIP_CLOSE_ANGLE);' : '  open_hand();');
+    } else lines.push(step.kind === 'grab' ? '  close_hand(90);' : '  open_hand();');
 
   });
   return lines.map(line => line.trim()).join('\n');

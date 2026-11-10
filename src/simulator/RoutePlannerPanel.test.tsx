@@ -54,7 +54,7 @@ it('draws points without moving the robot and executes ordered events from the c
   fireEvent.click(screen.getByRole('button', { name: 'Xoay' }));
   fireEvent.click(screen.getByRole('button', { name: 'Thả' }));
   const preview = screen.getByRole('textbox', { name: 'Code C++ lộ trình' }) as HTMLTextAreaElement;
-  expect(preview.value).toBe('move_tank(2000, 2000, 10.000);\nclose_hand(GRIP_CLOSE_ANGLE);\nturn_two_wheels(2000, 90.00);\nopen_hand();');
+  expect(preview.value).toBe('move_tank(2000, 2000, 10.000);\nclose_hand(90);\nturn_two_wheels(2000, 90.00);\nopen_hand();');
   expect(screen.queryByRole('button', { name: /copy|sao chép|tải/i })).toBeNull();
   fireEvent.click(screen.getByText('Chạy lộ trình'));
   expect(onRun).toHaveBeenCalledWith(expect.stringContaining('move_tank(2000, 2000, 10.000)'), expect.objectContaining({ x: 400, y: 400, heading: 0 }));
