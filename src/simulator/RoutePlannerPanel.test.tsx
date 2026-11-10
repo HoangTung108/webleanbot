@@ -58,5 +58,6 @@ it('draws points without moving the robot and executes ordered events from the c
   expect(screen.queryByRole('button', { name: /copy|sao chép|tải/i })).toBeNull();
   fireEvent.click(screen.getByText('Chạy lộ trình'));
   expect(onRun).toHaveBeenCalledWith(expect.stringContaining('move_tank(2000, 2000, 10.000)'), expect.objectContaining({ x: 400, y: 400, heading: 0 }));
+  expect(onRun.mock.calls[0][0]).toContain('sqrtf(ratio)');
   expect(renderer.plannedRoute).toHaveLength(5);
 });

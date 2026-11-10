@@ -70,3 +70,10 @@ describe('custom C++ execution', () => {
     expect(a.angle).toBeCloseTo(b.angle, 6);
   });
 });
+
+
+it('supports the square-root braking profile used by generated route turns',()=>{
+ const logs:string[]=[];
+ const runtime=new CppRuntime('void loop(){Serial.println(sqrtf(9));Serial.println(sqrt(0.25));Serial.println(isfinite(sqrtf(-1)));LbMission.end();}',{motors(){},advance(){},log:message=>logs.push(message)});
+ runtime.start();runtime.tick(0);expect(runtime.running).toBe(false);expect(logs).toEqual(['3','0.5','false']);
+});

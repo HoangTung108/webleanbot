@@ -295,3 +295,10 @@ Cần triển khai **cả backend Render và frontend GitHub Pages** từ cùng 
 Lộ trình sinh mới tự lấy hằng số từ `docs/baseCode.cpp`. Code đã lưu trước đó cần đổi hai lệnh `LbDelay(0.1f)` / `LbDelay(0.1)` trong vòng quay/di chuyển thành `LbDelay(1)` hoặc tạo lại code lộ trình. Runtime vẫn giữ nguyên ý nghĩa của các khoảng chờ 0,1 ms nếu chương trình có sử dụng.
 
 Server cập nhật vật lý mỗi 20 ms theo đồng hồ mô phỏng, tiếp tục chia bước tích phân 1 ms; snapshot vẫn gửi mỗi 50 ms. Tua không đổi encoder/góc quay hoặc bỏ thời gian còn chờ.
+
+
+### Giảm tốc khi quay lộ trình
+
+Vòng `turn_angle` dùng `sqrtf(ratio)` để giảm tốc theo căn bậc hai của góc còn lại thay vì tuyến tính. Mô hình này giữ tốc độ cao hơn trong phần phanh, tránh bò chậm ở các góc nhỏ của đường vẽ. Tốc độ tối đa, tăng tốc, góc đích, hệ số hiệu chuẩn và điều kiện stall/timeout giữ nguyên. Runtime hỗ trợ `sqrt`/`sqrtf` cho cùng C++ khi chạy local, online và IDE HTML.
+
+Bài đo bằng code sinh từ lộ trình ở 1×: quay 22° giảm từ khoảng 1.355 ms xuống 943 ms; quay 90° từ 2.550 ms xuống 2.098 ms. Đây là thời gian mô phỏng của thao tác quay, không gồm thời gian mở tay gắp ban đầu, và không phải số đo robot thật. Code lộ trình sinh mới tự lấy cập nhật; chương trình C++ đã lưu vẫn giữ công thức cũ cho đến khi được sửa hoặc sinh lại.

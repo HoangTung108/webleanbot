@@ -143,7 +143,9 @@ void turn_angle(int speed, float angle_deg, TurnMode mode) {
     if (now - lastAdvance > 1700UL) { failMission(ERR_TURN_STALL); break; }
 
     const float ratio = constrain((remaining - TURN_BRAKE_LEAD_DEG) / TURN_SLOW_ZONE, 0.0f, 1.0f);
-    int allowedSpeed = TURN_FINISH_SPEED + (int)lroundf((speed - TURN_FINISH_SPEED) * ratio);
+    // Braking velocity follows sqrt(remaining distance). The old linear
+    // envelope spent too long crawling through the last few degrees.
+    int allowedSpeed = TURN_FINISH_SPEED + (int)lroundf((speed - TURN_FINISH_SPEED) * sqrtf(ratio));
     if (currentSpeed > allowedSpeed) currentSpeed = allowedSpeed;
     else if (now - lastRamp >= 12UL) {
       currentSpeed = min(currentSpeed + TURN_ACCEL_INCREMENT, allowedSpeed);

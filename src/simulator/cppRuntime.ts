@@ -129,7 +129,7 @@ export class CppRuntime {
   constructor(source: string, private host: RuntimeHost) {
     this.nodes = new Parser(source).parse();
     for (const n of this.nodes) if (n.k === 'function') this.functions.set(n.name, n);
-    const builtins = new Set(['Leanbot.begin', 'LbMission.begin', 'LbMission.end', 'LbMotion.runLR', 'LbMotion.runLRrpm', 'LbMotion.stopAndWait', 'LbMotion.setZeroOrigin', 'LbMotion.getDistanceMm', 'LbMotion.getRotationDeg', 'LbMotion.waitDistanceMm', 'LbMotion.waitRotationDeg', 'LbDelay', 'delay', 'millis', 'isfinite', 'fabsf', 'fabs', 'abs', 'lroundf', 'round', 'min', 'max', 'constrain', 'strcmp', 'Serial.begin', 'Serial.println', 'Serial.print', 'LbGripper.open', 'LbGripper.close', 'LbGripper.moveToLR', 'LbGripper.moveTo', 'Leanbot.pingCm', 'Leanbot.pingMm', 'Leanbot.tone', 'LbRGB.show']);
+    const builtins = new Set(['Leanbot.begin', 'LbMission.begin', 'LbMission.end', 'LbMotion.runLR', 'LbMotion.runLRrpm', 'LbMotion.stopAndWait', 'LbMotion.setZeroOrigin', 'LbMotion.getDistanceMm', 'LbMotion.getRotationDeg', 'LbMotion.waitDistanceMm', 'LbMotion.waitRotationDeg', 'LbDelay', 'delay', 'millis', 'isfinite', 'fabsf', 'fabs', 'abs', 'lroundf', 'round', 'sqrtf', 'sqrt', 'min', 'max', 'constrain', 'strcmp', 'Serial.begin', 'Serial.println', 'Serial.print', 'LbGripper.open', 'LbGripper.close', 'LbGripper.moveToLR', 'LbGripper.moveTo', 'Leanbot.pingCm', 'Leanbot.pingMm', 'Leanbot.tone', 'LbRGB.show']);
     const validate = (n: any) => {
       if (!n || typeof n !== 'object') return;
       if (n.k === 'call' && !this.functions.has(n.name) && !builtins.has(n.name) && !['LbIRLine.read', 'LbIRLine.setThreshold'].includes(n.name)) throw new Error(`Hàm chưa hỗ trợ trong giả lập: ${n.name}`);
@@ -210,6 +210,7 @@ export class CppRuntime {
         yield { ms: speed ? Math.abs(a) / speed * 1000 : 0 }; return null;
       }
       case 'isfinite': return Number.isFinite(a);
+      case 'sqrtf': case 'sqrt': return Math.sqrt(a);
       case 'fabsf': case 'fabs': case 'abs': return Math.abs(a);
       case 'lroundf': case 'round': return Math.sign(a) * Math.floor(Math.abs(a) + 0.5);
       case 'min': return Math.min(...nums); case 'max': return Math.max(...nums);
