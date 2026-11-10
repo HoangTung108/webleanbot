@@ -28,6 +28,11 @@ var LeanbotCpp = (() => {
     mountMissionEditor: () => mountMissionEditor
   });
 
+  // src/simulator/motionCalibration.ts
+  var MOTION_CALIBRATION = Object.freeze({
+    physicalMmPerEncoderMm: 1.06
+  });
+
   // src/simulator/robotGeometry.ts
   var LEANBOT_GEOMETRY = {
     length: 180,
@@ -1437,8 +1442,10 @@ var LeanbotCpp = (() => {
     }
   };
   var CppRuntime = class {
-    constructor(source, host) {
+    constructor(source, host, distanceScale = MOTION_CALIBRATION.physicalMmPerEncoderMm) {
       this.host = host;
+      this.distanceScale = distanceScale;
+      if (!Number.isFinite(distanceScale) || distanceScale <= 0) throw new Error("H\u1EC7 s\u1ED1 hi\u1EC7u chu\u1EA9n qu\xE3ng \u0111\u01B0\u1EDDng ph\u1EA3i l\xE0 s\u1ED1 d\u01B0\u01A1ng h\u1EEFu h\u1EA1n.");
       this.nodes = new Parser(source).parse();
       for (const n of this.nodes) if (n.k === "function") this.functions.set(n.name, n);
       const builtins = /* @__PURE__ */ new Set(["Leanbot.begin", "LbMission.begin", "LbMission.end", "LbMotion.runLR", "LbMotion.runLRrpm", "LbMotion.stopAndWait", "LbMotion.setZeroOrigin", "LbMotion.getDistanceMm", "LbMotion.getRotationDeg", "LbMotion.waitDistanceMm", "LbMotion.waitRotationDeg", "LbDelay", "delay", "millis", "isfinite", "fabsf", "fabs", "abs", "lroundf", "round", "sqrtf", "sqrt", "min", "max", "constrain", "strcmp", "Serial.begin", "Serial.println", "Serial.print", "LbGripper.open", "LbGripper.close", "LbGripper.moveToLR", "LbGripper.moveTo", "Leanbot.pingCm", "Leanbot.pingMm", "Leanbot.tone", "LbRGB.show"]);
@@ -1455,6 +1462,7 @@ var LeanbotCpp = (() => {
     scopes = [/* @__PURE__ */ new Map()];
     iterator;
     pending = 0;
+    missionStarted = false;
     running = false;
     time = 0;
     distance = 0;
@@ -1594,9 +1602,16 @@ var LeanbotCpp = (() => {
         case "LbIRLine.read":
           return this.host.lineMask?.() ?? 0;
         case "Leanbot.begin":
-        case "LbMission.begin":
         case "Serial.begin":
         case "LbRGB.show":
+          return null;
+        case "LbMission.begin":
+          if (this.missionStarted) {
+            this.motors(0, 0);
+            yield { end: true };
+            return null;
+          }
+          this.missionStarted = true;
           return null;
         case "LbMission.end":
           this.motors(0, 0);
@@ -1629,7 +1644,7 @@ var LeanbotCpp = (() => {
         case "LbMotion.waitDistanceMm": {
           const speed = Math.abs((this.left + this.right) / 2);
           if (!speed && a) throw new Error("Kh\xF4ng th\u1EC3 ch\u1EDD qu\xE3ng \u0111\u01B0\u1EDDng khi robot \u0111\u1EE9ng y\xEAn");
-          yield { ms: speed ? Math.abs(a) / speed * 1e3 : 0 };
+          yield { ms: speed ? Math.abs(a) * this.distanceScale / speed * 1e3 : 0 };
           return null;
         }
         case "LbMotion.waitRotationDeg": {
@@ -1756,11 +1771,17 @@ var LeanbotCpp = (() => {
       for (const n of this.nodes) if (n.k !== "function") yield* this.statement(n);
       if (this.functions.has("setup")) yield* this.call("setup", []);
       if (this.functions.has("loop")) while (true) {
+        const missionWasStarted = this.missionStarted;
         yield* this.call("loop", []);
+        if (!missionWasStarted && this.missionStarted) {
+          this.motors(0, 0);
+          return;
+        }
         yield { ms: 1 };
       }
     }
     start() {
+      this.missionStarted = false;
       this.scopes = [/* @__PURE__ */ new Map()];
       this.iterator = this.program();
       this.running = true;
@@ -1795,7 +1816,7 @@ var LeanbotCpp = (() => {
             const dt = Math.min(this.pending, remaining, 5);
             this.host.advance(dt / 1e3);
             this.time += dt;
-            this.distance += (this.left + this.right) / 2 * dt / 1e3;
+            this.distance += (this.left + this.right) / 2 * dt / 1e3 / this.distanceScale;
             this.rotation += (this.left - this.right) / LEANBOT_GEOMETRY.wheelBase * 180 / Math.PI * dt / 1e3;
             this.pending -= dt;
             remaining -= dt;

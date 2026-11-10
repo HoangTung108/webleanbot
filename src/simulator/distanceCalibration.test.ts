@@ -1,3 +1,4 @@
+import {MOTION_CALIBRATION} from './motionCalibration';
 import {describe,it,expect} from 'vitest';
 import {generateRouteCode,type RouteStep} from './routePlanner';
 import {RobotSimulator} from './robotSimulator';
@@ -6,9 +7,9 @@ function run(steps:RouteStep[]){
  const sim=new RobotSimulator(),start={x:1000,y:1000,heading:0};sim.setBoard({name:'Test',width:5000,height:5000,walls:[],obstacles:[],lines:[],initialPose:start});
  const b=new CppSimulatorBridge(sim);expect(b.loadCode(generateRouteCode(start,steps)).success).toBe(true);sim.start();b.startExecution(0);
  for(let t=0;t<120000&&b.isExecuting();t+=20)b.executeStep(t);
- expect(b.isExecuting()).toBe(false);return sim.getRobotPose().x-start.x;
+ expect(b.isExecuting()).toBe(false);return (sim.getRobotPose().x-start.x)/MOTION_CALIBRATION.physicalMmPerEncoderMm;
 }
-describe('distance versus the base controller brake lead',()=>{
+describe('encoder distance versus the base controller brake lead',()=>{
  it('preserves the controller intentional 3 mm brake lead for a single move',()=>{
   expect(run([{kind:'move',x:2000,y:1000,follow:false}])).toBeCloseTo(997,1);
  });

@@ -311,3 +311,14 @@ Luyện tập local và chuẩn bị online không tự ngắt ở 120 giây; ch
 Giữ mốc quãng đường 325 mm / 5 s và sa bàn 1219,2 mm. `move_tank` vẫn chủ động dừng trước đích `MOVE_BRAKE_LEAD_MM = 3`; 20 lệnh sẽ có tổng khoảng 60 mm phanh sớm nếu không mô phỏng thêm chuyển động khi phanh. Không tự biến sai lệch đó thành hệ số phóng to sa bàn. Mốc `originDist` dùng float để không vứt phần lẻ encoder mỗi lần gọi hàm; phần này không làm thay đổi mốc đọc integer của phần cứng.
 
 Để khớp sai số còn lại của robot thật cần đo quãng đường thực tế sau cùng một chương trình, gồm cả các lần phanh/quay. Chưa tự thêm hệ số trượt, quán tính hoặc tăng tốc độ khi chưa có số đo tương ứng.
+
+
+### Hiệu chuẩn theo phép đo quãng đường mới
+
+Theo ước lượng người dùng: `move_tank(2000,2000,33.274)` đi khoảng 350 mm trên robot thật, trong khi profile cũ đi khoảng 329,74 mm sau phanh sớm. `motionCalibration.ts` đặt hệ số **physical mm / encoder mm = 1,06**, làm tròn từ phép đo gần đúng này. Cùng lệnh hiện đi khoảng 349,5 mm trong giả lập. Chưa thay hình học sa bàn, kích thước robot hoặc tỷ lệ góc quay.
+
+Tốc độ vật lý vẫn 65 mm/s ở lệnh 2000: chạy theo thời gian 5 giây vẫn được 325 mm. Chỉ phản hồi distance encoder được hiệu chuẩn: một lệnh chờ quãng đường sẽ chạy lâu hơn tương ứng; `getDistanceMm` và `waitDistanceMm` dùng cùng hệ số. Phần phanh sớm 3 mm của base helper vẫn là 3 mm encoder. Các lệnh C++ đã có được mô phỏng theo profile này; số cm trong code sinh từ đường vẽ không bị tự sửa.
+
+Nút Chạy cung cấp một tín hiệu bắt đầu nhiệm vụ. Với `LbMission.begin`, giả lập không tự chạy lại lộ trình khi Arduino quay lại `loop()` hoặc khi gặp cổng nhiệm vụ kế tiếp; cần bấm Chạy cho một lần mới. Loop điều khiển không có cổng nhiệm vụ vẫn được lặp bình thường. [Tham khảo API Mission.begin](https://github.com/ecchallenge/ptit/blob/main/Leanbot%20API%20Reference/README.md#lbmissionbegin).
+
+Kiểm thử dùng profile encoder 1,0 để tách kiểm tra scheduler/động học danh định; `motionCalibration.test.ts` kiểm tra riêng profile đo 1,06 mặc định, gồm khoảng 35 cm với lệnh 33,274 cm, chạy lùi, quay, chờ quãng đường và chạy theo thời gian.

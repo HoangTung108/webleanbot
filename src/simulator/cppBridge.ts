@@ -34,7 +34,7 @@ export class CppSimulatorBridge {
   private completionReason: 'program' | 'time-limit' | undefined;
   getCompletionReason() { return this.completionReason; }
 
-  constructor(simulator: RobotSimulator) {
+  constructor(simulator: RobotSimulator, private readonly distanceScale?:number) {
     this.simulator = simulator;
     this.commandQueue = {
       commands: [],
@@ -59,7 +59,7 @@ export class CppSimulatorBridge {
         sensors: () => this.simulator.getSensorReadings(),
         lineMask: () => this.simulator.getLineMask(),
         log: message => this.logs.push(message),
-      });
+      },this.distanceScale);
       this.commandQueue = { commands: [], currentIndex: 0, isExecuting: false };
       this.logs = [];
       return { success: true };

@@ -4,11 +4,12 @@ import { CppSimulatorBridge } from './cppBridge';
 import { RobotSimulator } from './robotSimulator';
 
 const code = 'void setup(){} void loop(){ LbMotion.runLR(2000,2000); LbMotion.waitDistanceMm(325); LbMotion.stopAndWait(); LbMission.end(); }';
-describe('editor code bridge', () => {
+// Identity feedback isolates scheduler/physics checks; measured-profile tests are in motionCalibration.test.ts.
+describe('editor code bridge with nominal encoder calibration', () => {
   it('preserves the configured pose, pauses without adding elapsed time, and stops at 325 mm', () => {
     const robot = new RobotSimulator();
     robot.reset({ x: 400, y: 500, heading: 90 });
-    const bridge = new CppSimulatorBridge(robot);
+    const bridge = new CppSimulatorBridge(robot,1);
     expect(bridge.loadCode(code).success).toBe(true);
     robot.start(); bridge.startExecution(); bridge.executeStep(0);
     for (let t = 10; t <= 300; t += 10) bridge.executeStep(t);
@@ -22,7 +23,7 @@ describe('editor code bridge', () => {
     expect(bridge.isExecuting()).toBe(false);
   });
   it.each([1, 2, 5, 10])('keeps C++ delays, feedback encoders and physics synchronized at %sx', multiplier => {
-    const robot = new RobotSimulator(), bridge = new CppSimulatorBridge(robot);
+    const robot = new RobotSimulator(), bridge = new CppSimulatorBridge(robot,1);
     robot.reset({x:400,y:500,heading:0});
     robot.setSpeedMultiplier(multiplier);
     expect(bridge.loadCode(`void loop(){
@@ -50,7 +51,7 @@ describe('editor code bridge', () => {
   });
 
   it('changes fast-forward mid-program without changing the target distance', () => {
-    const robot = new RobotSimulator(), bridge = new CppSimulatorBridge(robot);
+    const robot = new RobotSimulator(), bridge = new CppSimulatorBridge(robot,1);
     robot.reset({x:400,y:500,heading:0});bridge.loadCode(code);robot.start();bridge.startExecution();
     bridge.executeStep(0);bridge.executeStep(1000);
     expect(robot.getRobotPose().x).toBeCloseTo(465,5);
@@ -62,7 +63,7 @@ describe('editor code bridge', () => {
   });
 
   it.each([1,10])('enforces the 120-second official competition limit at %sx', multiplier => {
-    const robot=new RobotSimulator(),bridge=new CppSimulatorBridge(robot);
+    const robot=new RobotSimulator(),bridge=new CppSimulatorBridge(robot,1);
     robot.setSpeedMultiplier(multiplier);
     expect(bridge.loadCode('void loop(){ LbDelay(1000000); }').success).toBe(true);
     robot.start();bridge.startExecution(undefined,{keepRoundClock:true});
@@ -74,7 +75,7 @@ describe('editor code bridge', () => {
   });
 
   it('uses freshly loaded code on the next run and reports unsupported code', () => {
-    const robot = new RobotSimulator(), bridge = new CppSimulatorBridge(robot);
+    const robot = new RobotSimulator(), bridge = new CppSimulatorBridge(robot,1);
     expect(bridge.loadCode(code).success).toBe(true);
     expect(bridge.loadCode('void loop(){ LbMotion.runLR(-400,-400); LbDelay(100); LbMission.end(); }').success).toBe(true);
     robot.reset({ x: 400, y: 500, heading: 0 }); robot.start(); bridge.startExecution();
@@ -83,7 +84,7 @@ describe('editor code bridge', () => {
     expect(bridge.loadCode('void loop(){ unknown(); }')).toMatchObject({ success: false });
   });
   it.each([[2000, -2000, 90], [-2000, 2000, -90]])('turns and reports matching encoder direction for runLR(%s, %s)', (left, right, angle) => {
-    const robot = new RobotSimulator(), bridge = new CppSimulatorBridge(robot);
+    const robot = new RobotSimulator(), bridge = new CppSimulatorBridge(robot,1);
     robot.reset({ x: 500, y: 500, heading: 0 });
     expect(bridge.loadCode(`void loop(){ LbMotion.runLR(${left},${right}); LbMotion.waitRotationDeg(90); LbMotion.stopAndWait(); Serial.println(LbMotion.getRotationDeg()); LbMission.end(); }`).success).toBe(true);
     robot.start(); bridge.startExecution();
@@ -96,7 +97,7 @@ describe('editor code bridge', () => {
   });
 
   it('picks up, carries and releases an actual mission block from C++ commands', () => {
-    const robot=new RobotSimulator(),bridge=new CppSimulatorBridge(robot),site=robot.mission.slots('pollution')[0];
+    const robot=new RobotSimulator(),bridge=new CppSimulatorBridge(robot,1),site=robot.mission.slots('pollution')[0];
     const block=robot.mission.place('pollution','red',site.x,site.y);
     robot.reset({x:site.x-LEANBOT_GEOMETRY.graspOffset,y:site.y,heading:0});
     expect(bridge.loadCode('void loop(){ LbGripper.close(); LbMotion.runLR(2000,2000); LbMotion.waitDistanceMm(35); LbMotion.stopAndWait(); LbGripper.open(); LbDelay(500); LbMission.end(); }').success).toBe(true);
@@ -111,7 +112,7 @@ describe('editor code bridge', () => {
 });
 
 it.each([1,10])('finishes a free-practice program longer than 120 seconds at %sx',multiplier=>{
- const robot=new RobotSimulator(),bridge=new CppSimulatorBridge(robot);
+ const robot=new RobotSimulator(),bridge=new CppSimulatorBridge(robot,1);
  robot.reset({x:400,y:600,heading:0});robot.setSpeedMultiplier(multiplier);
  expect(bridge.loadCode('void loop(){LbDelay(125000);LbMotion.runLR(2000,2000);LbDelay(5000);LbMission.end();}').success).toBe(true);
  robot.start();bridge.startExecution(0);

@@ -1,3 +1,4 @@
+import {MOTION_CALIBRATION} from './motionCalibration';
 import { LEANBOT_GEOMETRY } from './robotGeometry';
 export { MissionWorld, drawMissionBlocks } from './missionWorld';
 export { mountMissionEditor } from './missionEditor';
@@ -125,8 +126,10 @@ class Flow { constructor(public kind: string, public value: Value = null) {} }
 export class CppRuntime {
   private nodes: Node[]; private functions = new Map<string, Node>(); private scopes: Scope[] = [new Map()];
   private iterator?: Generator<Yield, void, unknown>; private pending = 0;
+  private missionStarted=false;
   running = false; time = 0; distance = 0; rotation = 0; left = 0; right = 0;
-  constructor(source: string, private host: RuntimeHost) {
+  constructor(source: string, private host: RuntimeHost, private readonly distanceScale: number = MOTION_CALIBRATION.physicalMmPerEncoderMm) {
+    if(!Number.isFinite(distanceScale)||distanceScale<=0)throw new Error('Hệ số hiệu chuẩn quãng đường phải là số dương hữu hạn.');
     this.nodes = new Parser(source).parse();
     for (const n of this.nodes) if (n.k === 'function') this.functions.set(n.name, n);
     const builtins = new Set(['Leanbot.begin', 'LbMission.begin', 'LbMission.end', 'LbMotion.runLR', 'LbMotion.runLRrpm', 'LbMotion.stopAndWait', 'LbMotion.setZeroOrigin', 'LbMotion.getDistanceMm', 'LbMotion.getRotationDeg', 'LbMotion.waitDistanceMm', 'LbMotion.waitRotationDeg', 'LbDelay', 'delay', 'millis', 'isfinite', 'fabsf', 'fabs', 'abs', 'lroundf', 'round', 'sqrtf', 'sqrt', 'min', 'max', 'constrain', 'strcmp', 'Serial.begin', 'Serial.println', 'Serial.print', 'LbGripper.open', 'LbGripper.close', 'LbGripper.moveToLR', 'LbGripper.moveTo', 'Leanbot.pingCm', 'Leanbot.pingMm', 'Leanbot.tone', 'LbRGB.show']);
@@ -191,7 +194,12 @@ export class CppRuntime {
     switch (name) {
       case 'LbIRLine.setThreshold': return null; // Board geometry supplies digital black/white readings.
       case 'LbIRLine.read': return this.host.lineMask?.() ?? 0;
-      case 'Leanbot.begin': case 'LbMission.begin': case 'Serial.begin': case 'LbRGB.show': return null;
+      case 'Leanbot.begin': case 'Serial.begin': case 'LbRGB.show': return null;
+      case 'LbMission.begin':
+        // Run supplies one start signal. The hardware waits for touch buttons
+        // again at the next mission; never auto-start another route here.
+        if(this.missionStarted){this.motors(0,0);yield {end:true};return null;}
+        this.missionStarted=true;return null;
       case 'LbMission.end': this.motors(0, 0); yield { end: true }; return null;
       case 'LbMotion.runLR': this.motors(Math.max(-2000,Math.min(2000,a)) * 65 / 2000, Math.max(-2000,Math.min(2000,b)) * 65 / 2000); return null;
       case 'LbMotion.runLRrpm': this.motors(a * 2 * Math.PI * 16.25 / 60, b * 2 * Math.PI * 16.25 / 60); return null;
@@ -203,7 +211,7 @@ export class CppRuntime {
       case 'LbDelay': case 'delay': if (!Number.isFinite(a) || a < 0) throw new Error('Thời gian chờ không hợp lệ'); yield { ms: a }; return null;
       case 'LbMotion.waitDistanceMm': {
         const speed = Math.abs((this.left + this.right) / 2); if (!speed && a) throw new Error('Không thể chờ quãng đường khi robot đứng yên');
-        yield { ms: speed ? Math.abs(a) / speed * 1000 : 0 }; return null;
+        yield { ms: speed ? Math.abs(a) * this.distanceScale / speed * 1000 : 0 }; return null;
       }
       case 'LbMotion.waitRotationDeg': {
         const speed = Math.abs((this.left - this.right) / LEANBOT_GEOMETRY.wheelBase * 180 / Math.PI); if (!speed && a) throw new Error('Không thể chờ góc quay khi hai bánh chạy cùng tốc độ');
@@ -263,9 +271,14 @@ export class CppRuntime {
   private *program(): Generator<Yield, void, unknown> {
     for (const n of this.nodes) if (n.k !== 'function') yield* this.statement(n);
     if (this.functions.has('setup')) yield* this.call('setup', []);
-    if (this.functions.has('loop')) while (true) { yield* this.call('loop', []); yield { ms: 1 }; }
+    if (this.functions.has('loop')) while (true) {
+      const missionWasStarted=this.missionStarted;
+      yield* this.call('loop', []);
+      if(!missionWasStarted&&this.missionStarted){this.motors(0,0);return;}
+      yield { ms: 1 };
+    }
   }
-  start() { this.scopes = [new Map()]; this.iterator = this.program(); this.running = true; this.time = this.distance = this.rotation = this.pending = 0; this.motors(0, 0); }
+  start() { this.missionStarted=false;this.scopes = [new Map()]; this.iterator = this.program(); this.running = true; this.time = this.distance = this.rotation = this.pending = 0; this.motors(0, 0); }
   stop() { this.running = false; this.motors(0, 0); }
   tick(milliseconds: number) {
     if (!Number.isFinite(milliseconds) || milliseconds < 0) return;
@@ -287,7 +300,8 @@ export class CppRuntime {
           if (remaining <= 0) break;
           const dt = Math.min(this.pending, remaining, 5);
           this.host.advance(dt / 1000); this.time += dt;
-          this.distance += (this.left + this.right) / 2 * dt / 1000;
+          // Physical wheel speeds stay unchanged; distance feedback has its own calibration.
+          this.distance += (this.left + this.right) / 2 * dt / 1000 / this.distanceScale;
           this.rotation += (this.left - this.right) / LEANBOT_GEOMETRY.wheelBase * 180 / Math.PI * dt / 1000;
           this.pending -= dt; remaining -= dt;
         } else {

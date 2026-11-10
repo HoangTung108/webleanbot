@@ -1,3 +1,4 @@
+import {MOTION_CALIBRATION} from './motionCalibration';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { LEANBOT_GEOMETRY } from './robotGeometry';
@@ -11,7 +12,7 @@ function run(code: string, frame = 16) {
     motors: (l, r) => motors.push([l, r]),
     advance: dt => { path += (runtime.left + runtime.right) / 2 * dt; angle += (runtime.left - runtime.right) / LEANBOT_GEOMETRY.wheelBase * 180 / Math.PI * dt; },
     gripper: (l, r) => hands.push([l, r]),
-  });
+  },1); // Nominal encoder profile; default measured gain is tested separately.
   runtime.start();
   for (let i = 0; i < 10000 && runtime.running; i++) runtime.tick(frame);
   expect(runtime.running).toBe(false);
@@ -36,12 +37,12 @@ describe('custom C++ execution', () => {
     expect(result.runtime.time).toBe(300);
   });
   it('matches measured 32.5 cm in 5 seconds at command 2000', () => {
-    const runtime = new CppRuntime('void loop(){ LbMotion.runLR(2000,2000); LbMotion.waitDistanceMm(325); LbMission.end(); }', { motors() {}, advance() {} });
+    const runtime = new CppRuntime('void loop(){ LbMotion.runLR(2000,2000); LbDelay(5000); LbMission.end(); }', { motors() {}, advance() {} });
     runtime.start(); runtime.tick(0); runtime.tick(4900);
     expect(runtime.running).toBe(true);
-    expect(runtime.distance).toBeCloseTo(318.5, 6);
+    expect(runtime.distance).toBeCloseTo(318.5/MOTION_CALIBRATION.physicalMmPerEncoderMm, 6);
     runtime.tick(100);
-    expect(runtime.distance).toBeCloseTo(325, 6);
+    expect(runtime.distance).toBeCloseTo(325/MOTION_CALIBRATION.physicalMmPerEncoderMm, 6);
     expect(runtime.time).toBeCloseTo(5000, 6);
     expect(runtime.running).toBe(false);
   });
