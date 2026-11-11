@@ -853,42 +853,42 @@ export const apiReference: ApiReference[] = [
   },
   {
     "group": "helpers",
-    "api": "turn_angle(1800, 90, TWO_WHEELS);",
+    "api": "turn_angle(2000, 90, TWO_WHEELS);",
     "description": "Quay có phản hồi, tăng/giảm tốc và kiểm tra kẹt.",
     "parameters": "Tốc độ, góc độ, TurnMode.",
     "returns": "void.",
     "notes": "Dùng TURN_SCALE và ngưỡng phanh hiện tại.",
-    "code": "// Quay có phản hồi, tăng/giảm tốc và kiểm tra kẹt.\nturn_angle(1800, 90, TWO_WHEELS);",
+    "code": "// Quay có phản hồi, tăng/giảm tốc và kiểm tra kẹt.\nturn_angle(2000, 90, TWO_WHEELS);",
     "source": "baseCode.cpp"
   },
   {
     "group": "helpers",
-    "api": "turn_one_wheel(1800, 90, \"L\");",
+    "api": "turn_one_wheel(2000, 90, \"L\");",
     "description": "Quay bằng một bánh.",
     "parameters": "Tốc độ, góc độ, \"L\" hoặc \"R\".",
     "returns": "void.",
     "notes": "Giữ quy ước dấu riêng của hàm trong baseCode.",
-    "code": "// Quay bằng một bánh.\nturn_one_wheel(1800, 90, \"L\");",
+    "code": "// Quay bằng một bánh.\nturn_one_wheel(2000, 90, \"L\");",
     "source": "baseCode.cpp"
   },
   {
     "group": "helpers",
-    "api": "turn_two_wheels(1800, 90);",
+    "api": "turn_two_wheels(2000, 90);",
     "description": "Quay bằng hai bánh.",
     "parameters": "Tốc độ, góc độ có dấu.",
     "returns": "void.",
     "notes": "Không gọi từ bên trong vòng điều khiển khác.",
-    "code": "// Quay bằng hai bánh.\nturn_two_wheels(1800, 90);",
+    "code": "// Quay bằng hai bánh.\nturn_two_wheels(2000, 90);",
     "source": "baseCode.cpp"
   },
   {
     "group": "helpers",
-    "api": "move_tank(1800, 1800, 10);",
+    "api": "move_tank(2000, 2000, 10);",
     "description": "Đi có phản hồi quãng đường và bù hướng.",
     "parameters": "Tốc độ L/R cùng dấu, quãng đường cm không âm.",
     "returns": "void.",
     "notes": "Hai tốc độ âm để lùi; giới hạn quãng đường 1200 cm.",
-    "code": "// Đi có phản hồi quãng đường và bù hướng.\nmove_tank(1800, 1800, 10);",
+    "code": "// Đi có phản hồi quãng đường và bù hướng.\nmove_tank(2000, 2000, 10);",
     "source": "baseCode.cpp"
   },
   {
