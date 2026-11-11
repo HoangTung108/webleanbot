@@ -344,7 +344,7 @@ Kiểm thử Wi-Fi biên dịch/chạy C++ với API giả lập để kiểm tr
 
 ### Dò line và kiểm tra màu trong base code
 
-Các hàm tương thích vẫn gồm `runFollowLine`, `followLineDistance`, `followLineUntilJunction`, `followLineMultipleJunctions`, `goToJunction`, `Obj_detectColor`, `requireColor`. Hàm gọi đơn giản để đọc khối là `read_color()`; `get_color()` lấy màu đã đo, `is_color(RED)` kiểm tra cache. Không dùng mẫu RGB của giả lập để thay các mẫu hiệu chuẩn thực tế của từng khối.
+Các hàm tương thích vẫn gồm `runFollowLine`, `followLineDistance`, `followLineUntilJunction`, `followLineMultipleJunctions`, `goToJunction`, `requireColor`. Hàm gọi đơn giản để đọc khối là `read_color()`; `get_color()` lấy màu đã đo, `is_color(RED)` kiểm tra cache. Không dùng mẫu RGB của giả lập để thay các mẫu hiệu chuẩn thực tế của từng khối.
 
 ### API dò line tinh gọn
 

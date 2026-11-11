@@ -13,7 +13,7 @@ describe('current base runs without helper rewrites',()=>{
  it('uses the current encoder scale and acceleration/braking for 32.5 cm',()=>{const r=run('move_tank(2000,2000,32.5);');expect(r.path).toBeCloseTo(325,0);expect(r.logs).toEqual([]);});
  it('runs the actual turn profile',()=>{const r=run('turn_two_wheels(2000,90);');expect(r.angle).toBeGreaterThan(89.4);expect(r.angle).toBeLessThan(90);});
  it('runs MyBlock pointer/struct feedback in mm and cm',()=>{const r=run('followLineDistance(100);followLineCm(22.5);');expect(r.path).toBeCloseTo(325,0);expect(r.logs).toEqual([]);});
- it('runs the asynchronous hand, color voting and local IoT FIFO',()=>{const r=run('close_hand_async(50);read_color();send_iot_color(get_color());poll_iot_color();Serial.println(pop_iot_color());wait_hand();');expect(r.hands.at(-1)).toEqual([50,50]);expect(r.logs).toContain('1');expect(r.logs.some(s=>s.includes('RED'))).toBe(true);});
+ it('runs the asynchronous hand, color voting and local IoT FIFO',()=>{const r=run('close_hand_async(50);read_color();send_iot_color(get_color());read_iot_color();Serial.println(pop_iot_color());wait_hand();');expect(r.hands.at(-1)).toEqual([50,50]);expect(r.logs).toContain('1');expect(r.logs.some(s=>s.includes('RED'))).toBe(true);});
 });
 
 it('follows the actual Synapse curved line in both directions',async()=>{

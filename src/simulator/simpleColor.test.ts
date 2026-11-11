@@ -33,10 +33,10 @@ assert(get_color()==UNKNOWN&&!is_color(UNKNOWN));
 frame(10,15,100);read_color();assert(APDS.reads==5);assert(get_color()==BLUE);assert(is_color(BLUE));assert(!is_color(RED));assert(APDS.reads==5);assert(LbRGB.changes==1);
 frame(100,100,100);read_color();assert(get_color()==UNKNOWN);assert(!is_color(BLUE));assert(LbRGB.changes==1);
 frame(100,15,10);read_color();assert(is_color(RED));assert(LbRGB.changes==2);
-frame(10,15,100);APDS.failAt=2;read_color();assert(get_color()==UNKNOWN);assert(!is_color(RED));assert(error==ERR_COLOR_SENSOR);assert(LbRGB.changes==2);
-frame(10,15,100);colorSensorReady=false;read_color();assert(get_color()==UNKNOWN&&APDS.reads==0);
-colorSensorReady=true;frame(10,15,100);bool valid=false;assert(readObjectColor(valid)==BLUE&&valid);assert(get_color()==BLUE);
-frame(100,100,100);assert(Obj_detectColor()==UNKNOWN);assert(!is_color(BLUE));
+frame(10,15,100);APDS.failAt=2;assert(!read_color());assert(get_color()==UNKNOWN);assert(!is_color(RED));assert(error==ERR_COLOR_SENSOR);assert(LbRGB.changes==2);
+frame(10,15,100);colorSensorReady=false;assert(!read_color());assert(get_color()==UNKNOWN&&APDS.reads==0);
+colorSensorReady=true;frame(10,15,100);assert(read_color());assert(get_color()==BLUE);
+frame(100,100,100);assert(read_color());assert(get_color()==UNKNOWN);assert(!is_color(BLUE));
 }
 `
   writeFileSync(join(dir,'test.cpp'),source)

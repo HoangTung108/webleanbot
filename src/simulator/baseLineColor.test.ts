@@ -1,7 +1,7 @@
 import {it,expect} from 'vitest';
 import baseCode from '../../docs/baseCode.cpp?raw';
 import {CppRuntime} from './cppRuntime';
-const helpers=baseCode.slice(0,baseCode.search(/void\s+setup\s*\(\s*\)\s*\{/));
+const helpers=baseCode.slice(0,baseCode.search(/void\s+(?:FullMission|setup)\s*\(\s*\)\s*\{/));
 function run(body:string,samples:readonly (readonly [number,number,number])[],ready=true){
  let reads=0;const logs:string[]=[],lights:number[][]=[];
  const runtime=new CppRuntime(`${helpers}\nvoid setup(){colorSensorReady=${ready?'true':'false'};}void loop(){${body}LbMission.end();}`,{

@@ -56,9 +56,7 @@ inline LbmbState lbmbReadState();
 
 enum ObjectColor { UNKNOWN, RED, GREEN, BLUE, YELLOW, PURPLE };
 static ObjectColor classifyColor(int red, int green, int blue);
-ObjectColor readObjectColor(bool &valid);
-ObjectColor Obj_detectColor();
-void read_color();
+bool read_color();
 ObjectColor get_color();
 bool is_color(ObjectColor expected);
 void requireColor(ObjectColor expected);
@@ -1124,17 +1122,17 @@ static ObjectColor classifyColor(int red, int green, int blue) {
   return PURPLE;
 }
 
-ObjectColor readObjectColor(bool &valid) {
-  valid = false;
+// Read and cache one measurement; false means a sensor error.
+bool read_color() {
   lastMeasuredColor = UNKNOWN; // Không giữ lại màu cũ nếu lần đo này thất bại.
-  if (!colorSensorReady) { failMission(ERR_COLOR_SENSOR); return UNKNOWN; }
+  if (!colorSensorReady) { failMission(ERR_COLOR_SENSOR); return false; }
   int votes[6] = {0, 0, 0, 0, 0, 0};
   long totalRed = 0, totalGreen = 0, totalBlue = 0;
   for (int sample = 0; sample < COLOR_SAMPLE_COUNT; ++sample) {
     int red = 0, green = 0, blue = 0;
     if (!readAPDSColor(red, green, blue) || red < 0 || green < 0 || blue < 0) {
       failMission(ERR_COLOR_SENSOR);
-      return UNKNOWN;
+      return false;
     }
     ++votes[(int)classifyColor(red, green, blue)];
     totalRed += red; totalGreen += green; totalBlue += blue;
@@ -1158,7 +1156,6 @@ ObjectColor readObjectColor(bool &valid) {
     case PURPLE: Serial.println(F("PURPLE")); break;
     default: Serial.println(F("UNKNOWN / unstable")); break;
   }
-  valid = true;
   lastMeasuredColor = color;
   if (color != UNKNOWN) {
     const CRGB colors[6] = {CRGB(0, 0, 0), CRGB(255, 0, 0), CRGB(0, 255, 0),
@@ -1166,23 +1163,16 @@ ObjectColor readObjectColor(bool &valid) {
     LbRGB.fillColor(colors[(int)color]);
     LbRGB.show();
   }
-  return color;
+  return true;
 }
 
 
-void read_color() {
-  bool valid = false;
-  readObjectColor(valid);
-}
 ObjectColor get_color() { return lastMeasuredColor; } // Không đo lại.
 bool is_color(ObjectColor expected) {
   return expected != UNKNOWN && lastMeasuredColor == expected;
 }
-ObjectColor Obj_detectColor() { bool valid; return readObjectColor(valid); }
 void requireColor(ObjectColor expected) {
-  bool valid;
-  const ObjectColor color = readObjectColor(valid);
-  if (valid && color != expected) failMission(ERR_COLOR_MISMATCH);
+  if (read_color() && lastMeasuredColor != expected) failMission(ERR_COLOR_MISMATCH);
 }
 // Tín hiệu màu IoT và hàng chờ
 void send_iot_color(ObjectColor color) {
@@ -1200,7 +1190,6 @@ const int IOT_QUEUE_CAPACITY = 16;
 ObjectColor iotColorQueue[IOT_QUEUE_CAPACITY];
 int iotQueueHead = 0;
 int iotQueueSize = 0;
-ObjectColor lastQueuedIotColor = UNKNOWN;
 bool iotQueueOverflow = false;
 int iot_queue_count() { return iotQueueSize; }
 void clear_iot_queue() {
@@ -1224,26 +1213,23 @@ ObjectColor read_iot_color() {
   String signal = IoTColor.read();
   signal.trim();
   signal.toUpperCase();
-  if (signal == "WAITING") lastQueuedIotColor = UNKNOWN;
   ObjectColor color = UNKNOWN;
   if (signal == "RED") color = RED;
   else if (signal == "GREEN") color = GREEN;
   else if (signal == "BLUE") color = BLUE;
   else if (signal == "YELLOW") color = YELLOW;
   else if (signal == "PURPLE") color = PURPLE;
-  if (color != UNKNOWN && color != lastQueuedIotColor) {
+  if (color != UNKNOWN) {
     if (iotQueueSize < IOT_QUEUE_CAPACITY) {
       const int tail = (iotQueueHead + iotQueueSize) % IOT_QUEUE_CAPACITY;
       iotColorQueue[tail] = color;
       ++iotQueueSize;
-      lastQueuedIotColor = color;
     } else {
       iotQueueOverflow = true;
     }
   }
   return color;
 }
-void poll_iot_color() { read_iot_color(); }
 void reset_iot_color() { IoTColor.write("waiting"); }
 bool wait_iot_color(ObjectColor expected, unsigned long timeoutMs) {
   if (expected != RED && expected != GREEN && expected != BLUE &&
@@ -1264,14 +1250,37 @@ bool wait_iot_color(ObjectColor expected, unsigned long timeoutMs) {
   return false;
 }
 
+void FullMission()
+{
+  LbRGB.fillColor(CRGB::Green, BITMAP(ledA,ledB));
+  LbRGB.show();
+  if(LbTouch.read(TB1A) == HIGH) // Do mau`
+  {
+      calibrate_line(); 
+  }
+  if(LbTouch.read(TB1B) == HIGH)
+  {
+    LbRGB.fillColor(CRGB::Yellow, BITMAP(ledC,ledD));
+    LbRGB.show();
+    // followLineCm(100, 2000);
+    // chay bai`
+  }
+  if(LbTouch.read(TB2A) == HIGH)
+  {
+    LbRGB.fillColor(CRGB::Red, BITMAP(ledC,ledD));
+    LbRGB.show();
+    // connect internet
+  }
+
+
+}
+
 void setup() {
   Leanbot.begin();
 //   set_line(IR_TH_2L, IR_TH_0L, IR_TH_1R, IR_TH_3R); // Ngưỡng dự phòng.
-  calibrate_line(); 
 }
 
-void loop() {
-  LbMission.begin(TB1A + TB1B);
- 
-  LbMission.end();
+void loop() 
+{
+  FullMission();
 }

@@ -443,36 +443,6 @@ export const apiReference: ApiReference[] = [
   },
   {
     "group": "sensors",
-    "api": "APDS.colorAvailable();",
-    "description": "Kiểm tra mẫu màu.",
-    "parameters": "Không có.",
-    "returns": "int trạng thái.",
-    "notes": "Arduino_APDS9960; kiểm tra phiên bản.",
-    "code": "// Kiểm tra mẫu màu.\nAPDS.colorAvailable();",
-    "source": "Arduino_APDS9960.h (Arduino)"
-  },
-  {
-    "group": "sensors",
-    "api": "APDS.readColor(r, g, b);",
-    "description": "Đọc RGB.",
-    "parameters": "Ba biến int tham chiếu.",
-    "returns": "bool.",
-    "notes": "Arduino_APDS9960; kiểm tra phiên bản.",
-    "code": "// Đọc RGB.\nAPDS.readColor(r, g, b);",
-    "source": "Arduino_APDS9960.h (Arduino)"
-  },
-  {
-    "group": "sensors",
-    "api": "APDS.readColor(r, g, b, c);",
-    "description": "Đọc RGB và clear.",
-    "parameters": "Bốn biến int tham chiếu.",
-    "returns": "bool.",
-    "notes": "Arduino_APDS9960; kiểm tra phiên bản.",
-    "code": "// Đọc RGB và clear.\nAPDS.readColor(r, g, b, c);",
-    "source": "Arduino_APDS9960.h (Arduino)"
-  },
-  {
-    "group": "sensors",
     "api": "APDS.proximityAvailable();",
     "description": "Kiểm tra mẫu gần.",
     "parameters": "Không có.",
@@ -1003,36 +973,6 @@ export const apiReference: ApiReference[] = [
   },
   {
     "group": "helpers",
-    "api": "set_color_white(100, 120, 80);",
-    "description": "Cân bằng trắng cho phân loại Hue.",
-    "parameters": "RGB thực tế của mẫu trắng.",
-    "returns": "void.",
-    "notes": "Ví dụ số minh họa; không dùng màu khối để cân bằng trắng.",
-    "code": "// Cân bằng trắng cho phân loại Hue.\nset_color_white(100, 120, 80);",
-    "source": "baseCode.cpp"
-  },
-  {
-    "group": "helpers",
-    "api": "readAPDSColor(r, g, b);",
-    "description": "Đọc một mẫu RGB có thời hạn.",
-    "parameters": "Ba biến int tham chiếu.",
-    "returns": "bool thành công.",
-    "notes": "Không tự phân loại hoặc đổi LED.",
-    "code": "// Đọc một mẫu RGB có thời hạn.\nreadAPDSColor(r, g, b);",
-    "source": "baseCode.cpp"
-  },
-  {
-    "group": "helpers",
-    "api": "set_color_reference(RED, 100, 15, 10);",
-    "description": "Lưu mẫu màu đã gán nhãn.",
-    "parameters": "Màu và RGB thô thực tế.",
-    "returns": "void.",
-    "notes": "Mẫu trong RAM; cần lưu câu lệnh vào setup để dùng sau reset.",
-    "code": "// Lưu mẫu màu đã gán nhãn.\nset_color_reference(RED, 100, 15, 10);",
-    "source": "baseCode.cpp"
-  },
-  {
-    "group": "helpers",
     "api": "calibrate_color(RED);",
     "description": "Học mẫu khi đang đặt đúng khối.",
     "parameters": "Tên màu thật.",
@@ -1041,36 +981,7 @@ export const apiReference: ApiReference[] = [
     "code": "// Học mẫu khi đang đặt đúng khối.\ncalibrate_color(RED);",
     "source": "baseCode.cpp"
   },
-  {
-    "group": "helpers",
-    "api": "readObjectColor(valid);",
-    "description": "Đọc 5 mẫu, phân loại khi có ít nhất 4 phiếu.",
-    "parameters": "bool valid đã khai báo, truyền tham chiếu.",
-    "returns": "ObjectColor; valid báo đọc đủ mẫu.",
-    "notes": "valid=true vẫn có thể UNKNOWN; chỉ xử lý khi màu xác định. Học sinh có thể dùng read_color() để khỏi khai báo biến; get_color()/is_color() lấy kết quả không đo lại.",
-    "code": "// Đọc 5 mẫu, phân loại khi có ít nhất 4 phiếu.\nreadObjectColor(valid);",
-    "source": "baseCode.cpp"
-  },
-  {
-    "group": "helpers",
-    "api": "Obj_detectColor();",
-    "description": "Đọc màu qua hàm rút gọn.",
-    "parameters": "Không có.",
-    "returns": "ObjectColor.",
-    "notes": "Không cung cấp riêng cờ lỗi cảm biến.",
-    "code": "// Đọc màu qua hàm rút gọn.\nObj_detectColor();",
-    "source": "baseCode.cpp"
-  },
-  {
-    "group": "helpers",
-    "api": "requireColor(BLUE);",
-    "description": "Đo và kiểm tra màu đích.",
-    "parameters": "Màu mong đợi.",
-    "returns": "void.",
-    "notes": "Ghi lỗi khi đọc được nhưng không đúng màu.",
-    "code": "// Đo và kiểm tra màu đích.\nrequireColor(BLUE);",
-    "source": "baseCode.cpp"
-  },
+
   {
     "group": "helpers",
     "api": "send_iot_color(BLUE);",
@@ -1101,16 +1012,7 @@ export const apiReference: ApiReference[] = [
     "code": "// Xóa FIFO và cờ đầy.\nclear_iot_queue();",
     "source": "baseCode.cpp"
   },
-  {
-    "group": "helpers",
-    "api": "peek_iot_color();",
-    "description": "Xem tín hiệu cũ nhất.",
-    "parameters": "Không có.",
-    "returns": "ObjectColor; UNKNOWN nếu rỗng.",
-    "notes": "Không lấy khỏi hàng đợi.",
-    "code": "// Xem tín hiệu cũ nhất.\npeek_iot_color();",
-    "source": "baseCode.cpp"
-  },
+
   {
     "group": "helpers",
     "api": "pop_iot_color();",
@@ -1127,18 +1029,8 @@ export const apiReference: ApiReference[] = [
     "description": "Đọc mạng và xếp màu mới vào FIFO.",
     "parameters": "Không có.",
     "returns": "ObjectColor.",
-    "notes": "Cùng màu bị lọc trùng tới khi thấy WAITING hoặc màu khác.",
+    "notes": "Mỗi lần đọc màu hợp lệ đều thêm vào FIFO, kể cả cùng màu liên tiếp. Đọc lại giá trị IoT chưa đổi cũng thêm một mục; khi đầy chỉ bật cờ tràn.",
     "code": "// Đọc mạng và xếp màu mới vào FIFO.\nread_iot_color();",
-    "source": "baseCode.cpp"
-  },
-  {
-    "group": "helpers",
-    "api": "poll_iot_color();",
-    "description": "Phục vụ việc nhận IoT một lần.",
-    "parameters": "Không có.",
-    "returns": "void.",
-    "notes": "Gọi định kỳ ngoài vòng điều khiển động cơ.",
-    "code": "// Phục vụ việc nhận IoT một lần.\npoll_iot_color();",
     "source": "baseCode.cpp"
   },
   {
@@ -1147,7 +1039,7 @@ export const apiReference: ApiReference[] = [
     "description": "Ghi waiting để mở lượt trao đổi mới.",
     "parameters": "Không có.",
     "returns": "void.",
-    "notes": "Không tự xóa FIFO robot nhận; cần robot nhận đọc được waiting.",
+    "notes": "Không tự xóa FIFO robot nhận. Giá trị waiting không được thêm vào hàng chờ; không bắt buộc giữa hai màu giống nhau.",
     "code": "// Ghi waiting để mở lượt trao đổi mới.\nreset_iot_color();",
     "source": "baseCode.cpp"
   },
@@ -1226,7 +1118,7 @@ export const apiReference: ApiReference[] = [
     "api": "read_color();",
     "description": "Đọc màu khối bằng một lệnh, không cần khai báo biến.",
     "parameters": "Không có.",
-    "returns": "void.",
+    "returns": "bool: false = sensor error; true = samples read (may be UNKNOWN).",
     "notes": "Giữ nhận diện 5 mẫu/4 phiếu và mẫu hiệu chuẩn hiện tại. Tự in Serial, chỉ đổi LED khi có màu xác định. Lỗi hoặc chưa chắc chắn xóa màu lưu về UNKNOWN.",
     "code": "read_color(); // Đọc và báo màu, không cần bool valid hay biến color",
     "source": "baseCode.cpp"
@@ -1250,5 +1142,35 @@ export const apiReference: ApiReference[] = [
     "notes": "Chỉ kiểm tra kết quả đã lưu, không đọc cảm biến lần nữa.",
     "code": "read_color();\nif (is_color(RED)) {\n  close_hand(GRIP_CLOSE_ANGLE); // Xử lý khi nhận diện được đỏ\n}",
     "source": "baseCode.cpp"
+  },
+  {
+    "group": "sensors",
+    "api": "APDS.colorAvailable();",
+    "description": "Kiểm tra mẫu màu.",
+    "parameters": "Không có.",
+    "returns": "int trạng thái.",
+    "notes": "Arduino_APDS9960; kiểm tra phiên bản.",
+    "code": "// Kiểm tra mẫu màu.\nAPDS.colorAvailable();",
+    "source": "Arduino_APDS9960.h (Arduino)"
+  },
+  {
+    "group": "sensors",
+    "api": "APDS.readColor(r, g, b);",
+    "description": "Đọc RGB.",
+    "parameters": "Ba biến int tham chiếu.",
+    "returns": "bool.",
+    "notes": "Arduino_APDS9960; kiểm tra phiên bản.",
+    "code": "// Đọc RGB.\nAPDS.readColor(r, g, b);",
+    "source": "Arduino_APDS9960.h (Arduino)"
+  },
+  {
+    "group": "sensors",
+    "api": "APDS.readColor(r, g, b, c);",
+    "description": "Đọc RGB và clear.",
+    "parameters": "Bốn biến int tham chiếu.",
+    "returns": "bool.",
+    "notes": "Arduino_APDS9960; kiểm tra phiên bản.",
+    "code": "// Đọc RGB và clear.\nAPDS.readColor(r, g, b, c);",
+    "source": "Arduino_APDS9960.h (Arduino)"
   }
 ]
