@@ -38,7 +38,7 @@ export function generateRouteCode(start: Pose, steps: RouteStep[]): string {
 #include <string.h>
 ${helpers}
 void plannedRoute() {
-${commands.split('\n').filter(Boolean).map(line => `  ${line}\n  if (!missionOK) return;`).join('\n')}
+${commands.split('\n').filter(Boolean).map(line => `  ${line}`).join('\n')}
 }
 void setup() {
   Leanbot.begin();
@@ -46,7 +46,6 @@ void setup() {
 }
 void loop() {
   LbMission.begin(TB1A + TB1B);
-  missionOK = true;
   missionError = ERR_NONE;
   junctionPending = false;
   resetMotionState();

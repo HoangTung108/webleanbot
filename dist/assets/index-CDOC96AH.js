@@ -384,9 +384,6 @@ const int TURN_FINISH_SPEED = 120;
 const float TURN_SLOW_ZONE = 30.0f;
 const float TURN_BRAKE_LEAD_DEG = 1.5f;
 const int TURN_ACCEL_INCREMENT = 18;
-// millis() and ramp/stall checks use milliseconds. Poll once per millisecond;
-// 0.1 ms repeats the controller ten times with the same timer value and overloads
-// the simulator. Keep acceleration, braking, speed and target-angle calibration.
 const unsigned long MOTION_FEEDBACK_MS = 1UL;
 
 const int ROUTE_SPEED = 1800;       
@@ -417,7 +414,6 @@ enum ErrorCode {
 };
 
 ErrorCode missionError = ERR_NONE;
-bool missionOK = true;
 bool junctionPending = false;
 int lastLineError = 0;
 int lastLineCmdL = 0;
@@ -434,7 +430,6 @@ static float fmaxLocal(float a, float b) { return a > b ? a : b; }
 
 void failMission(ErrorCode code) {
   if (missionError == ERR_NONE) missionError = code;
-  missionOK = false;
   LbMotion.stopAndWait();
   LbRGB.fillColor(CRGB::Red);
   LbRGB.show();
@@ -448,13 +443,12 @@ void resetMotionState() {
   lastLineSeenTime = millis();
 }
 
-void turn_angle(int speed, float angle_deg, TurnMode mode) {
-  if (!missionOK) return;
+bool turn_angle(int speed, float angle_deg, TurnMode mode) {
   if (!isfinite(angle_deg) || speed < TURN_FINISH_SPEED || speed > MAX_MOTOR_SPEED ||
       mode < TWO_WHEELS || mode > RIGHT_ONLY) {
-    failMission(ERR_INVALID_MOVE); return;
+    failMission(ERR_INVALID_MOVE); return false;
   }
-  if (fabsf(angle_deg) < 0.8f) return;
+  if (fabsf(angle_deg) < 0.8f) return true;
 
   LbMotion.stopAndWait();
   resetMotionState();
@@ -467,15 +461,15 @@ void turn_angle(int speed, float angle_deg, TurnMode mode) {
   int previousSpeed = -1;
   const unsigned long timeoutMs = 3500UL + (unsigned long)(target * 90.0f);
 
-  while (missionOK) {
+  while (true) {
     const float progress = (float)((long)LbMotion.getRotationDeg() - origin) * direction;
     const float remaining = target - progress;
     if (remaining <= TURN_BRAKE_LEAD_DEG) break;
 
     const unsigned long now = millis();
     if (progress > bestProgress + 0.5f) { bestProgress = progress; lastAdvance = now; }
-    if (now - started > timeoutMs) { failMission(ERR_TURN_TIMEOUT); break; }
-    if (now - lastAdvance > 1700UL) { failMission(ERR_TURN_STALL); break; }
+    if (now - started > timeoutMs) { failMission(ERR_TURN_TIMEOUT); return false; }
+    if (now - lastAdvance > 1700UL) { failMission(ERR_TURN_STALL); return false; }
 
     const float ratio = constrain((remaining - TURN_BRAKE_LEAD_DEG) / TURN_SLOW_ZONE, 0.0f, 1.0f);
     // Braking velocity follows sqrt(remaining distance). The old linear
@@ -496,27 +490,27 @@ void turn_angle(int speed, float angle_deg, TurnMode mode) {
     LbDelay(MOTION_FEEDBACK_MS);
   }
   LbMotion.stopAndWait();
+  return true;
 }
 
-void turn_one_wheel(int speed, float angle, const char* info) {
-  if (info == nullptr || !missionOK) return;
-  if (strcmp(info, "L") == 0) turn_angle(speed, -angle, LEFT_ONLY);
-  else if (strcmp(info, "R") == 0) turn_angle(speed, angle, RIGHT_ONLY);
-  else failMission(ERR_INVALID_MOVE);
+bool turn_one_wheel(int speed, float angle, const char* info) {
+  if (info == nullptr) { failMission(ERR_INVALID_MOVE); return false; }
+  if (strcmp(info, "L") == 0) return turn_angle(speed, -angle, LEFT_ONLY);
+  else if (strcmp(info, "R") == 0) return turn_angle(speed, angle, RIGHT_ONLY);
+  else { failMission(ERR_INVALID_MOVE); return false; }
 }
-void turn_two_wheels(int speed, float angle) {
-  turn_angle(speed, angle, TWO_WHEELS);
+bool turn_two_wheels(int speed, float angle) {
+  return turn_angle(speed, angle, TWO_WHEELS);
 }
 
-void move_tank(int motor_L, int motor_R, float distance_cm) {
-  if (!missionOK) return;
+bool move_tank(int motor_L, int motor_R, float distance_cm) {
   if (!isfinite(distance_cm) || distance_cm < 0.0f ||
       motor_L == 0 || motor_R == 0 || signInt(motor_L) != signInt(motor_R)) {
-    failMission(ERR_INVALID_MOVE); return;
+    failMission(ERR_INVALID_MOVE); return false;
   }
-  if (distance_cm == 0.0f) return;
+  if (distance_cm == 0.0f) return true;
   const float targetMm = distance_cm * 10.0f * DISTANCE_SCALE;
-  if (!isfinite(targetMm) || targetMm > 12000.0f) { failMission(ERR_INVALID_MOVE); return; }
+  if (!isfinite(targetMm) || targetMm > 12000.0f) { failMission(ERR_INVALID_MOVE); return false; }
 
   motor_L = clampMotor(motor_L);
   motor_R = clampMotor(motor_R);
@@ -524,12 +518,10 @@ void move_tank(int motor_L, int motor_R, float distance_cm) {
   const int targetL = (int)lroundf(fabsf((float)motor_L) * LEFT_SCALE);
   const int targetR = (int)lroundf(fabsf((float)motor_R) * RIGHT_SCALE);
   const int maxMagnitude = max(targetL, targetR);
-  if (maxMagnitude < MOVE_FINISH_SPEED) { failMission(ERR_INVALID_MOVE); return; }
+  if (maxMagnitude < MOVE_FINISH_SPEED) { failMission(ERR_INVALID_MOVE); return false; }
 
   LbMotion.stopAndWait();
   resetMotionState();
-  // Preserve fractional origins in simulation; integer hardware readings remain
-  // unchanged. Truncating each origin makes short decimal-distance moves drift.
   const float originDist = (float)LbMotion.getDistanceMm();
   const long originRot = LbMotion.getRotationDeg();
   unsigned long started = millis(), lastAdvance = started, lastRamp = started;
@@ -538,14 +530,14 @@ void move_tank(int motor_L, int motor_R, float distance_cm) {
   int previousL = 32767, previousR = 32767;
   const unsigned long timeoutMs = 3500UL + (unsigned long)(targetMm * 60.0f);
 
-  while (missionOK) {
+  while (true) {
     const float progressed = ((float)LbMotion.getDistanceMm() - originDist) * direction;
     const float remaining = targetMm - progressed;
     if (remaining <= MOVE_BRAKE_LEAD_MM) break;
     const unsigned long now = millis();
     if (progressed > bestProgress + 1.0f) { bestProgress = progressed; lastAdvance = now; }
-    if (now - started > timeoutMs) { failMission(ERR_MOVE_TIMEOUT); break; }
-    if (now - lastAdvance > 1800UL) { failMission(ERR_MOVE_STALL); break; }
+    if (now - started > timeoutMs) { failMission(ERR_MOVE_TIMEOUT); return false; }
+    if (now - lastAdvance > 1800UL) { failMission(ERR_MOVE_STALL); return false; }
 
     const float ratio = constrain((remaining - MOVE_BRAKE_LEAD_MM) / MOVE_SLOW_ZONE_MM, 0.0f, 1.0f);
     const int allowed = min(maxMagnitude,
@@ -569,16 +561,15 @@ void move_tank(int motor_L, int motor_R, float distance_cm) {
     LbDelay(MOTION_FEEDBACK_MS);
   }
   LbMotion.stopAndWait();
+  return true;
 }
 
 void close_hand(int degree) {
-  if (!missionOK) return;
   const int angle = constrain(degree, -30, 120);
   LbGripper.moveToLR(angle, angle, GRIP_MOVE_MS);
   LbDelay(GRIP_MOVE_MS + GRIP_SETTLE_MS);
 }
 void open_hand() {
-  if (!missionOK) return;
   LbGripper.moveToLR(0, 0, GRIP_MOVE_MS);
   LbDelay(GRIP_MOVE_MS + GRIP_SETTLE_MS);
 }
@@ -586,19 +577,13 @@ void open_hand() {
 void set_wifi(string )
 
 bool Forward(int speed, int distanceMm) {
-  if (!missionOK) return false;
-  move_tank(abs(speed), abs(speed), distanceMm / 10.0f);
-  return missionOK;
+  return move_tank(abs(speed), abs(speed), distanceMm / 10.0f);
 }
 bool Backward(int speed, int distanceMm) {
-  if (!missionOK) return false;
-  move_tank(-abs(speed), -abs(speed), distanceMm / 10.0f);
-  return missionOK;
+  return move_tank(-abs(speed), -abs(speed), distanceMm / 10.0f);
 }
 bool Rotate(int speed, float angleDeg) {
-  if (!missionOK) return false;
-  turn_two_wheels(abs(speed), ((speed >= 0) ? 1.0f : -1.0f) * angleDeg);
-  return missionOK;
+  return turn_two_wheels(abs(speed), ((speed >= 0) ? 1.0f : -1.0f) * angleDeg);
 }
 
 
@@ -618,13 +603,12 @@ static int lineErrorForMask(int mask) {
   }
 }
 
-void runFollowLine(int bits) {
-  if (!missionOK) return;
+bool runFollowLine(int bits) {
   if (bits != 0) {
     lastLineSeenTime = millis();
     lastLineError = lineErrorForMask(bits);
   } else if (millis() - lastLineSeenTime >= LINE_LOST_MS) {
-    failMission(ERR_LINE_LOST); return;
+    failMission(ERR_LINE_LOST); return false;
   }
   const int correction = LINE_KP * lastLineError;
   const int desiredL = constrain(LINE_SPEED + correction, 100, 1250);
@@ -632,18 +616,18 @@ void runFollowLine(int bits) {
   lastLineCmdL += constrain(desiredL - lastLineCmdL, -110, 110);
   lastLineCmdR += constrain(desiredR - lastLineCmdR, -110, 110);
   LbMotion.runLR(lastLineCmdL, lastLineCmdR);
+  return true;
 }
-void runFollowLine() { runFollowLine(LbIRLine.read()); }
+bool runFollowLine() { return runFollowLine(LbIRLine.read()); }
 
 bool followLineUntilJunction() {
-  if (!missionOK) return false;
   resetMotionState();
   const unsigned long started = millis();
   const long origin = LbMotion.getDistanceMm();
   bool armed = false;
   int clearFrames = 0, crossingFrames = 0;
 
-  while (missionOK) {
+  while (true) {
     const unsigned long now = millis();
     const float advanced = fabsf((float)LbMotion.getDistanceMm() - origin);
     if (now - started > LINE_JUNCTION_TIMEOUT_MS || advanced > LINE_JUNCTION_LIMIT_MM) {
@@ -665,7 +649,7 @@ bool followLineUntilJunction() {
         }
       } else crossingFrames = 0;
     }
-    runFollowLine(bits);
+    if (!runFollowLine(bits)) return false;
     LbDelay((unsigned int)LINE_STEP_MS);
   }
   LbMotion.stopAndWait();
@@ -673,15 +657,13 @@ bool followLineUntilJunction() {
 }
 
 bool centerDetectedJunction() {
-  if (!missionOK) return false;
   if (!junctionPending) return true;
   junctionPending = false;
-  move_tank(450, 450, JUNCTION_CENTER_MM / 10.0f);
-  return missionOK;
+  return move_tank(450, 450, JUNCTION_CENTER_MM / 10.0f);
 }
 
 bool followLineMultipleJunctions(int junctionCount) {
-  if (!missionOK || junctionCount <= 0) return false;
+  if (junctionCount <= 0) return false;
   for (int i = 0; i < junctionCount; ++i) {
     if (i > 0 && !centerDetectedJunction()) return false;
     if (!followLineUntilJunction()) return false;
@@ -690,23 +672,23 @@ bool followLineMultipleJunctions(int junctionCount) {
 }
 
 bool goToJunction() {
-  if (!missionOK) return false;
   if (!junctionPending && !followLineUntilJunction()) return false;
   return centerDetectedJunction();
 }
 
 bool followLineDistance(int distanceMm) {
-  if (!missionOK || distanceMm < 0) return false;
+  if (distanceMm < 0) return false;
   resetMotionState();
   long origin = LbMotion.getDistanceMm();
   unsigned long started = millis();
-  while (missionOK && (long)LbMotion.getDistanceMm() - origin < distanceMm) {
-    if (millis() - started > 9000UL) { failMission(ERR_JUNCTION_TIMEOUT); break; }
-    runFollowLine(); LbDelay((unsigned int)LINE_STEP_MS);
+  while ((long)LbMotion.getDistanceMm() - origin < distanceMm) {
+    if (millis() - started > 9000UL) { failMission(ERR_JUNCTION_TIMEOUT); return false; }
+    if (!runFollowLine()) return false;
+    LbDelay((unsigned int)LINE_STEP_MS);
   }
   LbMotion.stopAndWait();
   resetMotionState();
-  return missionOK;
+  return true;
 }
 
 
@@ -724,7 +706,7 @@ bool readAPDSUnderLight(CRGB light, int &r, int &g, int &b) {
 }
 
 ObjectColor Obj_detectColor() {
-  if (!missionOK || !colorSensorReady) { failMission(ERR_COLOR_SENSOR); return OBJECT_UNKNOWN; }
+  if (!colorSensorReady) { failMission(ERR_COLOR_SENSOR); return OBJECT_UNKNOWN; }
   int rRed=0, gGreen=0, bBlue=0, r=0,g=0,b=0;
   int ambientR=0, ambientG=0, ambientB=0;
   const int saved = LbRGB.getBrightness();
@@ -755,13 +737,12 @@ ObjectColor Obj_detectColor() {
 }
 
 bool requireColor(ObjectColor expected) {
-  if (!missionOK) return false;
-  if (Obj_detectColor() != expected) { if (missionOK) failMission(ERR_COLOR_MISMATCH); return false; }
+  if (Obj_detectColor() != expected) { failMission(ERR_COLOR_MISMATCH); return false; }
   return true;
 }
 
 // Primary XML has NO object-color checks in its Fullmision.
-bool requireColor(ObjectColor) { return missionOK; }
+bool requireColor(ObjectColor) { return true; }
 
 
 
@@ -772,7 +753,6 @@ bool requireColor(ObjectColor) { return missionOK; }
 bool missionIotA() {
   STEP(FromCRLtoE2());
   const ObjectColor color = Obj_detectColor();
-  if (!missionOK) return false;
   if (color == OBJECT_BLUE) IoTColor.write("Blue");
   else { IoTColor.write("Unknown"); failMission(ERR_COLOR_MISMATCH); return false; }
   // Source Fullmision_LeanbotA route, distinct from standalone.
@@ -845,7 +825,6 @@ void loop() {
   // Always wait for BOTH touch buttons before executing a mission.
   LbMission.begin(TB1A + TB1B);
   missionError = ERR_NONE;
-  missionOK = true;
   junctionPending = false;
   resetMotionState();
   bool finished = false;
@@ -873,7 +852,7 @@ void loop() {
 #endif
   }
   LbMotion.stopAndWait();
-  if (finished && missionOK) {
+  if (finished && missionError == ERR_NONE) {
     LbRGB.fillColor(CRGB::Green);
     LbRGB.show();
 #if DEBUG_SERIAL
@@ -896,8 +875,7 @@ void loop() {
 ${u}
 void plannedRoute() {
 ${f.split(`
-`).filter(Boolean).map(m=>`  ${m}
-  if (!missionOK) return;`).join(`
+`).filter(Boolean).map(m=>`  ${m}`).join(`
 `)}
 }
 void setup() {
@@ -906,7 +884,6 @@ void setup() {
 }
 void loop() {
   LbMission.begin(TB1A + TB1B);
-  missionOK = true;
   missionError = ERR_NONE;
   junctionPending = false;
   resetMotionState();

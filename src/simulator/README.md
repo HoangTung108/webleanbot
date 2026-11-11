@@ -322,3 +322,8 @@ Tốc độ vật lý vẫn 65 mm/s ở lệnh 2000: chạy theo thời gian 5 g
 Nút Chạy cung cấp một tín hiệu bắt đầu nhiệm vụ. Với `LbMission.begin`, giả lập không tự chạy lại lộ trình khi Arduino quay lại `loop()` hoặc khi gặp cổng nhiệm vụ kế tiếp; cần bấm Chạy cho một lần mới. Loop điều khiển không có cổng nhiệm vụ vẫn được lặp bình thường. [Tham khảo API Mission.begin](https://github.com/ecchallenge/ptit/blob/main/Leanbot%20API%20Reference/README.md#lbmissionbegin).
 
 Kiểm thử dùng profile encoder 1,0 để tách kiểm tra scheduler/động học danh định; `motionCalibration.test.ts` kiểm tra riêng profile đo 1,06 mặc định, gồm khoảng 35 cm với lệnh 33,274 cm, chạy lùi, quay, chờ quãng đường và chạy theo thời gian.
+
+
+### Kết quả từng thao tác trong base code
+
+Base code và code sinh từ lộ trình không dùng cờ `missionOK`. Các thao tác di chuyển/quay/dò line trả về `bool` để báo thành công hoặc lỗi tại chỗ; kiểm tra đầu vào, timeout, stall và log `missionError` vẫn hoạt động. Một thao tác lỗi không tự khóa các lệnh tiếp theo trong `plannedRoute()`. Các hàm ghép có thể kiểm tra kết quả trả về để kết thúc riêng thao tác đó; trạng thái lỗi chỉ dùng cho chẩn đoán và hiển thị kết quả cuối.
