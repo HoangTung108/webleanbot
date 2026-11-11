@@ -1293,11 +1293,11 @@ var LeanbotCpp = (() => {
     LbRGB: ["fillColor", "show", "getBrightness", "setBrightness"],
     LbGripper: ["open", "close", "moveTo", "moveToLR"],
     APDS: ["begin", "colorAvailable", "readColor"],
-    Serial: ["begin", "print", "println"],
+    Serial: ["begin", "print", "println", "available", "read", "readStringUntil"],
     "LbIoT.Wifi": ["begin"],
     "LbIoT.Asset": ["begin", "attribute"]
   }).flatMap(([object, methods]) => methods.map((method) => `${object}.${method}`)));
-  var INSTANCE_CALLS = /* @__PURE__ */ new Set(["length", "c_str", "trim", "toUpperCase", "read", "write"]);
+  var INSTANCE_CALLS = /* @__PURE__ */ new Set(["length", "c_str", "trim", "toUpperCase", "indexOf", "substring", "read", "write"]);
   var assignments = /* @__PURE__ */ new Set(["=", "+=", "-=", "*=", "/=", "%=", "&=", "|="]);
   var precedence = { "=": 1, "+=": 1, "-=": 1, "*=": 1, "/=": 1, "%=": 1, "&=": 1, "|=": 1, "?": 2, "||": 3, "&&": 4, "|": 5, "^": 6, "&": 7, "==": 8, "!=": 8, "<": 9, ">": 9, "<=": 9, ">=": 9, "<<": 10, ">>": 10, "+": 11, "-": 11, "*": 12, "/": 12, "%": 12 };
   var Parser = class {
@@ -1732,13 +1732,15 @@ var LeanbotCpp = (() => {
           const name = callName(n.callee);
           const fn = this.findFunction(name, n.args.length);
           const args = [];
-          for (let i = 0; i < n.args.length; i++) args.push(fn?.params[i]?.type.includes("&") || name === "APDS.readColor" ? yield* this.location(n.args[i]) : yield* this.expr(n.args[i]));
+          for (let i = 0; i < n.args.length; i++) args.push(fn?.params[i]?.type.includes("&") && !fn?.params[i]?.type.includes("const") || name === "APDS.readColor" ? yield* this.location(n.args[i]) : yield* this.expr(n.args[i]));
           if (n.callee.k === "member" && !/^(Leanbot|Lb|APDS|Serial|CRGB)/.test(name)) {
             const obj = yield* this.expr(n.callee.value);
             const method = n.callee.name;
             if (typeof obj === "string") {
               if (method === "length") return obj.length;
               if (method === "c_str") return obj;
+              if (method === "indexOf") return obj.indexOf(String(args[0] ?? ""));
+              if (method === "substring") return obj.substring(Number(args[0] ?? 0), args.length > 1 ? Number(args[1]) : void 0);
               if (method === "trim" || method === "toUpperCase") {
                 (yield* this.location(n.callee.value)).write(method === "trim" ? obj.trim() : obj.toUpperCase());
                 return null;
@@ -1775,7 +1777,7 @@ var LeanbotCpp = (() => {
         const scope = /* @__PURE__ */ new Map();
         for (let i = 0; i < fn.params.length; i++) {
           const p = fn.params[i];
-          scope.set(p.name, i < args.length ? p.type.includes("&") ? { ...args[i], alias: true } : p.type.includes("*") ? args[i] : copyValue(args[i]) : yield* this.expr(p.value));
+          scope.set(p.name, i < args.length ? p.type.includes("&") && !p.type.includes("const") ? { ...args[i], alias: true } : p.type.includes("*") ? args[i] : copyValue(args[i]) : yield* this.expr(p.value));
         }
         this.scopes.push(scope);
         try {
@@ -1852,6 +1854,12 @@ var LeanbotCpp = (() => {
         case "Leanbot.begin":
         case "Serial.begin":
           return null;
+        case "Serial.available":
+          return 0;
+        case "Serial.read":
+          return -1;
+        case "Serial.readStringUntil":
+          return "";
         case "LbMission.begin":
           if (this.missionStarted) {
             this.motors(0, 0);

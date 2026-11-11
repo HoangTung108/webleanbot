@@ -20,6 +20,7 @@ import { ConflictDialog } from './ConflictDialog'
 import { ConversionDialog } from './ConversionDialog'
 import { Toolbar } from './Toolbar'
 import { MultiRobotConnector } from '../components/MultiRobotConnector'
+import { realRobotColorBridge } from '../lib/realRobotColorBridge'
 
 function initialProject() {
   return loadProject() ?? loadDocuments()[0] ?? newDocument('Bài 01.xml')
@@ -53,7 +54,9 @@ export function StudentIDE({ onSourceChange }: { onSourceChange?: (source: strin
   useEffect(() => {
     persistenceRef.current = bindProjectPersistence(() => snapshot(), () => setNotice({ message: 'Không thể lưu project trên trình duyệt. Chương trình vẫn được giữ trong phiên này.', tone: 'error' }))
     serial.onDisconnect = () => setConnected(false)
-    return () => { persistenceRef.current?.flush(); persistenceRef.current?.dispose(); void serial.disconnect() }
+    realRobotColorBridge.setSerialClient(serial)
+    realRobotColorBridge.start()
+    return () => { persistenceRef.current?.flush(); persistenceRef.current?.dispose(); realRobotColorBridge.stop(); void serial.disconnect() }
   }, [serial])
 
   useEffect(() => {

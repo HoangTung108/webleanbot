@@ -1,6 +1,8 @@
-import { Network, Plus, LogIn, Check } from 'lucide-react';
+import { Network, Plus, LogIn, Check, Radio } from 'lucide-react';
 import React, { useState, useEffect } from 'react';
 import { robotNetworkManager } from '../lib/robotNetworkManager';
+import { realRobotColorBridge } from '../lib/realRobotColorBridge';
+import { type RobotColor, COLOR_HEX_MAP } from '../lib/robotColorSignal';
 
 export function MultiRobotConnector() {
   const [connectionMode, setConnectionMode] = useState<'idle' | 'create' | 'join'>('idle');
@@ -11,12 +13,16 @@ export function MultiRobotConnector() {
   const [peers, setPeers] = useState<string[]>(robotNetworkManager.getAllPeers().map(peer => peer.id));
   const [error, setError] = useState<string | null>(null);
   const [showMenu, setShowMenu] = useState(false);
+  const [lastColor, setLastColor] = useState<RobotColor | null>(robotNetworkManager.getLastColorSignal()?.color ?? null);
+  const [lastSender, setLastSender] = useState<string | null>(robotNetworkManager.getLastColorSignal()?.senderRobotId ?? null);
 
   useEffect(() => {
     const handleConnected = () => {
       setIsConnected(true);
       setPeers(robotNetworkManager.getAllPeers().map(peer => peer.id));
       setCurrentRoom(robotNetworkManager.getRoomId());
+      setLastColor(robotNetworkManager.getLastColorSignal()?.color ?? null);
+      setLastSender(robotNetworkManager.getLastColorSignal()?.senderRobotId ?? null);
       setError(null);
       setConnectionMode('idle');
     };
@@ -25,6 +31,8 @@ export function MultiRobotConnector() {
       setIsConnected(false);
       setCurrentRoom(null);
       setPeers([]);
+      setLastColor(null);
+      setLastSender(null);
     };
 
     const handlePeerJoined = (event: any) => {
@@ -35,6 +43,13 @@ export function MultiRobotConnector() {
       setPeers(prev => prev.filter(id => id !== event.data.peerId));
     };
 
+    const handleColorSignal = (event: any) => {
+      if (event.data?.color) {
+        setLastColor(event.data.color);
+        setLastSender(event.data.senderRobotId || event.data.peerId || null);
+      }
+    };
+
     const handleError = (event: any) => {
       setError(event.error);
     };
@@ -43,6 +58,7 @@ export function MultiRobotConnector() {
     robotNetworkManager.on('disconnected', handleDisconnected);
     robotNetworkManager.on('peer-joined', handlePeerJoined);
     robotNetworkManager.on('peer-left', handlePeerLeft);
+    robotNetworkManager.on('color-signal', handleColorSignal);
     robotNetworkManager.on('error', handleError);
 
     return () => {
@@ -50,6 +66,7 @@ export function MultiRobotConnector() {
       robotNetworkManager.off('disconnected', handleDisconnected);
       robotNetworkManager.off('peer-joined', handlePeerJoined);
       robotNetworkManager.off('peer-left', handlePeerLeft);
+      robotNetworkManager.off('color-signal', handleColorSignal);
       robotNetworkManager.off('error', handleError);
     };
   }, []);
@@ -103,6 +120,41 @@ export function MultiRobotConnector() {
               <div style={styles.dropdownRow}>
                 <span style={styles.dropdownLabel}>Robots:</span>
                 <span style={styles.dropdownValue}>{peers.length + 1}/2</span>
+              </div>
+              <div style={styles.dropdownSection}>
+                <div style={styles.dropdownLabel}><Radio size={12} style={{ display: 'inline', verticalAlign: '-1px' }} /> Tín hiệu màu (WiFi / WS):</div>
+                <div style={styles.colorStatusRow}>
+                  <span
+                    style={{
+                      ...styles.colorBadge,
+                      backgroundColor: lastColor ? COLOR_HEX_MAP[lastColor] || '#9ca3af' : '#6b7280',
+                      color: 'white',
+                    }}
+                  >
+                    {lastColor || 'WAITING'}
+                  </span>
+                  {lastSender && (
+                    <span style={{ fontSize: '11px', color: '#64748b' }} title="Robot gửi tín hiệu">
+                      từ {lastSender}
+                    </span>
+                  )}
+                </div>
+                <div style={styles.colorActions}>
+                  {(['RED', 'GREEN', 'BLUE', 'YELLOW', 'PURPLE'] as RobotColor[]).map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      title={`Gửi tín hiệu màu ${c}`}
+                      onClick={() => void realRobotColorBridge.sendColor(c, true)}
+                      style={{
+                        ...styles.colorBtn,
+                        backgroundColor: COLOR_HEX_MAP[c],
+                      }}
+                    >
+                      {c[0]}
+                    </button>
+                  ))}
+                </div>
               </div>
               <button 
                 onClick={() => navigator.clipboard.writeText(currentRoom)}
@@ -260,6 +312,43 @@ const styles = {
     borderBottom: '1px solid #eee',
     marginBottom: '6px',
     color: '#333',
+  } as React.CSSProperties,
+  dropdownSection: {
+    margin: '6px 0',
+    padding: '6px 8px',
+    backgroundColor: '#f8fafc',
+    borderRadius: '4px',
+    border: '1px solid #e2e8f0',
+  } as React.CSSProperties,
+  colorStatusRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    margin: '4px 0',
+  } as React.CSSProperties,
+  colorBadge: {
+    padding: '2px 8px',
+    borderRadius: '12px',
+    fontSize: '11px',
+    fontWeight: '700',
+    letterSpacing: '0.5px',
+    textTransform: 'uppercase',
+  } as React.CSSProperties,
+  colorActions: {
+    display: 'flex',
+    gap: '4px',
+    marginTop: '6px',
+  } as React.CSSProperties,
+  colorBtn: {
+    flex: 1,
+    padding: '4px 0',
+    color: 'white',
+    border: 'none',
+    borderRadius: '3px',
+    fontSize: '11px',
+    fontWeight: '700',
+    cursor: 'pointer',
+    textAlign: 'center',
   } as React.CSSProperties,
   dropdownRow: {
     display: 'flex',

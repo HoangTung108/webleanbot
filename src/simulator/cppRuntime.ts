@@ -22,11 +22,11 @@ const SDK_CALLS = new Set(Object.entries({
   LbRGB:['fillColor','show','getBrightness','setBrightness'],
   LbGripper:['open','close','moveTo','moveToLR'],
   APDS:['begin','colorAvailable','readColor'],
-  Serial:['begin','print','println'],
+  Serial:['begin','print','println','available','read','readStringUntil'],
   'LbIoT.Wifi':['begin'],
   'LbIoT.Asset':['begin','attribute'],
 }).flatMap(([object,methods])=>methods.map(method=>`${object}.${method}`)));
-const INSTANCE_CALLS = new Set(['length','c_str','trim','toUpperCase','read','write']);
+const INSTANCE_CALLS = new Set(['length','c_str','trim','toUpperCase','indexOf','substring','read','write']);
 const assignments = new Set(['=','+=','-=','*=','/=','%=','&=','|=']);
 const precedence: Record<string,number> = {'=':1,'+=':1,'-=':1,'*=':1,'/=':1,'%=':1,'&=':1,'|=':1,'?':2,'||':3,'&&':4,'|':5,'^':6,'&':7,'==':8,'!=':8,'<':9,'>':9,'<=':9,'>=':9,'<<':10,'>>':10,'+':11,'-':11,'*':12,'/':12,'%':12};
 
@@ -97,7 +97,7 @@ export interface RuntimeHost {
   rawLine?(): readonly number[]; // 2L, 0L, 1R, 3R
   color?(): readonly [number,number,number] | null;
   led?(rgb:readonly number[],brightness:number):void;
-  iotRead?(attribute:string,assetId:string):string;
+  iotRead?(attribute:string,assetId:string):string|undefined;
   iotWrite?(attribute:string,value:string,assetId:string):void;
   motors(left: number, right: number): void;
   advance(seconds: number): void;
@@ -201,11 +201,13 @@ export class CppRuntime {
       case 'call': {
         const name=callName(n.callee);const fn=this.findFunction(name,n.args.length);
         const args:Value[]=[];
-        for(let i=0;i<n.args.length;i++)args.push(fn?.params[i]?.type.includes('&')||name==='APDS.readColor'?yield* this.location(n.args[i]):yield* this.expr(n.args[i]));
+        for(let i=0;i<n.args.length;i++)args.push((fn?.params[i]?.type.includes('&')&&!fn?.params[i]?.type.includes('const'))||name==='APDS.readColor'?yield* this.location(n.args[i]):yield* this.expr(n.args[i]));
         if(n.callee.k==='member'&&!/^(Leanbot|Lb|APDS|Serial|CRGB)/.test(name)){
           const obj=yield* this.expr(n.callee.value);const method=n.callee.name;
           if(typeof obj==='string'){
             if(method==='length')return obj.length;if(method==='c_str')return obj;
+            if(method==='indexOf')return obj.indexOf(String(args[0]??''));
+            if(method==='substring')return obj.substring(Number(args[0]??0),args.length>1?Number(args[1]):undefined);
             if(method==='trim'||method==='toUpperCase'){(yield* this.location(n.callee.value)).write(method==='trim'?obj.trim():obj.toUpperCase());return null;}
           }
           if(obj&&typeof obj==='object'&&'attribute' in obj){const attr=String(obj.attribute),key=JSON.stringify([this.assetId,attr]);if(method==='read')return this.host.iotRead?.(attr,this.assetId)??this.iot.get(key)??'waiting';if(method==='write'){this.iot.set(key,String(args[0]));this.host.iotWrite?.(attr,String(args[0]),this.assetId);return null;}}
@@ -227,7 +229,7 @@ export class CppRuntime {
     if (fn) {
       if (this.scopes.length > 64) throw new Error('Hàm gọi lồng nhau quá sâu');
       const scope:Scope=new Map();
-      for(let i=0;i<fn.params.length;i++){const p=fn.params[i];scope.set(p.name,i<args.length?(p.type.includes('&')?{...(args[i] as Reference),alias:true}:p.type.includes('*')?args[i]:copyValue(args[i])):yield* this.expr(p.value));}
+      for(let i=0;i<fn.params.length;i++){const p=fn.params[i];scope.set(p.name,i<args.length?(p.type.includes('&')&&!p.type.includes('const')?{...(args[i] as Reference),alias:true}:p.type.includes('*')?args[i]:copyValue(args[i])):yield* this.expr(p.value));}
       this.scopes.push(scope);
       try { yield* this.statement(fn.body); } catch (e) { if (e instanceof Flow && e.kind === 'return') return e.value; throw e; }
       finally { this.scopes.pop(); } return null;
@@ -255,6 +257,9 @@ export class CppRuntime {
       case 'LbRGB.show':this.host.led?.(this.rgb,this.brightness);return null;
       case 'LbIRLine.value': return this.cachedLineMask;
       case 'Leanbot.begin': case 'Serial.begin': return null;
+      case 'Serial.available': return 0;
+      case 'Serial.read': return -1;
+      case 'Serial.readStringUntil': return '';
       case 'LbMission.begin':
         // Run supplies one start signal. The hardware waits for touch buttons
         // again at the next mission; never auto-start another route here.

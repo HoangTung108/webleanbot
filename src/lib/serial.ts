@@ -26,6 +26,7 @@ export class LeanbotSerialClient {
   reader: ReadableStreamDefaultReader<Uint8Array> | null = null
   onText: (value: string) => void = () => undefined
   onDisconnect: () => void = () => undefined
+  private textListeners = new Set<(value: string) => void>()
   private reading = false
   private monitorPromise: Promise<void> | null = null
   private uploadSession: { push(chunk: Uint8Array): void; fail(error: Error): void; close(): Promise<void> } | null = null
@@ -36,6 +37,22 @@ export class LeanbotSerialClient {
 
   get supported() { return Boolean((navigator as NavigatorWithSerial).serial) }
   get connected() { return Boolean(this.port?.readable && this.port?.writable) }
+
+  addTextListener(listener: (value: string) => void): () => void {
+    this.textListeners.add(listener)
+    return () => { this.textListeners.delete(listener) }
+  }
+
+  removeTextListener(listener: (value: string) => void): void {
+    this.textListeners.delete(listener)
+  }
+
+  private emitText(text: string) {
+    this.onText(text)
+    for (const listener of this.textListeners) {
+      try { listener(text) } catch (err) { console.error('Serial text listener error:', err) }
+    }
+  }
 
   async connect() {
     if (globalThis.isSecureContext !== true) throw new Error('Web Serial yêu cầu HTTPS hoặc localhost an toàn.')
@@ -139,7 +156,7 @@ export class LeanbotSerialClient {
       } finally {
         try { writer.releaseLock() } catch { /* port may have been unplugged */ }
         this.uploadSession = null
-        if (queue.length && !this.disconnecting) this.onText(this.decoder.decode(queue, { stream: true }))
+        if (queue.length && !this.disconnecting) this.emitText(this.decoder.decode(queue, { stream: true }))
         queue = new Uint8Array()
       }
     }
@@ -205,7 +222,7 @@ export class LeanbotSerialClient {
             if (done) break
             if (value?.length) {
               if (this.uploadSession) this.uploadSession.push(value)
-              else this.onText(this.decoder.decode(value, { stream: true }))
+              else this.emitText(this.decoder.decode(value, { stream: true }))
             }
           }
         } catch (e) { failure = e }

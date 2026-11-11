@@ -10,6 +10,8 @@ const primaryCommands = new Set([
   'followLineMultipleJunctions', 'goToJunction',
   'calibrate_color', 'read_color', 'get_color', 'is_color',
   'send_iot_color', 'read_iot_color', 'reset_iot_color', 'wait_iot_color',
+  'use_wifi_color_mode', 'connect_robot_room',
+  'send_real_robot_color', 'read_real_robot_color', 'wait_real_robot_color',
   'iot_queue_count', 'pop_iot_color', 'clear_iot_queue',
 ])
 

@@ -5,6 +5,7 @@
 import { ROUND_LIMIT_MS } from './scoring';
 import { CppRuntime } from './cppRuntime';
 import { RobotSimulator } from './robotSimulator';
+import { robotNetworkManager } from '../lib/robotNetworkManager';
 
 export interface SimulatorCommand {
   type: 'motor' | 'delay' | 'sensor' | 'gripper' | 'log';
@@ -61,6 +62,17 @@ export class CppSimulatorBridge {
         rawLine: () => this.simulator.getRawLineReadings(),
         color: () => this.simulator.getColorReading(),
         led: (rgb,brightness) => this.simulator.setLedColors(rgb,brightness),
+        iotRead: (attribute) => {
+          if (attribute === 'Color' && robotNetworkManager.isConnected()) {
+            return robotNetworkManager.getLastColorSignal()?.color ?? 'waiting';
+          }
+          return undefined;
+        },
+        iotWrite: (attribute, value) => {
+          if (attribute === 'Color' && robotNetworkManager.isConnected()) {
+            robotNetworkManager.sendColorSignal(value);
+          }
+        },
         log: message => this.logs.push(message),
       },this.distanceScale);
       this.commandQueue = { commands: [], currentIndex: 0, isExecuting: false };

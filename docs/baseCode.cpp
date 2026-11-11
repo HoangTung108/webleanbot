@@ -67,6 +67,11 @@ ObjectColor peek_iot_color();
 ObjectColor pop_iot_color();
 ObjectColor read_iot_color();
 bool wait_iot_color(ObjectColor expected, unsigned long timeoutMs = 30000UL);
+void use_wifi_color_mode();
+void connect_robot_room(const __FlashStringHelper *roomId);
+void send_real_robot_color(ObjectColor color);
+ObjectColor read_real_robot_color();
+bool wait_real_robot_color(ObjectColor expected, unsigned long timeoutMs = 30000UL);
 ObjectColor lastMeasuredColor = UNKNOWN;
 
 auto IoTColor = LbIoT.Asset.attribute(F("Color"));
@@ -372,6 +377,17 @@ void move_tank(int motor_L, int motor_R, float distance_cm) {
 String wifiSsid;
 String wifiPassword;
 const __FlashStringHelper *wifiAssetId = nullptr;
+bool wifiColorMode = false;
+
+void use_wifi_color_mode() {
+  wifiColorMode = true;
+}
+
+void connect_robot_room(const __FlashStringHelper *roomId) {
+  wifiAssetId = roomId;
+  if (roomId != nullptr) LbIoT.Asset.begin(roomId);
+  wifiColorMode = true;
+}
 
 void declare_wifi(const String &ssid, const String &password, const __FlashStringHelper *assetId = nullptr) {
   wifiSsid = ssid;
@@ -385,7 +401,10 @@ void set_wifi() {
     return;
   }
   LbIoT.Wifi.begin(wifiSsid.c_str(), wifiPassword.c_str());
-  if (wifiAssetId != nullptr) LbIoT.Asset.begin(wifiAssetId);
+  if (wifiAssetId != nullptr) {
+    LbIoT.Asset.begin(wifiAssetId);
+    wifiColorMode = true;
+  }
 }
 
 void set_wifi(const String &ssid, const String &password, const __FlashStringHelper *assetId = nullptr) {
@@ -1188,6 +1207,78 @@ bool wait_iot_color(ObjectColor expected, unsigned long timeoutMs) {
     if (received == expected) return true;
     const unsigned long remaining = timeoutMs - elapsed;
     robot_delay(min(250UL, remaining));
+  }
+  failMission(ERR_IOT_TIMEOUT);
+  return false;
+}
+
+// Giao tiếp tín hiệu màu giữa 2 robot thực tế qua module WiFi (LbIoT) hoặc Serial / WebSocket Bridge
+// WiFi Robot Setup (không cần cáp USB):
+// 1. set_wifi("SSID", "Password", F("ROOM_ID")); // Kết nối WiFi và phòng WebSocket
+// 2. connect_robot_room(F("ROOM_ID"));           // Hoặc chuyển phòng và bật chế độ WiFi
+// 3. send_robot_color(BLUE);                // Gửi màu trực tiếp qua WiFi
+// 4. wait_robot_color(GREEN, 30000UL);      // Đợi nhận màu từ robot đối tác qua WiFi
+void send_robot_color(ObjectColor color) {
+  if (wifiColorMode) {
+    send_iot_color(color);
+    return;
+  }
+  Serial.print(F("COLOR:"));
+  switch (color) {
+    case RED:    Serial.println(F("RED")); break;
+    case GREEN:  Serial.println(F("GREEN")); break;
+    case BLUE:   Serial.println(F("BLUE")); break;
+    case YELLOW: Serial.println(F("YELLOW")); break;
+    case PURPLE: Serial.println(F("PURPLE")); break;
+    default:     Serial.println(F("UNKNOWN")); break;
+  }
+}
+
+ObjectColor read_robot_color() {
+  if (wifiColorMode) {
+    return read_iot_color();
+  }
+  if (Serial.available() <= 0) return UNKNOWN;
+  String line = Serial.readStringUntil('\n');
+  line.trim();
+  line.toUpperCase();
+  int idx = line.indexOf("COLOR:");
+  if (idx < 0) return UNKNOWN;
+  String colorStr = line.substring(idx + 6);
+  colorStr.trim();
+  ObjectColor color = UNKNOWN;
+  if (colorStr == "RED") color = RED;
+  else if (colorStr == "GREEN") color = GREEN;
+  else if (colorStr == "BLUE") color = BLUE;
+  else if (colorStr == "YELLOW") color = YELLOW;
+  else if (colorStr == "PURPLE") color = PURPLE;
+  if (color != UNKNOWN && iotQueueSize < IOT_QUEUE_CAPACITY) {
+    const int tail = (iotQueueHead + iotQueueSize) % IOT_QUEUE_CAPACITY;
+    iotColorQueue[tail] = color;
+    ++iotQueueSize;
+  }
+  return color;
+}
+
+bool wait_robot_color(ObjectColor expected, unsigned long timeoutMs) {
+  if (wifiColorMode) {
+    return wait_iot_color(expected, timeoutMs);
+  }
+  if (expected < RED || expected > PURPLE) {
+    failMission(ERR_COLOR_MISMATCH);
+    return false;
+  }
+  const unsigned long started = millis();
+  while (millis() - started < timeoutMs) {
+    const ObjectColor received = read_real_robot_color();
+    if (received == expected) return true;
+    if (iot_queue_count() > 0 && peek_iot_color() == expected) {
+      pop_iot_color();
+      return true;
+    }
+    const unsigned long elapsed = millis() - started;
+    if (elapsed >= timeoutMs) break;
+    robot_delay(min(50UL, timeoutMs - elapsed));
   }
   failMission(ERR_IOT_TIMEOUT);
   return false;

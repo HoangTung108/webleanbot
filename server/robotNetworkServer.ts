@@ -2,6 +2,7 @@ import {OnlineCompetition} from './onlineCompetition';
 import type {OnlineCommand} from '../src/simulator/onlineCompetition';
 import {isFinitePose,separateRobots} from '../src/simulator/robotCollision';
 import {isValidRobotMessage} from '../src/lib/robotMessage';
+import {normalizeRobotColor} from '../src/lib/robotColorSignal';
 /**
  * Multi-Robot WebSocket Server
  * Handles room management and robot state synchronization
@@ -19,7 +20,14 @@ interface Room {
   password?: string;
   maxPeers: number;
   clients: Map<string, ClientConnection>;
+  wifiPeers: Set<string>;
   createdAt: number;
+  lastColorSignal?: {
+    peerId: string;
+    color: string;
+    timestamp: number;
+    senderRobotId?: string;
+  };
 }
 
 interface ClientConnection {
@@ -47,6 +55,9 @@ interface Message {
   robotId?: string;
   maxPeers?: number;
   payload?: unknown;
+  color?: string;
+  senderRobotId?: string;
+  timestamp?: number;
 }
 
 class RobotNetworkServer {
@@ -56,20 +67,237 @@ class RobotNetworkServer {
   private port: number;
   private timer?: ReturnType<typeof setInterval>;
   private snapshotTimer?: ReturnType<typeof setInterval>;
+  private iotAttributes = new Map<string, string>();
 
   constructor(port: number = 8080) {
     this.port = port;
     this.server = http.createServer((request, response) => {
-      if (request.url?.split('?')[0] === '/health') {
-        response.writeHead(200, { 'Content-Type': 'application/json' });
-        response.end(JSON.stringify({ ok: true, service: 'leanbot-robot-network', competitionProtocol: 1, revision: process.env.RENDER_GIT_COMMIT ?? null }));
-        return;
-      }
-      response.writeHead(404, { 'Content-Type': 'text/plain' });
-      response.end('Not found');
+      this.handleHttpRequest(request, response);
     });
     this.wss = new WebSocketServer({ noServer: true,maxPayload:300000 });
     this.setupRoutes();
+  }
+
+  private async handleHttpRequest(request: http.IncomingMessage, response: http.ServerResponse) {
+    response.setHeader('Access-Control-Allow-Origin', '*');
+    response.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    response.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+    if (request.method === 'OPTIONS') {
+      response.writeHead(204);
+      response.end();
+      return;
+    }
+
+    const host = request.headers.host || 'localhost';
+    const parsedUrl = new URL(request.url || '/', `http://${host}`);
+    const pathname = parsedUrl.pathname;
+
+    if (pathname === '/health') {
+      response.writeHead(200, { 'Content-Type': 'application/json' });
+      response.end(JSON.stringify({
+        ok: true,
+        service: 'leanbot-robot-network',
+        competitionProtocol: 1,
+        colorProtocol: 1,
+        revision: process.env.RENDER_GIT_COMMIT ?? null,
+      }));
+      return;
+    }
+
+    // GET /api/rooms/:roomId/color
+    const roomColorMatch = pathname.match(/^\/api\/rooms\/([^/]+)\/color$/);
+    if (roomColorMatch && request.method === 'GET') {
+      const roomId = decodeURIComponent(roomColorMatch[1]).toUpperCase();
+      const wifiClientId = parsedUrl.searchParams.get('clientId');
+      let room = this.rooms.get(roomId);
+      if (wifiClientId) {
+        if (!room) {
+          this.handleCreateRoom({ type: 'create-room', roomId, maxPeers: 2 }, roomId);
+          room = this.rooms.get(roomId);
+        }
+        room?.wifiPeers.add(wifiClientId);
+      }
+      const signal = room?.lastColorSignal;
+      const iotColor = normalizeRobotColor(this.iotAttributes.get(JSON.stringify([roomId, 'Color'])));
+      response.writeHead(200, { 'Content-Type': 'application/json' });
+      response.end(JSON.stringify({
+        ok: true,
+        roomId,
+        color: signal?.color ?? iotColor ?? 'WAITING',
+        peerId: signal?.peerId ?? null,
+        senderRobotId: signal?.senderRobotId ?? null,
+        timestamp: signal?.timestamp ?? null,
+        wifiPeers: room ? [...room.wifiPeers] : [],
+      }));
+      return;
+    }
+
+    // POST /api/rooms/:roomId/color
+    if (roomColorMatch && request.method === 'POST') {
+      const roomId = decodeURIComponent(roomColorMatch[1]).toUpperCase();
+      try {
+        const body = await this.readJsonBody(request);
+        const rawColor = body.color ?? body.payload ?? body;
+        const color = normalizeRobotColor(rawColor);
+        if (!color) {
+          response.writeHead(400, { 'Content-Type': 'application/json' });
+          response.end(JSON.stringify({
+            ok: false,
+            message: 'Tín hiệu màu không hợp lệ. Các màu được hỗ trợ: RED, GREEN, BLUE, YELLOW, PURPLE, UNKNOWN, WAITING.',
+          }));
+          return;
+        }
+
+        let room = this.rooms.get(roomId);
+        if (!room) {
+          this.handleCreateRoom({ type: 'create-room', roomId, maxPeers: 2 }, roomId);
+          room = this.rooms.get(roomId);
+        }
+
+        if (room?.password && body.password !== undefined && room.password !== body.password) {
+          response.writeHead(403, { 'Content-Type': 'application/json' });
+          response.end(JSON.stringify({ ok: false, message: 'Sai mật khẩu phòng.' }));
+          return;
+        }
+
+        const timestamp = typeof body.timestamp === 'number' && Number.isFinite(body.timestamp) ? body.timestamp : Date.now();
+        const senderRobotId = String(body.senderRobotId || body.clientId || 'wifi-robot');
+        const colorPayload = {
+          type: 'color-signal',
+          peerId: senderRobotId,
+          senderRobotId,
+          color,
+          timestamp,
+        };
+
+        this.iotAttributes.set(JSON.stringify([roomId, 'Color']), color);
+        if (room) {
+          room.wifiPeers.add(senderRobotId);
+          room.lastColorSignal = { peerId: senderRobotId, color, timestamp, senderRobotId };
+          const data = JSON.stringify(colorPayload);
+          for (const recipient of room.clients.values()) {
+            if (recipient.ws.readyState === WebSocket.OPEN) {
+              recipient.ws.send(data);
+            }
+          }
+        }
+
+        response.writeHead(200, { 'Content-Type': 'application/json' });
+        response.end(JSON.stringify({
+          ok: true,
+          roomId,
+          color,
+          senderRobotId,
+          broadcastedTo: room ? room.clients.size : 0,
+          timestamp,
+        }));
+        return;
+      } catch {
+        response.writeHead(400, { 'Content-Type': 'application/json' });
+        response.end(JSON.stringify({ ok: false, message: 'Dữ liệu JSON không hợp lệ.' }));
+        return;
+      }
+    }
+
+    // GET /api/iot/attribute?assetId=...&attribute=...
+    if (pathname === '/api/iot/attribute' && request.method === 'GET') {
+      const assetId = parsedUrl.searchParams.get('assetId') || '';
+      const attribute = parsedUrl.searchParams.get('attribute') || 'Color';
+      const wifiClientId = parsedUrl.searchParams.get('clientId');
+      const key = JSON.stringify([assetId, attribute]);
+      const upperKey = JSON.stringify([assetId.toUpperCase(), attribute]);
+      const room = assetId ? this.rooms.get(assetId.toUpperCase()) : undefined;
+      if (wifiClientId && room) {
+        room.wifiPeers.add(wifiClientId);
+      }
+      const value =
+        this.iotAttributes.get(key) ??
+        this.iotAttributes.get(upperKey) ??
+        (attribute === 'Color' && room?.lastColorSignal ? room.lastColorSignal.color : undefined) ??
+        'waiting';
+      response.writeHead(200, { 'Content-Type': 'application/json' });
+      response.end(JSON.stringify({ ok: true, assetId, attribute, value }));
+      return;
+    }
+
+    // POST /api/iot/attribute
+    if (pathname === '/api/iot/attribute' && request.method === 'POST') {
+      try {
+        const body = await this.readJsonBody(request);
+        const assetId = String(body.assetId || '');
+        const attribute = String(body.attribute || 'Color');
+        const value = String(body.value ?? '');
+        const key = JSON.stringify([assetId, attribute]);
+        this.iotAttributes.set(key, value);
+        if (assetId) {
+          this.iotAttributes.set(JSON.stringify([assetId.toUpperCase(), attribute]), value);
+        }
+
+        if (attribute === 'Color') {
+          const color = normalizeRobotColor(value);
+          if (color) {
+            const roomId = assetId.toUpperCase();
+            let room = this.rooms.get(roomId);
+            if (!room && roomId) {
+              this.handleCreateRoom({ type: 'create-room', roomId, maxPeers: 2 }, roomId);
+              room = this.rooms.get(roomId);
+            }
+            if (room) {
+              const timestamp = Date.now();
+              const sender = String(body.clientId || body.senderRobotId || 'iot-wifi-robot');
+              room.wifiPeers.add(sender);
+              room.lastColorSignal = { peerId: sender, color, timestamp, senderRobotId: sender };
+              const data = JSON.stringify({
+                type: 'color-signal',
+                peerId: sender,
+                senderRobotId: sender,
+                color,
+                timestamp,
+              });
+              for (const recipient of room.clients.values()) {
+                if (recipient.ws.readyState === WebSocket.OPEN) {
+                  recipient.ws.send(data);
+                }
+              }
+            }
+          }
+        }
+
+        response.writeHead(200, { 'Content-Type': 'application/json' });
+        response.end(JSON.stringify({ ok: true, assetId, attribute, value }));
+        return;
+      } catch {
+        response.writeHead(400, { 'Content-Type': 'application/json' });
+        response.end(JSON.stringify({ ok: false, message: 'Dữ liệu JSON không hợp lệ.' }));
+        return;
+      }
+    }
+
+    response.writeHead(404, { 'Content-Type': 'application/json' });
+    response.end(JSON.stringify({ ok: false, message: 'Endpoint không tồn tại.' }));
+  }
+
+  private readJsonBody(request: http.IncomingMessage, maxBytes = 32768): Promise<any> {
+    return new Promise((resolve, reject) => {
+      let body = '';
+      request.on('data', chunk => {
+        body += chunk;
+        if (body.length > maxBytes) {
+          request.destroy();
+          reject(new Error('Payload too large'));
+        }
+      });
+      request.on('end', () => {
+        if (!body.trim()) return resolve({});
+        try {
+          resolve(JSON.parse(body));
+        } catch {
+          resolve({ payload: body.trim() });
+        }
+      });
+      request.on('error', reject);
+    });
   }
 
   private setupRoutes() {
@@ -77,6 +305,7 @@ class RobotNetworkServer {
       const url = new URL(request.url || '', `http://${request.headers.host}`);
       const clientId = url.searchParams.get('clientId');
       const roomId = url.searchParams.get('roomId');
+      const autoJoin = url.searchParams.get('mode') === 'wifi' || url.searchParams.get('autoJoin') === '1';
 
       if (!clientId || !roomId) {
         socket.destroy();
@@ -84,18 +313,25 @@ class RobotNetworkServer {
       }
 
       this.wss.handleUpgrade(request, socket, head, (ws) => {
-        this.handleNewConnection(ws, clientId, roomId);
+        this.handleNewConnection(ws, clientId, roomId, autoJoin);
       });
     });
   }
 
-  private handleNewConnection(ws: WebSocket, clientId: string, roomId: string) {
+  private handleNewConnection(ws: WebSocket, clientId: string, roomId: string, autoJoin = false) {
     console.log(`New connection: ${clientId} to room ${roomId}`);
 
     const client: ClientConnection = {
       id: clientId,
       ws,
     };
+
+    if (autoJoin) {
+      if (!this.rooms.has(roomId)) {
+        this.handleCreateRoom({ type: 'create-room', roomId, maxPeers: 2 }, roomId);
+      }
+      this.joinRoom(client, roomId);
+    }
 
     ws.on('message', (data) => {
       try {
@@ -196,6 +432,59 @@ class RobotNetworkServer {
         break;
       }
 
+      case 'color-signal': {
+        if (room.competition) {
+          client.ws.send(JSON.stringify({ type: 'error', message: 'Không thể gửi tín hiệu màu trong phiên thi online.' }));
+          break;
+        }
+        const rawColor = message.color ?? (typeof message.payload === 'string' ? message.payload : (message.payload as any)?.color);
+        const color = normalizeRobotColor(rawColor);
+        if (!color) {
+          client.ws.send(JSON.stringify({ type: 'error', message: 'Tín hiệu màu không hợp lệ. Các màu được hỗ trợ: RED, GREEN, BLUE, YELLOW, PURPLE, UNKNOWN, WAITING.' }));
+          break;
+        }
+        const timestamp = typeof message.timestamp === 'number' && Number.isFinite(message.timestamp) ? message.timestamp : Date.now();
+        const senderRobotId = message.senderRobotId || client.robotId || client.id;
+        room.lastColorSignal = { peerId: client.id, color, timestamp, senderRobotId };
+        this.iotAttributes.set(JSON.stringify([roomId.toUpperCase(), 'Color']), color);
+        const recipients = [...room.clients.values()].filter(peer => peer !== client && peer.ws.readyState === WebSocket.OPEN);
+        if (!recipients.length && room.wifiPeers.size === 0) {
+          client.ws.send(JSON.stringify({ type: 'error', message: 'Không có robot khác trong phòng để nhận tín hiệu màu.' }));
+          break;
+        }
+        if (recipients.some(peer => peer.ws.bufferedAmount > 65536)) {
+          client.ws.send(JSON.stringify({ type: 'error', message: 'Kết nối nhận đang bận; tín hiệu màu chưa được gửi.' }));
+          break;
+        }
+        const colorPayload = {
+          type: 'color-signal',
+          peerId: client.id,
+          senderRobotId,
+          color,
+          timestamp,
+        };
+        const data = JSON.stringify(colorPayload);
+        for (const recipient of recipients) recipient.ws.send(data);
+        break;
+      }
+
+      case 'get-color-signal': {
+        if (room.lastColorSignal) {
+          client.ws.send(JSON.stringify({
+            type: 'color-signal',
+            ...room.lastColorSignal,
+          }));
+        } else {
+          client.ws.send(JSON.stringify({
+            type: 'color-signal',
+            color: 'WAITING',
+            peerId: 'system',
+            timestamp: Date.now(),
+          }));
+        }
+        break;
+      }
+
       default:
         console.log('Unknown message type:', message.type);
     }
@@ -211,6 +500,7 @@ class RobotNetworkServer {
       password: message.password,
       maxPeers: message.maxPeers || 2,
       clients: new Map(),
+      wifiPeers: new Set(),
       createdAt: Date.now(),
     };
 
@@ -262,6 +552,7 @@ class RobotNetworkServer {
       roomId,
       clientId: client.id,
       robotId: client.robotId,
+      lastColorSignal: room.lastColorSignal ?? null,
       peers: Array.from(room.clients.entries())
         .filter(([id]) => id !== client.id)
         .map(([id, c]) => ({
@@ -327,7 +618,7 @@ class RobotNetworkServer {
     });
 
     // Clean up empty rooms
-    if (room.clients.size === 0) {
+    if (room.clients.size === 0 && room.wifiPeers.size === 0) {
       room.competition?.dispose();this.rooms.delete(roomId);
       console.log(`Room ${roomId} deleted`);
     }

@@ -1055,6 +1055,56 @@ export const apiReference: ApiReference[] = [
   },
   {
     "group": "helpers",
+    "api": "use_wifi_color_mode();",
+    "description": "Chuyển giao tiếp màu giữa 2 robot sang dùng trực tiếp module WiFi (LbIoT) thay vì cáp USB.",
+    "parameters": "Không có.",
+    "returns": "void.",
+    "notes": "Sau khi bật, các lệnh send_real_robot_color, read_real_robot_color và wait_real_robot_color sẽ truyền nhận trực tiếp qua module WiFi của robot mà không cần cắm USB.",
+    "code": "// Bật chế độ truyền tín hiệu màu qua module WiFi của robot.\nuse_wifi_color_mode();",
+    "source": "baseCode.cpp"
+  },
+  {
+    "group": "helpers",
+    "api": "connect_robot_room(F(\"ROOM_ID\"));",
+    "description": "Kết nối robot vào phòng trao đổi tín hiệu màu qua module WiFi.",
+    "parameters": "roomId: Chuỗi flash tên phòng (F(\"ROOM_ID\")) trùng với mã phòng WebSocket.",
+    "returns": "void.",
+    "notes": "Tự động đặt LbIoT.Asset.begin(roomId) và kích hoạt wifiColorMode để hai robot giao tiếp trực tiếp qua WiFi không cần USB.",
+    "code": "// Kết nối WiFi và vào phòng trao đổi tín hiệu màu ABC123.\nset_wifi(\"TenWifi\", \"MatKhau\");\nconnect_robot_room(F(\"ABC123\"));",
+    "source": "baseCode.cpp"
+  },
+  {
+    "group": "helpers",
+    "api": "send_real_robot_color(BLUE);",
+    "description": "Gửi tín hiệu màu sang robot thứ hai qua module WiFi của robot hoặc Serial/WebSocket Bridge.",
+    "parameters": "ObjectColor: RED, GREEN, BLUE, YELLOW, PURPLE.",
+    "returns": "void.",
+    "notes": "Khi đã kết nối WiFi (set_wifi kèm AssetID hoặc connect_robot_room), robot gửi màu trực tiếp qua module WiFi không cần USB; nếu chưa bật WiFi mode thì gửi qua Serial Bridge.",
+    "code": "// Gửi tín hiệu màu sang robot đối tác qua WiFi hoặc Serial bridge.\nsend_real_robot_color(BLUE);",
+    "source": "baseCode.cpp"
+  },
+  {
+    "group": "helpers",
+    "api": "read_real_robot_color();",
+    "description": "Đọc tín hiệu màu nhận từ robot khác qua module WiFi hoặc Serial/WebSocket Bridge.",
+    "parameters": "Không có.",
+    "returns": "ObjectColor; UNKNOWN nếu chưa có dữ liệu mới.",
+    "notes": "Tự động đọc từ kênh WiFi (LbIoT) khi ở chế độ WiFi hoặc từ Serial Bridge, và thêm màu hợp lệ vào hàng chờ iotColorQueue.",
+    "code": "// Đọc tín hiệu màu từ robot đối tác.\nObjectColor received = read_real_robot_color();",
+    "source": "baseCode.cpp"
+  },
+  {
+    "group": "helpers",
+    "api": "wait_real_robot_color(BLUE, 30000UL);",
+    "description": "Đợi nhận đúng màu đích từ robot khác qua module WiFi hoặc Serial/WebSocket Bridge.",
+    "parameters": "expected: ObjectColor; timeoutMs: thời gian chờ tính bằng ms, mặc định 30000.",
+    "returns": "bool; true nếu nhận đúng màu trước hạn.",
+    "notes": "Kiểm tra tín hiệu qua module WiFi (LbIoT) hoặc Serial định kỳ; quá hạn báo lỗi ERR_IOT_TIMEOUT.",
+    "code": "// Đợi robot đối tác gửi tín hiệu màu BLUE qua WiFi.\nwait_real_robot_color(BLUE, 30000UL);",
+    "source": "baseCode.cpp"
+  },
+  {
+    "group": "helpers",
     "api": "followLineSeconds(2.5f);",
     "description": "Dò line trong khoảng thời gian tính bằng giây rồi dừng.",
     "parameters": "seconds: 0..600 giây. speedPercent tùy chọn: tốc độ %, mặc định LINE_SPEED / 20.",

@@ -80,3 +80,33 @@ it('clears the previous error at the start of a deliberately requested new run',
   expect(logs.filter(log => log === 'RUN')).toHaveLength(2)
   expect(logs.filter(log => log === '0')).toHaveLength(2)
 })
+
+it('exchanges color signals in WiFi mode (no USB) via connect_robot_room and send/wait_real_robot_color', () => {
+  const iotWrites: Array<{ attribute: string; value: string; assetId: string }> = []
+  let incomingColor = 'waiting'
+  const logs: string[] = []
+  const source = base.slice(0, base.indexOf('void loop()'))
+  const runtime: CppRuntime = new CppRuntime(`${source}
+    void loop() {
+      set_wifi("LeanbotWiFi", "12345678", F("ROOM99"));
+      connect_robot_room(F("ROOM99"));
+      send_real_robot_color(BLUE);
+      bool ok = wait_real_robot_color(GREEN, 500UL);
+      Serial.println(ok);
+      LbMission.end();
+    }
+  `, {
+    motors() {}, advance() {},
+    iotRead: (attribute) => attribute === 'Color' ? incomingColor : 'waiting',
+    iotWrite: (attribute, value, assetId) => {
+      iotWrites.push({ attribute, value, assetId })
+      if (value === 'Blue') incomingColor = 'Green'
+    },
+    log: value => logs.push(value),
+  })
+  runtime.start()
+  for (let i = 0; i < 200 && runtime.running; i++) runtime.tick(10)
+  expect(runtime.running).toBe(false)
+  expect(iotWrites).toEqual([{ attribute: 'Color', value: 'Blue', assetId: 'ROOM99' }])
+  expect(logs).toContain('true')
+})

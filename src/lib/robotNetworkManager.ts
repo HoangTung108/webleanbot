@@ -1,6 +1,11 @@
 import type {OnlineCommand,OnlineCompetitionState} from '../simulator/onlineCompetition';
 import {isFinitePose} from '../simulator/robotCollision';
 import {isValidRobotMessage} from './robotMessage';
+import {
+  type RobotColor,
+  type ColorSignalMessage,
+  normalizeRobotColor,
+} from './robotColorSignal';
 /**
  * Robot Network Manager - Multi-robot online synchronization
  * Handles WebSocket connection, room management, and state sync
@@ -24,7 +29,7 @@ export interface RoomConfig {
   maxPeers: number;
 }
 
-export type NetworkEventType = 'connected' | 'disconnected' | 'peer-joined' | 'peer-left' | 'state-sync' | 'pose-correction' | 'competition-state' | 'robot-message' | 'error';
+export type NetworkEventType = 'connected' | 'disconnected' | 'peer-joined' | 'peer-left' | 'state-sync' | 'pose-correction' | 'competition-state' | 'robot-message' | 'color-signal' | 'error';
 
 export interface NetworkEvent {
   type: NetworkEventType;
@@ -37,7 +42,11 @@ export class RobotNetworkManager {
   private competition:OnlineCompetitionState|null=null;
   private ownerId='';
   private competitionProtocol=0;
+  private robotId: string | null = null;
+  private lastColorSignal: ColorSignalMessage | null = null;
   getCompetitionState(){return this.competition;}
+  getRobotId(){return this.robotId;}
+  getLastColorSignal(){return this.lastColorSignal;}
   isHost(){return this.ownerId===this.clientId;}
   sendCompetitionCommand(command:OnlineCommand){
     if(!this.isConnected()||this.competitionProtocol!==1){this.emit('error',undefined,'Máy chủ chưa hỗ trợ phiên thi online. Cần triển khai backend mới.');return;}
@@ -70,7 +79,7 @@ export class RobotNetworkManager {
   }
 
   private initializeListeners() {
-    const eventTypes: NetworkEventType[] = ['connected', 'disconnected', 'peer-joined', 'peer-left', 'state-sync', 'pose-correction', 'competition-state', 'robot-message', 'error'];
+    const eventTypes: NetworkEventType[] = ['connected', 'disconnected', 'peer-joined', 'peer-left', 'state-sync', 'pose-correction', 'competition-state', 'robot-message', 'color-signal', 'error'];
     eventTypes.forEach(type => {
       this.listeners.set(type, new Set());
     });
@@ -194,11 +203,15 @@ export class RobotNetworkManager {
             if (message.type === 'room-joined') {
               this.joined = true;
               this.ownerId=message.ownerId;this.competitionProtocol=message.competitionProtocol??0;
+              this.robotId = message.robotId || null;
               this.creating = false;
               this.peers.clear();
               for (const peer of message.peers || []) {
                 this.handleMessage({ type: 'peer-joined', peerId: peer.id, ...peer });
                 if (peer.state) this.handleMessage({ type: 'state-sync', peerId: peer.id, state: peer.state });
+              }
+              if (message.lastColorSignal) {
+                this.handleMessage(message.lastColorSignal);
               }
               settle(true);
               this.emit('connected', message);
@@ -223,6 +236,8 @@ export class RobotNetworkManager {
           if (this.ws !== socket) return;
           this.ws = null;
           this.joined = false;
+          this.robotId = null;
+          this.lastColorSignal = null;
           this.peers.clear();
           this.emit('disconnected');
           this.attemptReconnect();
@@ -277,6 +292,24 @@ export class RobotNetworkManager {
         }
         break;
 
+      case 'color-signal': {
+        const color = normalizeRobotColor(message.color);
+        if (color) {
+          const signal: ColorSignalMessage = {
+            type: 'color-signal',
+            color,
+            peerId: message.peerId,
+            senderRobotId: message.senderRobotId || message.peerId,
+            timestamp: typeof message.timestamp === 'number' ? message.timestamp : Date.now(),
+          };
+          this.lastColorSignal = signal;
+          this.emit('color-signal', signal);
+        } else {
+          this.emit('error', undefined, 'Máy chủ gửi tín hiệu màu không hợp lệ.');
+        }
+        break;
+      }
+
       case 'pose-correction':
         if(isFinitePose(message.pose)){
           for(const peer of Array.isArray(message.peers)?message.peers:[])this.updatePeerState(peer.peerId,peer.state);
@@ -311,6 +344,41 @@ export class RobotNetworkManager {
       return true;
     } catch (error) {
       this.emit('error', undefined, `Không thể gửi dữ liệu: ${error instanceof Error ? error.message : String(error)}`);
+      return false;
+    }
+  }
+
+  /**
+   * Send color signal to other robots in the room
+   */
+  sendColorSignal(colorInput: RobotColor | string, options?: { senderRobotId?: string }): boolean {
+    if (!this.isConnected()) {
+      this.emit('error', undefined, 'Chưa kết nối phòng WebSocket.');
+      return false;
+    }
+    const color = normalizeRobotColor(colorInput);
+    if (!color) {
+      this.emit('error', undefined, 'Màu không hợp lệ. Các màu được hỗ trợ: RED, GREEN, BLUE, YELLOW, PURPLE, UNKNOWN, WAITING.');
+      return false;
+    }
+    if (!this.ws || this.ws.bufferedAmount > 65536) {
+      this.emit('error', undefined, 'Kết nối đang bận; tín hiệu màu chưa được gửi.');
+      return false;
+    }
+    try {
+      const timestamp = Date.now();
+      const senderRobotId = options?.senderRobotId || this.robotId || this.clientId;
+      const payload: ColorSignalMessage = {
+        type: 'color-signal',
+        color,
+        senderRobotId,
+        timestamp,
+      };
+      this.lastColorSignal = { ...payload, peerId: this.clientId };
+      this.ws.send(JSON.stringify(payload));
+      return true;
+    } catch (error) {
+      this.emit('error', undefined, `Không thể gửi tín hiệu màu: ${error instanceof Error ? error.message : String(error)}`);
       return false;
     }
   }
@@ -379,6 +447,8 @@ export class RobotNetworkManager {
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     this.reconnectTimer = null;
     this.joined = false;
+    this.robotId = null;
+    this.lastColorSignal = null;
     this.competition=null;
     const socket = this.ws;
     this.ws = null;
