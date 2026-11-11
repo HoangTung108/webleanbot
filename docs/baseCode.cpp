@@ -195,14 +195,14 @@ bool handBusy = false;
 
 void update_hand() {
   if (!handBusy) return;
-  const unsigned long elapsed = millis() - handStarted;
+  const signed long elapsed = millis() - handStarted;
   const float ratio = constrain((float)elapsed / handDuration, 0.0f, 1.0f);
   const int angle = handFrom + (int)lroundf((handTarget - handFrom) * ratio);
   if (angle != handAngle) {
     LbGripper.moveToLR(angle, angle, 0);
     handAngle = angle;
   }
-  if (elapsed >= handDuration + GRIP_SETTLE_MS) handBusy = false;
+  if (elapsed >=( handDuration + GRIP_SETTLE_MS)) handBusy = false;
 }
 void robot_delay(unsigned long duration) {
   const unsigned long started = millis();
