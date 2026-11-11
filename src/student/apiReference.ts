@@ -827,7 +827,7 @@ export const apiReference: ApiReference[] = [
     "description": "Quay có phản hồi, tăng/giảm tốc và kiểm tra kẹt.",
     "parameters": "Tốc độ, góc độ, TurnMode.",
     "returns": "void.",
-    "notes": "Dùng TURN_SCALE và ngưỡng phanh hiện tại. Trần quay TURN_MAX_SPEED hiện là 2000; giới hạn tốc độ theo góc còn lại giữ chậm các độ cuối để hạn chế vượt góc.",
+    "notes": "Dùng TURN_SCALE và ngưỡng phanh hiện tại. Trần quay MAX_MOTOR_SPEED hiện là 2000; giới hạn tốc độ theo góc còn lại giữ chậm các độ cuối để hạn chế vượt góc.",
     "code": "// Quay có phản hồi, tăng/giảm tốc và kiểm tra kẹt.\nturn_angle(2000, 90, TWO_WHEELS);",
     "source": "baseCode.cpp"
   },
@@ -837,7 +837,7 @@ export const apiReference: ApiReference[] = [
     "description": "Quay bằng một bánh.",
     "parameters": "Tốc độ, góc độ, \"L\" hoặc \"R\".",
     "returns": "void.",
-    "notes": "Giữ quy ước dấu riêng của hàm trong baseCode. Trần quay TURN_MAX_SPEED hiện là 2000; giới hạn tốc độ theo góc còn lại giữ chậm các độ cuối để hạn chế vượt góc.",
+    "notes": "Giữ quy ước dấu riêng của hàm trong baseCode. Trần quay MAX_MOTOR_SPEED hiện là 2000; giới hạn tốc độ theo góc còn lại giữ chậm các độ cuối để hạn chế vượt góc.",
     "code": "// Quay bằng một bánh.\nturn_one_wheel(2000, 90, \"L\");",
     "source": "baseCode.cpp"
   },
@@ -847,18 +847,18 @@ export const apiReference: ApiReference[] = [
     "description": "Quay bằng hai bánh.",
     "parameters": "Tốc độ, góc độ có dấu.",
     "returns": "void.",
-    "notes": "Không gọi từ bên trong vòng điều khiển khác. Trần quay TURN_MAX_SPEED hiện là 2000; giới hạn tốc độ theo góc còn lại giữ chậm các độ cuối để hạn chế vượt góc.",
+    "notes": "Không gọi từ bên trong vòng điều khiển khác. Trần quay MAX_MOTOR_SPEED hiện là 2000; giới hạn tốc độ theo góc còn lại giữ chậm các độ cuối để hạn chế vượt góc.",
     "code": "// Quay bằng hai bánh.\nturn_two_wheels(2000, 90);",
     "source": "baseCode.cpp"
   },
   {
     "group": "helpers",
     "api": "move_tank(2000, 2000, 10);",
-    "description": "Đi có phản hồi quãng đường và bù hướng.",
+    "description": "Đi theo quãng đường với PID giữ hướng và ACC tăng/giảm tốc.",
     "parameters": "Tốc độ L/R cùng dấu, quãng đường cm không âm.",
     "returns": "void.",
-    "notes": "Hai tốc độ âm để lùi; giới hạn quãng đường 1200 cm.",
-    "code": "// Đi có phản hồi quãng đường và bù hướng.\nmove_tank(2000, 2000, 10);",
+    "notes": "Hai tốc độ âm để lùi. PID giữ hướng bắt đầu, lọc D và hạn chế tích lũy I khi chạm giới hạn. ACC dùng thời gian thực và quãng đường còn lại để tăng/phanh; MOVE_ACCEL=18000, MOVE_DECEL=2600 bước/s². Quy đổi dựa trên phép đo 2000 bước/s = 65 mm/s, cần hiệu chỉnh trên robot thật. Lệnh bánh giới hạn ±2000; vẫn kiểm tra kẹt, quá hạn và cập nhật tay. Leanbot.DCMotor.setPower chỉ điều khiển cổng DC phụ trợ.",
+    "code": "// Đi thẳng 10 cm, PID tự sửa hướng và ACC điều chỉnh tốc độ.\nmove_tank(2000, 2000, 10);\n// Lùi 10 cm với cùng cơ chế phản hồi:\nmove_tank(-2000, -2000, 10);",
     "source": "baseCode.cpp"
   },
   {

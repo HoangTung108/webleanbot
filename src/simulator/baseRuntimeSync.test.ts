@@ -2,7 +2,7 @@ import {readFileSync} from 'node:fs';
 import {describe,it,expect} from 'vitest';
 import {CppRuntime} from './cppRuntime';
 const base=readFileSync(new URL('../../docs/baseCode.cpp',import.meta.url),'utf8');
-const prefix=base.slice(0,base.search(/void\s+setup\s*\(\s*\)\s*\{/));
+const prefix=base.slice(0,base.search(/void\s+(?:FullMission|setup)\s*\(\s*\)\s*\{/));
 function run(commands:string, frame=20){
  let path=0,angle=0;const logs:string[]=[];const hands:number[][]=[];
  const runtime=new CppRuntime(`${prefix}\nvoid setup(){Leanbot.begin();set_line(IR_TH_2L,IR_TH_0L,IR_TH_1R,IR_TH_3R);colorSensorReady=APDS.begin();}\nvoid loop(){LbMission.begin(TB1A+TB1B);${commands} LbMission.end();}`,{
