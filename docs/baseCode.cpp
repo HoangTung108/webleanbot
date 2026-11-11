@@ -521,15 +521,13 @@ ObjectColor readObjectColor(bool &valid) {
     case OBJECT_PURPLE: Serial.println(F("PURPLE")); break;
     default: Serial.println(F("UNKNOWN / unstable")); break;
   }
-  valid = true; // Đọc đủ mẫu; UNKNOWN nghĩa là chưa chắc chắn, không được coi là màu đích.
+  valid = true; 
   if (color != OBJECT_UNKNOWN) {
     const CRGB colors[6] = {CRGB(0, 0, 0), CRGB(255, 0, 0), CRGB(0, 255, 0),
                             CRGB(0, 0, 255), CRGB(255, 255, 0), CRGB(128, 0, 128)};
     LbRGB.fillColor(colors[(int)color]);
     LbRGB.show();
   }
-  // Giữ LED không đổi trong quá trình đo; không nháy các màu chiếu sáng.
-  // Nếu LED báo màu chiếu vào vật, che hướng chiếu hoặc dùng đèn trắng ổn định.
   return color;
 }
 
@@ -629,148 +627,6 @@ bool wait_iot_color(ObjectColor expected, unsigned long timeoutMs) {
   return false;
 }
 
-/*
-BẢNG TRA CỨU API THƯ VIỆN
-Các API dưới đây được dùng trong script hoặc bộ sinh Blockly của project.
-Đây là bảng API liên quan, không phải danh sách đầy đủ của mọi phiên bản SDK.
-
-LEANBOT — #include <Leanbot.h>
-| API / ví dụ                                  | Công dụng / đơn vị                         |
-|----------------------------------------------|--------------------------------------------|
-| Leanbot.begin();                             | Khởi tạo phần cứng, gọi đầu setup.          |
-| LbMission.begin(TB1A + TB1B);                  | Đợi tổ hợp nút bắt đầu nhiệm vụ.            |
-| LbMission.end();                              | Kết thúc nhiệm vụ.                         |
-| LbMotion.runLR(1000, 1000);                   | Đặt tốc độ L/R; âm để đảo chiều bánh.       |
-| LbMotion.runLRrpm(30, 30);                    | Đặt tốc độ bánh theo vòng/phút.             |
-| LbMotion.stopAndWait();                       | Dừng bánh và đợi hoàn tất việc dừng.        |
-| LbMotion.getDistanceMm();                     | Đọc quãng đường phản hồi, mm.              |
-| LbMotion.getRotationDeg();                    | Đọc góc quay phản hồi, độ.                 |
-| LbMotion.setZeroOrigin();                     | Đặt lại mốc đo chuyển động.                |
-| LbMotion.waitDistanceMm(100);                 | Đợi theo quãng đường, mm.                  |
-| LbMotion.waitRotationDeg(90);                 | Đợi theo góc quay, độ.                     |
-| LbGripper.open();                            | Mở tay bằng API thư viện.                  |
-| LbGripper.close();                           | Đóng tay bằng API thư viện.                |
-| LbGripper.moveTo(50);                        | Đặt cùng góc cho hai càng, độ.             |
-| LbGripper.moveToLR(50, 50, 750);              | Đặt góc L/R và thời gian chuyển động, ms.  |
-| LbIRLine.setThreshold(69, 78, 106, 70);       | Ngưỡng theo thứ tự 2L, 0L, 1R, 3R.         |
-| LbIRLine.read();                             | Đọc cảm biến line, mặt nạ 4 bit.           |
-| LbIRLine.value();                            | Lấy kết quả line đã lưu sau lần đọc.       |
-| LbTouch.read(TB1A);                          | Đọc nút cảm ứng; so sánh với HIGH/LOW.     |
-| Leanbot.pingCm();                            | Đọc khoảng cách siêu âm, cm.               |
-| Leanbot.tone(1000, 200);                      | Phát âm 1000 Hz trong 200 ms.              |
-| LbRGB.fillColor(CRGB(255, 0, 0));             | Đặt màu bộ đệm LED; chưa hiển thị.         |
-| LbRGB.show();                                | Đẩy màu trong bộ đệm ra LED.               |
-| LbRGB.getBrightness();                       | Đọc mức sáng LED hiện tại.                |
-| LbRGB.setBrightness(64);                     | Đặt độ sáng LED 0..255.                    |
-| LbDelay(100);                                | Đợi 100 ms theo API Leanbot.               |
-
-Lưu ý: runLR đặt tốc độ, không tự giới hạn quãng đường. Các lệnh wait cần
-chuyển động được khởi động phù hợp; không thay thế bộ điều khiển move_tank.
-Trong script này dùng tốc độ runLR trong -2000..2000. Khi dùng tay async,
-tránh gọi trực tiếp LbGripper vì bộ điều khiển handAngle sẽ mất đồng bộ.
-Không gọi đổi LED trong nhiệm vụ nếu muốn LED chỉ báo màu đã đo được.
-
-LEANBOT IOT — #include <LeanbotIoT.h>
-| API / ví dụ                                  | Công dụng / điều kiện                      |
-|----------------------------------------------|--------------------------------------------|
-| LbIoT.Wifi.begin(ssid, password);             | Kết nối WiFi; script truyền const char*.   |
-| LbIoT.Asset.begin(F("AssetID"));              | Chọn Asset; ID phải là chuỗi flash.        |
-| LbIoT.Asset.attribute(F("Color"));            | Tạo đối tượng truy cập thuộc tính Color.   |
-| IoTColor.write("Blue");                      | Ghi giá trị màu lên thuộc tính.            |
-| String value = IoTColor.read();              | Đọc giá trị đang lưu trên máy chủ.         |
-
-IoTColor là biến đã khai báo ở đầu file, không phải tên đối tượng có sẵn
-trong thư viện. Hai robot dùng chung Asset/Color mới trao đổi trên cùng kênh.
-Không ép wifiAssetId.c_str() thành con trỏ flash; hãy dùng F("AssetID").
-Lệnh mạng có thể chặn; tránh gọi trong vòng phản hồi động cơ 1 ms.
-Thuộc tính chỉ giữ giá trị cuối, không phải hàng đợi tin nhắn của máy chủ.
-FIFO trong script chỉ lưu tín hiệu đã đọc; cùng màu lặp lại cần thấy waiting
-ở giữa. Giá trị đọc được không tự chứng minh tín hiệu thuộc lượt nhiệm vụ mới.
-
-CẢM BIẾN VÀ DEBUG — THƯ VIỆN RIÊNG / ARDUINO
-| API / ví dụ                                  | Công dụng                                 |
-|----------------------------------------------|-------------------------------------------|
-| APDS.begin();                               | Khởi tạo Arduino_APDS9960, kiểm tra bool. |
-| APDS.colorAvailable();                      | Kiểm tra dữ liệu màu sẵn sàng.            |
-| APDS.readColor(red, green, blue);            | Đọc RGB vào ba biến int, kiểm tra kết quả.|
-| Serial.begin(115200);                        | Mở Serial trùng baud của Web Debug.      |
-| Serial.print(value);                        | In giá trị, không xuống dòng.            |
-| Serial.println(value);                      | In giá trị rồi xuống dòng.               |
-| millis();                                   | Thời gian từ lúc khởi động, ms.           |
-
-APDS thuộc Arduino_APDS9960, Serial/millis thuộc Arduino, không phải LeanbotIoT.
-Các hàm move_tank, turn_two_wheels, set_wifi, set_line, readObjectColor,
-calibrate_color, send_iot_color, poll_iot_color và pop_iot_color ở phần sau
-là HÀM HỖ TRỢ CỦA SCRIPT, không phải API gốc của thư viện.
-
-KHỞI TẠO / WIFI (đặt trong setup, sau Leanbot.begin):
-  declare_wifi("TenWifi", "MatKhau", F("AssetID"));
-  set_wifi();                         Kết nối theo cấu hình đã khai báo.
-  set_wifi("TenWifi", "MatKhau", F("AssetID"));  Khai báo và kết nối một lần.
-
-ĐI VÀ QUAY (speed tối đa 2000; giữ nguyên thuật toán điều khiển):
-  move_tank(1800, 1800, 10);            Đi tới 10 cm; dùng hai số âm để lùi.
-  Rotate(1800, 90);                    Quay góc +90 độ; góc âm đảo chiều.
-  turn_two_wheels(1800, -90);          Quay tại chỗ bằng hai bánh.
-  turn_one_wheel(1800, 90, "L");       Chỉ chạy bánh L; "R" chọn bánh R.
-
-LINE (thứ tự cảm biến: 2L, 0L, 1R, 3R):
-  set_line(69, 78, 106, 70);            Đặt bốn ngưỡng nhận biết nền đen.
-  int line = measure_line();           Đọc mặt nạ 4 bit, giá trị 0..15.
-  print_line();                       In mặt nạ; cần Serial.begin(115200).
-  runFollowLine();                    Chỉnh hướng một lần, gọi trong vòng lặp.
-  followLineDistance(100);             Dò line 100 mm rồi dừng.
-  followLineUntilJunction();           Dò tới giao lộ đã được xác nhận rồi dừng.
-  followLineMultipleJunctions(2);      Đi qua các giao lộ tới giao lộ thứ hai.
-  centerDetectedJunction();           Tiến vào tâm giao lộ vừa phát hiện.
-  goToJunction();                     Tìm giao lộ nếu chưa có, sau đó tiến vào tâm.
-  measure_line không đo giá trị analog; 0 = không thấy đen, 15 = cả bốn thấy đen.
-
-TAY GẮP:
-  close_hand(GRIP_CLOSE_ANGLE);         Đóng tay và đợi xong.
-  open_hand();                        Mở tay và đợi xong.
-  close_hand_async(GRIP_CLOSE_ANGLE);  Bắt đầu đóng tay, tiếp tục lệnh tiếp theo.
-  open_hand_async();                  Bắt đầu mở tay, tiếp tục lệnh tiếp theo.
-  wait_hand();                        Đợi tay xong trước khi kết thúc nhiệm vụ.
-  robot_delay(500);                   Đợi 500 ms và cập nhật tay đang chạy.
-  update_hand();                      Cập nhật tay trong vòng lặp tự viết.
-  Không xen lệnh LbGripper trực tiếp khi dùng bộ điều khiển tay async.
-
-CẢM BIẾN MÀU:
-  calibrate_color(OBJECT_RED);         Đặt khối ĐỎ, giữ yên rồi gọi để học mẫu.
-  Lặp lại riêng với GREEN, BLUE, YELLOW, PURPLE khi đã đặt đúng từng khối.
-  Mới học 1..4 màu: trả UNKNOWN; đủ 5 màu mới phân loại theo mẫu đã học.
-  Serial in set_color_reference(...); lưu 5 dòng vào setup sau APDS.begin để dùng lại.
-  set_color_white(100, 120, 80);       Ví dụ RGB mẫu TRẮNG; thay bằng số đo thực tế.
-  ObjectColor color = Obj_detectColor();  Đọc màu khối bằng APDS.
-  bool valid = false;                 Khai báo cờ trước khi đọc màu.
-  ObjectColor color = readObjectColor(valid);
-  if (valid && color == OBJECT_BLUE) { send_iot_color(color); }
-                                      Chỉ dùng màu khi cảm biến đọc thành công.
-  Hai cách Obj_detectColor / readObjectColor là lựa chọn thay thế, không cần đọc hai lần.
-  Trong setup cần: colorSensorReady = APDS.begin();
-  requireColor(OBJECT_BLUE);           Kiểm tra màu; báo lỗi nếu không đúng.
-  Màu: OBJECT_RED, OBJECT_GREEN, OBJECT_BLUE, OBJECT_YELLOW, OBJECT_PURPLE, OBJECT_UNKNOWN.
-  Cảm biến cần APDS.begin thành công trước khi đọc hoặc requireColor.
-
-TÍN HIỆU MÀU GIỮA CÁC ROBOT IOT:
-  Cả hai robot cần WiFi và cùng Asset ID / thuộc tính Color được phép truy cập.
-  reset_iot_color();                  Robot gửi xóa tín hiệu cũ trước lượt mới.
-  send_iot_color(OBJECT_BLUE);         Robot gửi ghi tín hiệu Blue lên máy chủ.
-  ObjectColor color = read_iot_color();  Đọc màu và tự đưa màu mới vào hàng chờ.
-  if (!wait_iot_color(OBJECT_BLUE, 30000UL)) return;
-                                      Robot nhận đợi tối đa 30 giây, lỗi thì thoát.
-
-HÀNG CHỜ TÍN HIỆU (FIFO, tối đa 16 màu):
-  poll_iot_color();                    Đọc mạng một lần, đưa màu mới vào hàng chờ.
-  iot_queue_count();                   Số tín hiệu chưa xử lý.
-  peek_iot_color();                    Xem tín hiệu đầu, chưa lấy ra.
-  ObjectColor next = pop_iot_color();  Lấy tín hiệu cũ nhất; UNKNOWN nếu rỗng.
-  clear_iot_queue();                   Xóa hàng chờ và cờ đầy, giữ bộ lọc nhận trùng.
-  iotQueueOverflow                    true khi hàng chờ từng bị đầy; không ghi đè.
-
-
-*/
 
 void setup() {
   Leanbot.begin();

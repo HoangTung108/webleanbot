@@ -437,3 +437,4 @@ details summary { color: #365e9a; font-size: 12px; font-weight: 650; cursor: poi
   .api-library td:first-child { min-width: 0; }
   .api-library td code { white-space: normal; overflow-wrap: anywhere; }
 }
+.api-detail { margin-top: 6px; }.api-detail summary { color: #17558f; cursor: pointer; font-weight: 600; }.api-detail dl { margin: 10px 0; }.api-detail dt { font-weight: 600; margin-top: 8px; }.api-detail dd { margin: 2px 0 0; color: #526479; }.api-detail pre { max-width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; }.api-library td { overflow-wrap: anywhere; }.api-library td:first-child { max-width: 420px; }.api-detail button { margin-bottom: 8px; }
