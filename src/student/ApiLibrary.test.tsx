@@ -9,7 +9,7 @@ it('shows documented APIs, filters and switches groups', () => {
   expect(screen.getByText('Không tìm thấy API trong nhóm này.')).toBeTruthy()
   fireEvent.click(screen.getByRole('button', { name: 'Leanbot IoT' }))
   expect(screen.getByText('LbIoT.Asset.begin(F("AssetID"));')).toBeTruthy()
-  expect(screen.getByText(/Robot nhận phải đọc được waiting/)).toBeTruthy()
+  expect(screen.getByText(/Không cần waiting giữa hai khối cùng màu/)).toBeTruthy()
 })
 it('copies the annotated example and confirms success', async () => {
   const writeText = vi.fn().mockResolvedValue(undefined)

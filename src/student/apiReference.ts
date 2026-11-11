@@ -777,7 +777,7 @@ export const apiReference: ApiReference[] = [
     "description": "Bắt đầu đóng tay không đợi.",
     "parameters": "Góc kẹp, độ; giới hạn -30..120.",
     "returns": "void.",
-    "notes": "Giả định góc tay đang đồng bộ với handAngle.",
+    "notes": "Nếu đích không đổi thì không khởi động lại. Gọi các lệnh di chuyển hoặc robot_delay để tay tiếp tục cập nhật; dùng wait_hand khi cần chờ xong.",
     "code": "// Bắt đầu đóng tay không đợi.\nclose_hand_async(50);",
     "source": "baseCode.cpp"
   },
@@ -875,20 +875,20 @@ export const apiReference: ApiReference[] = [
     "group": "helpers",
     "api": "set_wifi();",
     "description": "Kết nối theo cấu hình đã khai báo.",
-    "parameters": "Không có; có overload nhận SSID, mật khẩu, Asset.",
+    "parameters": "Không có nếu đã gọi declare_wifi; hoặc truyền SSID, mật khẩu và Asset ID tùy chọn.",
     "returns": "void.",
     "notes": "Có thể chặn; SSID rỗng ghi ERR_WIFI_CONFIG.",
-    "code": "// Kết nối theo cấu hình đã khai báo.\nset_wifi();",
+    "code": "// Khai báo và kết nối trong một lệnh:\nset_wifi(\"TenWifi\", \"MatKhau\", F(\"AssetID\"));\n// Hoặc sau khi đã gọi declare_wifi: dùng set_wifi();",
     "source": "baseCode.cpp"
   },
   {
     "group": "helpers",
-    "api": "set_line(69, 78, 106, 70);",
+    "api": "set_line(IR_TH_2L, IR_TH_0L, IR_TH_1R, IR_TH_3R);",
     "description": "Đặt ngưỡng line.",
     "parameters": "2L, 0L, 1R, 3R.",
     "returns": "void.",
-    "notes": "Hiệu chuẩn theo nền và ánh sáng thật.",
-    "code": "// Đặt ngưỡng line.\nset_line(69, 78, 106, 70);",
+    "notes": "Dùng các hằng ngưỡng trong baseCode; cần hiệu chỉnh theo nền và ánh sáng thật. Không gọi sau calibrate_line vì sẽ ghi đè kết quả hiệu chuẩn.",
+    "code": "// Đặt ngưỡng theo cấu hình baseCode, thay cho hiệu chuẩn thủ công.\nset_line(IR_TH_2L, IR_TH_0L, IR_TH_1R, IR_TH_3R);",
     "source": "baseCode.cpp"
   },
   {
@@ -977,7 +977,7 @@ export const apiReference: ApiReference[] = [
     "description": "Học mẫu khi đang đặt đúng khối.",
     "parameters": "Tên màu thật.",
     "returns": "void.",
-    "notes": "Cần học riêng đủ 5 màu; không gán 5 tên cho cùng khối.",
+    "notes": "Khởi tạo colorSensorReady = APDS.begin() trước. Lấy trung bình 5 mẫu và in lệnh lưu mẫu ra Serial. Khi dùng mẫu hiệu chuẩn cần đủ 5 màu; không gán 5 tên cho cùng khối.",
     "code": "// Học mẫu khi đang đặt đúng khối.\ncalibrate_color(RED);",
     "source": "baseCode.cpp"
   },
@@ -1008,7 +1008,7 @@ export const apiReference: ApiReference[] = [
     "description": "Xóa FIFO và cờ đầy.",
     "parameters": "Không có.",
     "returns": "void.",
-    "notes": "Giữ màu cuối để tránh xếp lại giá trị cũ.",
+    "notes": "Xóa hàng chờ cục bộ và cờ tràn; không đổi giá trị IoT trên mạng. Lần đọc tiếp theo vẫn thêm màu hợp lệ, kể cả giá trị cũ.",
     "code": "// Xóa FIFO và cờ đầy.\nclear_iot_queue();",
     "source": "baseCode.cpp"
   },
@@ -1026,11 +1026,11 @@ export const apiReference: ApiReference[] = [
   {
     "group": "helpers",
     "api": "read_iot_color();",
-    "description": "Đọc mạng và xếp màu mới vào FIFO.",
+    "description": "Đọc mạng và thêm mỗi màu hợp lệ vào hàng chờ.",
     "parameters": "Không có.",
     "returns": "ObjectColor.",
     "notes": "Mỗi lần đọc màu hợp lệ đều thêm vào FIFO, kể cả cùng màu liên tiếp. Đọc lại giá trị IoT chưa đổi cũng thêm một mục; khi đầy chỉ bật cờ tràn.",
-    "code": "// Đọc mạng và xếp màu mới vào FIFO.\nread_iot_color();",
+    "code": "// Mỗi lần đọc hợp lệ thêm một mục, kể cả màu trùng.\nread_iot_color();",
     "source": "baseCode.cpp"
   },
   {
@@ -1047,9 +1047,9 @@ export const apiReference: ApiReference[] = [
     "group": "helpers",
     "api": "wait_iot_color(BLUE, 30000UL);",
     "description": "Đợi màu đích với thời hạn.",
-    "parameters": "Màu, timeout ms; mặc định 30000.",
+    "parameters": "RED, GREEN, BLUE, YELLOW hoặc PURPLE; timeout tính bằng ms, mặc định 30000.",
     "returns": "bool; false khi lỗi hoặc timeout.",
-    "notes": "Có xếp hàng nhưng không tự pop; thời hạn kiểm tra giữa các lần đọc mạng.",
+    "notes": "Đọc mạng qua read_iot_color nên mỗi lần đọc hợp lệ đều thêm hàng chờ, không tự pop. Màu không hợp lệ báo ERR_COLOR_MISMATCH; quá hạn báo ERR_IOT_TIMEOUT. Thời hạn được kiểm tra giữa các lần đọc mạng.",
     "code": "// Đợi màu đích với thời hạn.\nwait_iot_color(BLUE, 30000UL);",
     "source": "baseCode.cpp"
   },
@@ -1073,16 +1073,7 @@ export const apiReference: ApiReference[] = [
     "code": "// Dò 32,5 cm ở tốc độ mặc định.\nfollowLineCm(32.5f);\n// Giới hạn tốc độ 50%:\nfollowLineCm(32.5f, 50);",
     "source": "baseCode.cpp"
   },
-  {
-    "group": "helpers",
-    "api": "measure_line_values();",
-    "description": "Đo và in bốn giá trị IR thực để kiểm tra ngưỡng line.",
-    "parameters": "Không có.",
-    "returns": "void.",
-    "notes": "Dừng robot trước khi đo; không gọi in liên tục trong vòng bám line. Log gồm ADC theo 2L/0L/1R/3R, mặt nạ và sai số điều khiển gần nhất.",
-    "code": "// Khi robot đứng yên, xem Serial Debug 115200 baud.\nmeasure_line_values();\nrobot_delay(200); // Không in quá dày",
-    "source": "baseCode.cpp"
-  },
+
   {
     "group": "helpers",
     "api": "measure_line_error();",
@@ -1103,22 +1094,13 @@ export const apiReference: ApiReference[] = [
     "code": "// Trong setup, sau Leanbot.begin và Serial.begin(115200):\ncalibrate_line(); // Đặt cảm biến theo quy trình SDK, chạm TB1A xác nhận\n// Sau đó mới bắt đầu nhiệm vụ.",
     "source": "baseCode.cpp"
   },
-  {
-    "group": "helpers",
-    "api": "display_line();",
-    "description": "Đọc line rồi hiển thị trạng thái cảm biến bằng LED xanh.",
-    "parameters": "Không có tham số.",
-    "returns": "void.",
-    "notes": "Dùng khi đứng yên chẩn đoán. Đây là IR đen/trắng, không phải đọc màu APDS. Thay đổi LED chỉ khi chủ động gọi hàm này.",
-    "code": "// Chế độ chẩn đoán, không chạy bánh:\ndisplay_line(); // Đọc và hiển thị LED\nmeasure_line_values(); // Xem số IR trên Serial Debug\nrobot_delay(200);",
-    "source": "baseCode.cpp"
-  },
+
   {
     "group": "helpers",
     "api": "read_color();",
     "description": "Đọc màu khối bằng một lệnh, không cần khai báo biến.",
     "parameters": "Không có.",
-    "returns": "bool: false = sensor error; true = samples read (may be UNKNOWN).",
+    "returns": "bool: false khi lỗi cảm biến; true khi đọc đủ mẫu, kể cả khi kết quả là UNKNOWN.",
     "notes": "Giữ nhận diện 5 mẫu/4 phiếu và mẫu hiệu chuẩn hiện tại. Tự in Serial, chỉ đổi LED khi có màu xác định. Lỗi hoặc chưa chắc chắn xóa màu lưu về UNKNOWN.",
     "code": "read_color(); // Đọc và báo màu, không cần bool valid hay biến color",
     "source": "baseCode.cpp"

@@ -219,8 +219,7 @@ void robot_delay(unsigned long duration) {
 void close_hand_async(int degree) {
   update_hand();
   const int target = constrain(degree, -30, 120);
-  if (handBusy && target == handTarget) return;
-  if (!handBusy && target == handAngle) return;
+  if (target == (handBusy ? handTarget : handAngle)) return;
   handFrom = handAngle;
   handTarget = target;
   handStarted = millis();
@@ -391,24 +390,6 @@ void calibrate_line() {
   Serial.println(F("Line calibration returned. Check sensors on black and white."));
 }
 
-void display_line() {
-  LbIRLine.read();
-  LbIRLine.displayOnRGB(CRGB::Green);
-  LbRGB.show();
-}
-
-void measure_line_values() {
-  Serial.print(F("IR 2L/0L/1R/3R: "));
-  Serial.print(LbIRArray.read(ir2L)); Serial.print(' ');
-  Serial.print(LbIRArray.read(ir0L)); Serial.print(' ');
-  Serial.print(LbIRArray.read(ir1R)); Serial.print(' ');
-  Serial.print(LbIRArray.read(ir3R));
-  Serial.print(F(" mask: ")); Serial.print(measure_line());
-  Serial.print(F(" last error: ")); Serial.print(lastLineError);
-  Serial.print(F(" steering sign: ")); Serial.println(LINE_STEERING_SIGN);
-}
-
-
 
 inline int32_t lbmbAbs32(int32_t x) { return x < 0 ? -x : x; }
 inline float lbmbAbsF(float x) { return x < 0.0f ? -x : x; }
@@ -465,16 +446,8 @@ inline int16_t lbmbWheelSlew(
   int32_t delta = rate * (int32_t)dtMs / 1000;
   if (delta < 1) delta = 1;
 
-  if (target > current) {
-    int32_t next = (int32_t)current + delta;
-    return (int16_t)(next > target ? target : next);
-  }
-
-  if (target < current) {
-    int32_t next = (int32_t)current - delta;
-    return (int16_t)(next < target ? target : next);
-  }
-
+  if (target > current) return (int16_t)lbmbMin32((int32_t)current + delta, target);
+  if (target < current) return (int16_t)lbmbMax32((int32_t)current - delta, target);
   return current;
 }
 
@@ -497,12 +470,7 @@ inline float lbmbProfileStep(
     return *speed;
   }
 
-  float desiredAccel;
-  if (error > 0.0f) {
-    desiredAccel = maxAccel;
-  } else {
-    desiredAccel = -maxDecel;
-  }
+  float desiredAccel = error > 0.0f ? maxAccel : -maxDecel;
 
   float maxDeltaAccel = maxJerk * dt;
   float accelDelta = desiredAccel - *accel;
@@ -512,22 +480,12 @@ inline float lbmbProfileStep(
   float next = *speed + (*accel * dt);
 
   // Never cross the requested envelope.
-  if ((error > 0.0f && next >= targetSpeed) ||
-      (error < 0.0f && next <= targetSpeed)) {
+  if ((error > 0.0f && next >= targetSpeed) || (error < 0.0f && next <= targetSpeed)) {
     next = targetSpeed;
     *accel = 0.0f;
   }
-
-  if (next < 0.0f) {
-    next = 0.0f;
-    *accel = 0.0f;
-  }
-
-  if (next > LBMB_SPEED_MAX) {
-    next = LBMB_SPEED_MAX;
-    *accel = 0.0f;
-  }
-
+  if (next < 0.0f) {  next = 0.0f;  *accel = 0.0f; }
+  if (next > LBMB_SPEED_MAX) { next = LBMB_SPEED_MAX; *accel = 0.0f; }
   *speed = next;
   return next;
 }
@@ -540,11 +498,7 @@ inline int32_t lbmbMoveBrakeMm(int16_t targetSpeed) {
   return mm;
 }
 
-inline float lbmbBrakeEnvelope(
-  int32_t remaining,
-  int32_t brakeZone,
-  int16_t targetSpeed
-) {
+inline float lbmbBrakeEnvelope(  int32_t remaining,  int32_t brakeZone, int16_t targetSpeed) {
   int16_t minSpeed = lbmbInitialSpeed(targetSpeed);
   if (remaining >= brakeZone || brakeZone <= 0) return targetSpeed;
 
@@ -585,10 +539,7 @@ inline int16_t lbmbLinePosition1000(const LbmbState* state, int16_t fallbackErro
   int32_t v1 = state->ir1R;
   int32_t v3 = state->ir3R;
 
-  int32_t floorValue = v2;
-  if (v0 < floorValue) floorValue = v0;
-  if (v1 < floorValue) floorValue = v1;
-  if (v3 < floorValue) floorValue = v3;
+  int32_t floorValue = lbmbMin32(lbmbMin32(lbmbMin32(v2, v0), v1), v3);
 
   int32_t w2 = v2 - floorValue;
   int32_t w0 = v0 - floorValue;
@@ -611,10 +562,7 @@ inline int16_t lbmbLinePosition1000(const LbmbState* state, int16_t fallbackErro
       ( 1000L * w1) +
       ( 3000L * w3);
 
-  int32_t pos = weighted / sum;
-  if (pos < -3000) pos = -3000;
-  if (pos > 3000) pos = 3000;
-  return (int16_t)pos;
+  return lbmbClamp16(weighted / sum, -3000, 3000);
 }
 
 inline bool lbmbCheckMarker(uint8_t state, uint8_t mode) {
@@ -727,42 +675,15 @@ inline LbmbCommand lbmbFollowCoreStep(
     ctx->sharpTurn = false;
     ctx->centeredCount = 0;
   }
-  // Before the first valid sample, use a bounded bidirectional acquisition scan.
-  if (!lineValid && !ctx->hasValidError) {
-    // With no known side, scan both directions without translating off the mat.
-    int16_t scan = lbmbMin16(targetSpeed, LBMB_SEARCH_SPEED_MAX);
-    bool scanRight = elapsedOverall >= 700U && elapsedOverall < 2100U;
-    int16_t left = scanRight ? scan : -scan;
-    ctx->outLeft = lbmbWheelSlew(ctx->outLeft, left, dtMs);
-    ctx->outRight = lbmbWheelSlew(ctx->outRight, -left, dtMs);
-
-    cmd.leftSpeed = ctx->outLeft;
-    cmd.rightSpeed = ctx->outRight;
-    cmd.isDone = false;
-    return cmd;
-  }
-
-  // Lost line after having a valid error: pivot toward the last known side.
-  if (!lineValid || state->lineState == 0b0000) {
-    int16_t search = lbmbMin16(
-      targetSpeed,
-      LBMB_SEARCH_SPEED_MAX
-    );
-
-    int16_t targetLeft;
-    int16_t targetRight;
-
-    if (ctx->prevError > 0.0f) {
-      // Last line was on the right -> rotate right.
-      targetLeft = search;
-      targetRight = -search;
-    } else {
-      targetLeft = -search;
-      targetRight = search;
-    }
-
+  // Chưa bắt được line: quét hai phía; mất line: quay về phía thấy lần cuối.
+  if (!lineValid) {
+    const int16_t search = lbmbMin16(targetSpeed, LBMB_SEARCH_SPEED_MAX);
+    const bool searchRight = ctx->hasValidError
+      ? ctx->prevError > 0.0f
+      : elapsedOverall >= 700U && elapsedOverall < 2100U;
+    const int16_t targetLeft = searchRight ? search : -search;
     ctx->outLeft = lbmbWheelSlew(ctx->outLeft, targetLeft, dtMs);
-    ctx->outRight = lbmbWheelSlew(ctx->outRight, targetRight, dtMs);
+    ctx->outRight = lbmbWheelSlew(ctx->outRight, -targetLeft, dtMs);
 
     cmd.leftSpeed = ctx->outLeft;
     cmd.rightSpeed = ctx->outRight;
@@ -1219,21 +1140,19 @@ ObjectColor read_iot_color() {
   else if (signal == "BLUE") color = BLUE;
   else if (signal == "YELLOW") color = YELLOW;
   else if (signal == "PURPLE") color = PURPLE;
-  if (color != UNKNOWN) {
-    if (iotQueueSize < IOT_QUEUE_CAPACITY) {
-      const int tail = (iotQueueHead + iotQueueSize) % IOT_QUEUE_CAPACITY;
-      iotColorQueue[tail] = color;
-      ++iotQueueSize;
-    } else {
-      iotQueueOverflow = true;
-    }
+  if (color == UNKNOWN) return color;
+  if (iotQueueSize < IOT_QUEUE_CAPACITY) {
+    const int tail = (iotQueueHead + iotQueueSize) % IOT_QUEUE_CAPACITY;
+    iotColorQueue[tail] = color;
+    ++iotQueueSize;
+  } else {
+    iotQueueOverflow = true;
   }
   return color;
 }
 void reset_iot_color() { IoTColor.write("waiting"); }
 bool wait_iot_color(ObjectColor expected, unsigned long timeoutMs) {
-  if (expected != RED && expected != GREEN && expected != BLUE &&
-      expected != YELLOW && expected != PURPLE) {
+  if (expected < RED || expected > PURPLE) {
     failMission(ERR_COLOR_MISMATCH);
     return false;
   }

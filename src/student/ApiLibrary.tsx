@@ -3,9 +3,43 @@ import { libraryReference as apiReference } from './libraryReference'
 
 const examples = [
   { id: 'leanbot', title: 'Leanbot', code: `#include <Leanbot.h>\n\nvoid setup() {\n  Leanbot.begin(); // Khởi tạo phần cứng\n}\n\nvoid loop() {\n  LbMission.begin(TB1A + TB1B); // Đợi tín hiệu bắt đầu\n  LbMotion.runLR(1000, 1000);  // Hai bánh đi tới\n  LbMotion.waitDistanceMm(100); // Đợi đi 100 mm\n  LbMotion.stopAndWait();      // Dừng bánh\n  LbMission.end();\n}` },
-  { id: 'iot', title: 'Leanbot IoT', code: `// Dùng cùng Asset ID / thuộc tính Color trên hai robot.\n// Trong setup(), sau Leanbot.begin():\nset_wifi("TenWifi", "MatKhau", F("AssetID"));\n\n// Robot gửi: gọi trước lượt trao đổi mới.\nreset_iot_color(); // Robot nhận phải đọc được waiting\nsend_iot_color(BLUE); // Gửi màu sau khi đã đo\n\n// Robot nhận: gọi định kỳ khi bánh đã dừng.\nread_iot_color(); // Đọc mạng, xếp tín hiệu mới vào FIFO\nif (iot_queue_count() > 0) {\n  ObjectColor next = pop_iot_color(); // Lấy tín hiệu cũ nhất\n  // Xử lý nhiệm vụ theo next ở đây.\n}\n// Kênh chỉ lưu giá trị cuối; không đảm bảo nhận mọi lần gửi.` },
+  { id: 'iot', title: 'Leanbot IoT', code: `// Ví dụ dùng các hàm Code mở rộng trong baseCode.cpp.
+// Hai robot dùng cùng Asset ID / thuộc tính Color.
+// Trong setup(), sau Leanbot.begin():
+set_wifi("TenWifi", "MatKhau", F("AssetID"));
+
+// Robot gửi: gửi màu của khối cần xử lý.
+send_iot_color(BLUE);
+// Không cần waiting giữa hai khối cùng màu.
+
+// Robot nhận: gọi một lần khi cần lấy tín hiệu cho lượt xử lý.
+read_iot_color(); // Mỗi lần đọc màu hợp lệ đều thêm một mục
+if (iot_queue_count() > 0) {
+  ObjectColor next = pop_iot_color(); // Lấy mục cũ nhất
+  // Xử lý nhiệm vụ theo next ở đây.
+}
+// Đọc lại giá trị chưa đổi cũng thêm một mục vào hàng chờ.
+// Kênh chỉ lưu giá trị cuối; không tự phân biệt hai lần gửi cùng màu.
+// Khi cần đưa kênh về waiting, gọi reset_iot_color();
+// Xóa hàng chờ cục bộ bằng clear_iot_queue(); không đổi kênh IoT.` },
   { id: 'sensors', title: 'Cảm biến & Serial', code: `// Dùng với docs/baseCode.cpp. Trong setup():\nSerial.begin(115200); // Trùng baud Serial Debug trên web\ncolorSensorReady = APDS.begin(); // Phải thành công trước khi đo\n\n// Khi đã đặt khối trước cảm biến:\nread_color(); // Tự đọc nhiều mẫu, báo Serial/LED\nif (is_color(BLUE)) {\n  Serial.println("Blue block"); // Không cần khai báo biến\n}\n// Hiệu chuẩn: đặt khối đỏ rồi gọi calibrate_color(RED).\n// Làm riêng cho đủ 5 màu; lưu các dòng mẫu in trên Serial.` },
-  { id: 'helpers', title: 'Hàm baseCode', code: `// Các hàm hỗ trợ này cần có định nghĩa từ baseCode.cpp.\nset_line(69, 78, 106, 70); // Ngưỡng 2L, 0L, 1R, 3R\nint line = measure_line(); // Mặt nạ 0..15, không phải analog\n\nclose_hand_async(GRIP_CLOSE_ANGLE); // Bắt đầu gắp\nmove_tank(1800, 1800, 10); // Đi 10 cm, tay vẫn cập nhật\nwait_hand(); // Chờ tay hoàn tất\nturn_two_wheels(1800, 90); // Quay 90 độ\nopen_hand(); // Mở và chờ xong\nrobot_delay(250); // Đợi và phục vụ tay async` },
+  { id: 'helpers', title: 'Code mở rộng', code: `// Dùng cùng các định nghĩa trong baseCode.cpp.
+// Cấu hình line: dùng ngưỡng đã chỉnh, hoặc gọi calibrate_line().
+set_line(IR_TH_2L, IR_TH_0L, IR_TH_1R, IR_TH_3R);
+int line = measure_line(); // Mặt nạ 0..15
+
+close_hand_async(GRIP_CLOSE_ANGLE); // Bắt đầu gắp
+move_tank(1800, 1800, 10); // Đi 10 cm, tay vẫn cập nhật
+wait_hand(); // Chờ tay hoàn tất
+turn_two_wheels(1800, 90); // Quay 90 độ
+followLineCm(20, 50); // Dò 20 cm ở 50% tốc độ
+open_hand(); // Mở và chờ xong
+robot_delay(250); // Đợi và cập nhật tay
+
+// Khởi tạo cảm biến trong setup(): colorSensorReady = APDS.begin();
+// Khởi tạo WiFi/Asset trước khi gửi màu.
+read_color(); // Đọc 5 mẫu và lưu kết quả
+if (is_color(BLUE)) send_iot_color(get_color()); // Không đo lại` },
   { id: 'arduino', title: 'Arduino & Serial', code: `Serial.begin(115200); // Trong setup, trùng baud web
 
 // Trong loop, tránh in quá dày:
