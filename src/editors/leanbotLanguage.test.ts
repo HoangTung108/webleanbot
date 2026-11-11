@@ -28,6 +28,6 @@ it('does not duplicate parentheses and registers once for each Monaco instance',
  configureLeanbotLanguage(monaco)
  expect(register).toHaveBeenCalledTimes(1)
  expect(complete('LbMotion.run','(1000, 1000);').find((item:{label:string})=>item.label==='LbMotion.runLR').insertText).toBe('LbMotion.runLR')
- expect(complete('OBJECT_').some((item:{label:string})=>item.label==='OBJECT_PURPLE')).toBe(true)
+ expect(complete('PUR').some((item:{label:string})=>item.label==='PURPLE')).toBe(true)
  expect(complete('CRGB::').every((item:{label:string})=>item.label.startsWith('CRGB::'))).toBe(true)
 })

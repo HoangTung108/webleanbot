@@ -947,7 +947,7 @@ export const apiReference: ApiReference[] = [
     "description": "Cập nhật một bước bám line bằng lõi PID analog của Blockly MyBlock.",
     "parameters": "Không có hoặc int mặt nạ.",
     "returns": "void.",
-    "notes": "Đọc bốn IR thô, PID chống tích lũy bão hòa, tăng tốc giới hạn độ giật, tự giảm tốc khi lệch. LINE_SPEED mặc định 2000 (100%). Gọi mỗi 10 ms; mất line tìm có giới hạn 800 ms rồi dừng/báo lỗi. Muốn bắt đầu lượt mới sau khi dừng cần resetMotionState().",
+    "notes": "PID analog MyBlock, chu kỳ 10 ms. Bắt line ở tối đa 600, cần 5 mẫu giữa line mới tăng tốc. Cua gắt có trần 650 và cho bánh trong lùi nhẹ; hysteresis tránh chuyển chế độ liên tục. Không thấy line từ đầu: quét hai phía tối đa 3,5 giây; mất line đã bám: tìm theo hướng cũ tối đa 2,5 giây. Quá hạn thì dừng/báo lỗi; không bảo đảm tìm được line nằm ngoài vùng quét cảm biến.",
     "code": "// Đặt trong loop, khi robot đang theo line.\nrunFollowLine(); // Cập nhật điều khiển một lần\nrobot_delay(LINE_STEP_MS); // Giữ chu kỳ 10 ms và phục vụ tay async",
     "source": "baseCode.cpp"
   },
@@ -1023,22 +1023,22 @@ export const apiReference: ApiReference[] = [
   },
   {
     "group": "helpers",
-    "api": "set_color_reference(OBJECT_RED, 100, 15, 10);",
+    "api": "set_color_reference(RED, 100, 15, 10);",
     "description": "Lưu mẫu màu đã gán nhãn.",
     "parameters": "Màu và RGB thô thực tế.",
     "returns": "void.",
     "notes": "Mẫu trong RAM; cần lưu câu lệnh vào setup để dùng sau reset.",
-    "code": "// Lưu mẫu màu đã gán nhãn.\nset_color_reference(OBJECT_RED, 100, 15, 10);",
+    "code": "// Lưu mẫu màu đã gán nhãn.\nset_color_reference(RED, 100, 15, 10);",
     "source": "baseCode.cpp"
   },
   {
     "group": "helpers",
-    "api": "calibrate_color(OBJECT_RED);",
+    "api": "calibrate_color(RED);",
     "description": "Học mẫu khi đang đặt đúng khối.",
     "parameters": "Tên màu thật.",
     "returns": "void.",
     "notes": "Cần học riêng đủ 5 màu; không gán 5 tên cho cùng khối.",
-    "code": "// Học mẫu khi đang đặt đúng khối.\ncalibrate_color(OBJECT_RED);",
+    "code": "// Học mẫu khi đang đặt đúng khối.\ncalibrate_color(RED);",
     "source": "baseCode.cpp"
   },
   {
@@ -1047,7 +1047,7 @@ export const apiReference: ApiReference[] = [
     "description": "Đọc 5 mẫu, phân loại khi có ít nhất 4 phiếu.",
     "parameters": "bool valid đã khai báo, truyền tham chiếu.",
     "returns": "ObjectColor; valid báo đọc đủ mẫu.",
-    "notes": "valid=true vẫn có thể UNKNOWN; chỉ xử lý khi màu xác định.",
+    "notes": "valid=true vẫn có thể UNKNOWN; chỉ xử lý khi màu xác định. Học sinh có thể dùng read_color() để khỏi khai báo biến; get_color()/is_color() lấy kết quả không đo lại.",
     "code": "// Đọc 5 mẫu, phân loại khi có ít nhất 4 phiếu.\nreadObjectColor(valid);",
     "source": "baseCode.cpp"
   },
@@ -1063,22 +1063,22 @@ export const apiReference: ApiReference[] = [
   },
   {
     "group": "helpers",
-    "api": "requireColor(OBJECT_BLUE);",
+    "api": "requireColor(BLUE);",
     "description": "Đo và kiểm tra màu đích.",
     "parameters": "Màu mong đợi.",
     "returns": "void.",
     "notes": "Ghi lỗi khi đọc được nhưng không đúng màu.",
-    "code": "// Đo và kiểm tra màu đích.\nrequireColor(OBJECT_BLUE);",
+    "code": "// Đo và kiểm tra màu đích.\nrequireColor(BLUE);",
     "source": "baseCode.cpp"
   },
   {
     "group": "helpers",
-    "api": "send_iot_color(OBJECT_BLUE);",
+    "api": "send_iot_color(BLUE);",
     "description": "Gửi tên màu lên thuộc tính Color.",
     "parameters": "ObjectColor.",
     "returns": "void.",
     "notes": "Cần cấu hình WiFi và Asset.",
-    "code": "// Gửi tên màu lên thuộc tính Color.\nsend_iot_color(OBJECT_BLUE);",
+    "code": "// Gửi tên màu lên thuộc tính Color.\nsend_iot_color(BLUE);",
     "source": "baseCode.cpp"
   },
   {
@@ -1153,12 +1153,12 @@ export const apiReference: ApiReference[] = [
   },
   {
     "group": "helpers",
-    "api": "wait_iot_color(OBJECT_BLUE, 30000UL);",
+    "api": "wait_iot_color(BLUE, 30000UL);",
     "description": "Đợi màu đích với thời hạn.",
     "parameters": "Màu, timeout ms; mặc định 30000.",
     "returns": "bool; false khi lỗi hoặc timeout.",
     "notes": "Có xếp hàng nhưng không tự pop; thời hạn kiểm tra giữa các lần đọc mạng.",
-    "code": "// Đợi màu đích với thời hạn.\nwait_iot_color(OBJECT_BLUE, 30000UL);",
+    "code": "// Đợi màu đích với thời hạn.\nwait_iot_color(BLUE, 30000UL);",
     "source": "baseCode.cpp"
   },
   {
@@ -1177,7 +1177,7 @@ export const apiReference: ApiReference[] = [
     "description": "Dò line theo cm, cùng đơn vị nhập với move_tank.",
     "parameters": "distanceCm: số thực hữu hạn 0..1200 cm; 100 nghĩa là 1 mét.",
     "returns": "void.",
-    "notes": "Gọi lbmbFollowDistance với tốc độ mặc định LINE_SPEED/20 %. Lõi MyBlock dùng PID analog. Dừng sớm và báo lỗi nếu kẹt/mất line; độ phân giải quãng đường trong lõi là mm nguyên.",
+    "notes": "Gọi lbmbFollowDistance với tốc độ mặc định LINE_SPEED/20 %. Lõi MyBlock dùng PID analog. Dừng sớm và báo lỗi nếu kẹt/mất line; độ phân giải quãng đường trong lõi là mm nguyên. Tự giảm tốc khi bắt line/cua gắt; không tính xoay tìm line không tịnh tiến thành lỗi kẹt ngay sau 900 ms.",
     "code": "// Dùng các định nghĩa trong baseCode.cpp.\nfollowLineCm(32.5f); // Dò line 32,5 cm\n// followLineDistance(325) tương đương 325 mm.",
     "source": "baseCode.cpp"
   },
@@ -1237,7 +1237,7 @@ export const apiReference: ApiReference[] = [
     "description": "Bám line tới marker trái/phải/chữ T.",
     "parameters": "Tốc độ %, markerMode 1=trái, 2=phải, 3=T.",
     "returns": "void.",
-    "notes": "Cần 3 mẫu liên tiếp xác nhận marker. Mất line quá 800 ms hoặc quá thời hạn sẽ dừng và báo lỗi.",
+    "notes": "Cần 3 mẫu liên tiếp xác nhận marker. Dùng cùng chế độ bắt line/cua MyBlock; tìm lại line có giới hạn, quá hạn dừng và báo lỗi.",
     "code": "// Các định nghĩa MyBlock đã có trong baseCode.cpp.\nlbmbFollowMarker(100, 1); // Tốc độ tính theo %, 100% là trần 2000",
     "source": "Blockly MyBlock: myblocks.js + lớp tích hợp baseCode.cpp"
   },
@@ -1247,7 +1247,7 @@ export const apiReference: ApiReference[] = [
     "description": "Bám line theo cm bằng PID analog MyBlock.",
     "parameters": "Tốc độ %; khoảng cách 0..1200 cm.",
     "returns": "void.",
-    "notes": "100% đặt trần 2000, lõi tự giảm tốc theo độ lệch và khoảng cách còn lại. Dùng chung DISTANCE_SCALE với move_tank.",
+    "notes": "100% đặt trần 2000, lõi tự giảm tốc theo độ lệch và khoảng cách còn lại. Dùng chung DISTANCE_SCALE với move_tank. Tự giảm tốc khi bắt line/cua gắt; không tính xoay tìm line không tịnh tiến thành lỗi kẹt ngay sau 900 ms.",
     "code": "// Các định nghĩa MyBlock đã có trong baseCode.cpp.\nlbmbFollowDistance(100, 32.5f); // Tốc độ tính theo %, 100% là trần 2000",
     "source": "Blockly MyBlock: myblocks.js + lớp tích hợp baseCode.cpp"
   },
@@ -1260,5 +1260,35 @@ export const apiReference: ApiReference[] = [
     "notes": "Giảm tốc trước khi hết giờ; robot có thể dừng sớm khi mất line hoặc lỗi.",
     "code": "// Các định nghĩa MyBlock đã có trong baseCode.cpp.\nlbmbFollowTime(100, 2.5f); // Tốc độ tính theo %, 100% là trần 2000",
     "source": "Blockly MyBlock: myblocks.js + lớp tích hợp baseCode.cpp"
+  },
+  {
+    "group": "helpers",
+    "api": "read_color();",
+    "description": "Đọc màu khối bằng một lệnh, không cần khai báo biến.",
+    "parameters": "Không có.",
+    "returns": "void.",
+    "notes": "Giữ nhận diện 5 mẫu/4 phiếu và mẫu hiệu chuẩn hiện tại. Tự in Serial, chỉ đổi LED khi có màu xác định. Lỗi hoặc chưa chắc chắn xóa màu lưu về UNKNOWN.",
+    "code": "read_color(); // Đọc và báo màu, không cần bool valid hay biến color",
+    "source": "baseCode.cpp"
+  },
+  {
+    "group": "helpers",
+    "api": "get_color();",
+    "description": "Lấy màu của lần đo gần nhất mà không đo lại.",
+    "parameters": "Không có.",
+    "returns": "ObjectColor; UNKNOWN nếu chưa đo, đo lỗi hoặc chưa chắc chắn.",
+    "notes": "Gọi read_color trước khi cần kết quả mới; không tự gửi IoT.",
+    "code": "read_color(); // Cập nhật một lần\nif (is_color(BLUE)) send_iot_color(get_color()); // Không khai báo biến",
+    "source": "baseCode.cpp"
+  },
+  {
+    "group": "helpers",
+    "api": "is_color(BLUE);",
+    "description": "Kiểm tra màu đã đo để rẽ nhánh mà không khai báo biến.",
+    "parameters": "ObjectColor mong đợi.",
+    "returns": "bool; UNKNOWN luôn trả false.",
+    "notes": "Chỉ kiểm tra kết quả đã lưu, không đọc cảm biến lần nữa.",
+    "code": "read_color();\nif (is_color(RED)) {\n  close_hand(GRIP_CLOSE_ANGLE); // Xử lý khi nhận diện được đỏ\n}",
+    "source": "baseCode.cpp"
   }
 ]

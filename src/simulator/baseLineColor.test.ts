@@ -66,19 +66,19 @@ it('handles line distance, starting crossings, multiple junctions, lost-line and
 },25000);
 it('classifies ambient-corrected colors and restores brightness on failed reads/timeouts',()=>{
  compileRun(`
- assert(classifyColor(4,2,2)==OBJECT_RED);assert(classifyColor(2,4,2)==OBJECT_GREEN);assert(classifyColor(2,2,4)==OBJECT_BLUE);
- assert(classifyColor(3,0,0)==OBJECT_UNKNOWN);assert(classifyColor(6,6,0)==OBJECT_UNKNOWN);assert(classifyColor(4,3,0)==OBJECT_UNKNOWN);assert(classifyColor(0,0,0)==OBJECT_UNKNOWN);
- reset();redFrames();bool valid=false;assert(readObjectColor(valid)==OBJECT_RED&&valid);assert(errors.empty());assert(LbRGB.brightness==64);assert(APDS.reads==4);assert(LbRGB.lights.size()==5);assert(LbRGB.lights[0]==CRGB::Red&&LbRGB.lights[1]==CRGB::Lime&&LbRGB.lights[2]==CRGB::Blue&&LbRGB.lights[3]==CRGB::Black);
- reset();APDS.frames={{{10,0,0}},{{0,10,0}},{{0,0,10}},{{10,10,10}}};valid=false;assert(readObjectColor(valid)==OBJECT_UNKNOWN&&valid);assert(errors.empty());
- reset();redFrames();APDS.failAt=1;valid=true;assert(readObjectColor(valid)==OBJECT_UNKNOWN&&!valid);assert(errors.size()==1&&errors[0]==ERR_COLOR_SENSOR);assert(LbRGB.brightness==64);
- reset();APDS.available=false;valid=true;assert(readObjectColor(valid)==OBJECT_UNKNOWN&&!valid);assert(errors.size()==1&&errors[0]==ERR_COLOR_SENSOR);assert(APDS.reads==0);assert(LbRGB.brightness==64);assert(clockMs>=885&&clockMs<1000);
- reset();redFrames();APDS.failAt=0;requireColor(OBJECT_BLUE);assert(errors.size()==1&&errors[0]==ERR_COLOR_SENSOR);
- reset();redFrames();requireColor(OBJECT_BLUE);assert(errors.size()==1&&errors[0]==ERR_COLOR_MISMATCH);
- reset();colorSensorReady=false;valid=true;assert(readObjectColor(valid)==OBJECT_UNKNOWN&&!valid);assert(APDS.reads==0&&errors.size()==1);
+ assert(classifyColor(4,2,2)==RED);assert(classifyColor(2,4,2)==GREEN);assert(classifyColor(2,2,4)==BLUE);
+ assert(classifyColor(3,0,0)==UNKNOWN);assert(classifyColor(6,6,0)==UNKNOWN);assert(classifyColor(4,3,0)==UNKNOWN);assert(classifyColor(0,0,0)==UNKNOWN);
+ reset();redFrames();bool valid=false;assert(readObjectColor(valid)==RED&&valid);assert(errors.empty());assert(LbRGB.brightness==64);assert(APDS.reads==4);assert(LbRGB.lights.size()==5);assert(LbRGB.lights[0]==CRGB::Red&&LbRGB.lights[1]==CRGB::Lime&&LbRGB.lights[2]==CRGB::Blue&&LbRGB.lights[3]==CRGB::Black);
+ reset();APDS.frames={{{10,0,0}},{{0,10,0}},{{0,0,10}},{{10,10,10}}};valid=false;assert(readObjectColor(valid)==UNKNOWN&&valid);assert(errors.empty());
+ reset();redFrames();APDS.failAt=1;valid=true;assert(readObjectColor(valid)==UNKNOWN&&!valid);assert(errors.size()==1&&errors[0]==ERR_COLOR_SENSOR);assert(LbRGB.brightness==64);
+ reset();APDS.available=false;valid=true;assert(readObjectColor(valid)==UNKNOWN&&!valid);assert(errors.size()==1&&errors[0]==ERR_COLOR_SENSOR);assert(APDS.reads==0);assert(LbRGB.brightness==64);assert(clockMs>=885&&clockMs<1000);
+ reset();redFrames();APDS.failAt=0;requireColor(BLUE);assert(errors.size()==1&&errors[0]==ERR_COLOR_SENSOR);
+ reset();redFrames();requireColor(BLUE);assert(errors.size()==1&&errors[0]==ERR_COLOR_MISMATCH);
+ reset();colorSensorReady=false;valid=true;assert(readObjectColor(valid)==UNKNOWN&&!valid);assert(APDS.reads==0&&errors.size()==1);
  `);
 },25000);
 it('keeps Primary color checks optional without reading the sensor',()=>{
- compileRun('reset();colorSensorReady=false;requireColor(OBJECT_BLUE);assert(APDS.reads==0&&errors.empty());',true);
+ compileRun('reset();colorSensorReady=false;requireColor(BLUE);assert(APDS.reads==0&&errors.empty());',true);
 },25000);
 it('uses one shared line loop while retaining the public void helpers',()=>{
  expect(line.match(/while \(true\)/g)).toHaveLength(1);

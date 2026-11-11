@@ -30,7 +30,7 @@ export const API_SUGGESTIONS = apiReference.flatMap(entry => {
 });
 export const LEANBOT_COMPLETIONS = [...new Set(API_SUGGESTIONS.map(item => item.name))];
 const configured = new WeakSet<object>();
-const constants = ['OBJECT_UNKNOWN', 'OBJECT_RED', 'OBJECT_GREEN', 'OBJECT_BLUE', 'OBJECT_YELLOW', 'OBJECT_PURPLE', 'TWO_WHEELS', 'LEFT_ONLY', 'RIGHT_ONLY', 'TB1A', 'TB1B', 'GRIP_CLOSE_ANGLE', 'CRGB::Red', 'CRGB::Green', 'CRGB::Blue'];
+const constants = ['UNKNOWN', 'RED', 'GREEN', 'BLUE', 'YELLOW', 'PURPLE', 'TWO_WHEELS', 'LEFT_ONLY', 'RIGHT_ONLY', 'TB1A', 'TB1B', 'GRIP_CLOSE_ANGLE', 'CRGB::Red', 'CRGB::Green', 'CRGB::Blue'];
 
 export function configureLeanbotLanguage(monaco: Monaco) {
   if (configured.has(monaco)) return;

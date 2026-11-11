@@ -106,7 +106,8 @@ console.log('✓ myblocks_runtime registered (length=' + runtime.length + ')');
 const checks = [
   ['LbmbMotionCtx ctx = {}', 'value-initialised LbmbMotionCtx'],
   ['LbmbFollowCtx ctx = {}', 'value-initialised LbmbFollowCtx'],
-  ['delay(10)', '10ms tick present'],
+  ['const uint16_t LBMB_TICK_MS = 10;', '10ms tick configured'],
+  ['delay(LBMB_TICK_MS)', 'configured tick used'],
   ['LbMotion.stopAndWait()', 'stopAndWait present'],
   ['lbmbClamp16', 'speed clamp present'],
 ];

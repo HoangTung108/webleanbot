@@ -59,6 +59,9 @@ struct LbmbFollowCtx {
   int16_t outRight;
 
   bool hasValidError;
+  bool lineLocked;
+  bool sharpTurn;
+  uint8_t centeredCount;
   uint8_t markerCount;
   bool initialized;
 };
@@ -71,10 +74,13 @@ const uint16_t LBMB_TICK_MS = 10;
 
 const int16_t LBMB_SPEED_MAX = 2000;
 const int16_t LBMB_START_SPEED = 200;
-const int16_t LBMB_SEARCH_SPEED_MAX = 420;
+const int16_t LBMB_SEARCH_SPEED_MAX = 650;
 
 const uint32_t LBMB_PROGRESS_TIMEOUT_MS = 900;
-const uint32_t LBMB_LOST_LINE_TIMEOUT_MS = 800;
+const uint32_t LBMB_LOST_LINE_TIMEOUT_MS = 2500;
+const uint32_t LBMB_ACQUIRE_TIMEOUT_MS = 3500;
+const int16_t LBMB_ACQUIRE_SPEED_MAX = 600;
+const int16_t LBMB_CURVE_SPEED_MAX = 1000;
 const uint32_t LBMB_MARKER_TIMEOUT_MS = 60000UL;
 const uint32_t LBMB_MAX_OPERATION_MS = 600000UL;
 
@@ -276,9 +282,8 @@ inline float lbmbBrakeEnvelope(
 // -----------------------------------------------------------------------------
 
 inline bool lbmbIsLineValid(uint8_t state) {
-  return state == 0b1000 || state == 0b1100 || state == 0b0100 || state == 0b1110 ||
-         state == 0b0110 || state == 0b1111 || state == 0b0010 || state == 0b0111 ||
-         state == 0b0011 || state == 0b0001;
+  // Diagonal/curved tracks can produce non-contiguous sensor masks.
+  return (state & 0x0F) != 0;
 }
 
 inline int16_t lbmbDiscreteLineError1000(uint8_t state, int16_t prevError1000) {
@@ -298,6 +303,10 @@ inline int16_t lbmbDiscreteLineError1000(uint8_t state, int16_t prevError1000) {
 }
 
 inline int16_t lbmbLinePosition1000(const LbmbState* state, int16_t fallbackError1000) {
+  uint8_t mask = state->lineState & 0x0F;
+  if (mask == 0) return fallbackError1000;
+  if (mask == 0x0F) return 0; // Cross a wide black marker straight.
+  if (mask == 0b1001) return fallbackError1000; // Ambiguous outer branches.
   int32_t v2 = state->ir2L;
   int32_t v0 = state->ir0L;
   int32_t v1 = state->ir1R;
@@ -313,10 +322,12 @@ inline int16_t lbmbLinePosition1000(const LbmbState* state, int16_t fallbackErro
   int32_t w1 = v1 - floorValue;
   int32_t w3 = v3 - floorValue;
 
-  if (w2 < 0) w2 = 0;
-  if (w0 < 0) w0 = 0;
-  if (w1 < 0) w1 = 0;
-  if (w3 < 0) w3 = 0;
+  // Only calibrated sensors that currently detect the track may steer.
+  // Raw values on a non-line surface must not reverse the detected direction.
+  if (w2 < 0 || !(mask & 0b1000)) w2 = 0;
+  if (w0 < 0 || !(mask & 0b0100)) w0 = 0;
+  if (w1 < 0 || !(mask & 0b0010)) w1 = 0;
+  if (w3 < 0 || !(mask & 0b0001)) w3 = 0;
 
   int32_t sum = w2 + w0 + w1 + w3;
 
@@ -556,6 +567,9 @@ inline void lbmbFollowCoreInit(LbmbFollowCtx* ctx, const LbmbState* state) {
   ctx->outRight = 0;
 
   ctx->hasValidError = false;
+  ctx->lineLocked = false;
+  ctx->sharpTurn = false;
+  ctx->centeredCount = 0;
   ctx->markerCount = 0;
   ctx->initialized = true;
 }
@@ -608,6 +622,8 @@ inline LbmbCommand lbmbFollowCoreStep(
     }
 
     if (distanceProgress >= targetMm) return cmd;
+    // A recovery pivot has no forward distance; do not mistake it for a stall.
+    if (!lbmbIsLineValid(state->lineState)) ctx->lastProgressTime = state->timeMs;
     if (state->timeMs - ctx->lastProgressTime >= LBMB_PROGRESS_TIMEOUT_MS) return cmd;
   }
 
@@ -619,7 +635,8 @@ inline LbmbCommand lbmbFollowCoreStep(
     ctx->lastValidTime = state->timeMs;
   }
 
-  if (state->timeMs - ctx->lastValidTime >= LBMB_LOST_LINE_TIMEOUT_MS) {
+  uint32_t lostLimit = ctx->hasValidError ? LBMB_LOST_LINE_TIMEOUT_MS : LBMB_ACQUIRE_TIMEOUT_MS;
+  if (state->timeMs - ctx->lastValidTime >= lostLimit) {
     return cmd;
   }
 
@@ -629,12 +646,19 @@ inline LbmbCommand lbmbFollowCoreStep(
   if (dtMs > 50) dtMs = 50;
   ctx->lastTime = state->timeMs;
 
-  // Before the first valid line sample, crawl forward briefly instead of applying
-  // an arbitrary PID direction.
+  if (!lineValid) {
+    ctx->lineLocked = false;
+    ctx->sharpTurn = false;
+    ctx->centeredCount = 0;
+  }
+  // Before the first valid sample, use a bounded bidirectional acquisition scan.
   if (!lineValid && !ctx->hasValidError) {
-    int16_t crawl = lbmbMin16(targetSpeed, 300);
-    ctx->outLeft = lbmbWheelSlew(ctx->outLeft, crawl, dtMs);
-    ctx->outRight = lbmbWheelSlew(ctx->outRight, crawl, dtMs);
+    // With no known side, scan both directions without translating off the mat.
+    int16_t scan = lbmbMin16(targetSpeed, LBMB_SEARCH_SPEED_MAX);
+    bool scanRight = elapsedOverall >= 700U && elapsedOverall < 2100U;
+    int16_t left = scanRight ? scan : -scan;
+    ctx->outLeft = lbmbWheelSlew(ctx->outLeft, left, dtMs);
+    ctx->outRight = lbmbWheelSlew(ctx->outRight, -left, dtMs);
 
     cmd.leftSpeed = ctx->outLeft;
     cmd.rightSpeed = ctx->outRight;
@@ -682,6 +706,16 @@ inline LbmbCommand lbmbFollowCoreStep(
     ctx->hasValidError = true;
   }
 
+  // Require stable center samples before accelerating out of acquisition.
+  if (lbmbAbsF(error) < 0.30f) {
+    if (ctx->centeredCount < 5) ctx->centeredCount++;
+    if (ctx->centeredCount >= 5) ctx->lineLocked = true;
+  } else {
+    ctx->centeredCount = 0;
+  }
+  // Hysteresis prevents rapidly entering/exiting the tight-curve mode.
+  if (lbmbAbsF(error) >= 0.75f) ctx->sharpTurn = true;
+  else if (lbmbAbsF(error) <= 0.45f) ctx->sharpTurn = false;
   float rawDerivative = (error - ctx->prevError) / dt;
   ctx->filteredDerivative +=
       LBMB_FLL_D_ALPHA * (rawDerivative - ctx->filteredDerivative);
@@ -710,6 +744,8 @@ inline LbmbCommand lbmbFollowCoreStep(
   float desiredBase = targetSpeed * speedFactor;
   int16_t minimumBase = lbmbInitialSpeed(targetSpeed);
   if (desiredBase < minimumBase) desiredBase = minimumBase;
+  if (!ctx->lineLocked && desiredBase > LBMB_ACQUIRE_SPEED_MAX) desiredBase = LBMB_ACQUIRE_SPEED_MAX;
+  if (ctx->sharpTurn && desiredBase > LBMB_CURVE_SPEED_MAX) desiredBase = LBMB_CURVE_SPEED_MAX;
 
   // Distance/time braking imposes another ceiling.
   if (mode == 4) {
@@ -746,12 +782,18 @@ inline LbmbCommand lbmbFollowCoreStep(
     dt
   );
 
-  float steering =
+  // Scale curvature authority with speed, but keep the center/noise gain unchanged.
+  float curveBlend = lbmbClampF((lbmbAbsF(error) - 0.35f) / 0.40f, 0.0f, 1.0f);
+  float speedGain = ctx->baseSpeed / 650.0f;
+  if (speedGain < 1.0f) speedGain = 1.0f;
+  float steeringGain = 1.0f + curveBlend * (speedGain - 1.0f);
+  float steering = steeringGain * (
       LBMB_FLL_KP * error +
       LBMB_FLL_KI * candidateI +
-      LBMB_FLL_KD * ctx->filteredDerivative;
+      LBMB_FLL_KD * ctx->filteredDerivative);
 
-  float steerLimit = ctx->baseSpeed * LBMB_FLL_MAX_STEER_RATIO;
+  float steerRatio = ctx->sharpTurn ? 1.40f : LBMB_FLL_MAX_STEER_RATIO;
+  float steerLimit = ctx->baseSpeed * steerRatio;
   bool saturated = lbmbAbsF(steering) > steerLimit;
 
   // Anti-windup: do not integrate farther into saturation.
@@ -759,10 +801,10 @@ inline LbmbCommand lbmbFollowCoreStep(
       ((steering > 0.0f && error > 0.0f) ||
        (steering < 0.0f && error < 0.0f))) {
     candidateI = ctx->integral;
-    steering =
+    steering = steeringGain * (
         LBMB_FLL_KP * error +
         LBMB_FLL_KI * candidateI +
-        LBMB_FLL_KD * ctx->filteredDerivative;
+        LBMB_FLL_KD * ctx->filteredDerivative);
   }
 
   steering = lbmbClampF(steering, -steerLimit, steerLimit);
@@ -782,7 +824,7 @@ inline LbmbCommand lbmbFollowCoreStep(
     int16_t steerMag = lbmbClamp16(
       (int32_t)round(lbmbAbsF(steering)),
       0,
-      base
+      ctx->sharpTurn ? (int16_t)round(base * 1.40f) : base
     );
 
     if (steering > 0.0f) {
