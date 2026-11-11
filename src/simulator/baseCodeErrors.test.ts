@@ -15,13 +15,18 @@ describe('base helpers without a mission-wide success latch',()=>{
   expect(baseCode).not.toMatch(/missionOK/i);
   expect(generateRouteCode({x:400,y:600,heading:0},[{kind:'move',x:450,y:600,follow:false}])).not.toMatch(/missionOK/i);
  });
+ it('uses void action functions in the base source',()=>{
+  for(const name of ['turn_angle','turn_one_wheel','turn_two_wheels','move_tank','Forward','Backward','Rotate','runFollowLine','followLineUntilJunction','centerDetectedJunction','followLineMultipleJunctions','goToJunction','followLineDistance','requireColor','missionIotA','missionIotB']){
+   expect(baseCode).toMatch(new RegExp('void '+name+'\\('));expect(baseCode).not.toMatch(new RegExp('bool '+name+'\\('));
+  }
+ });
  it('reports an invalid command locally and still executes following motion and gripper commands',()=>{
-  const {robot,logs}=execute('Serial.println(move_tank(0,0,5));Serial.println(Forward(2000,50));close_hand(90);');
-  expect(logs).toContain('false');expect(logs).toContain('true');expect(logs.join(' ')).toContain('MISSION ERROR');
+  const {robot,logs}=execute('move_tank(0,0,5);Serial.println("after-invalid");Forward(2000,50);close_hand(90);');
+  expect(logs).toContain('after-invalid');expect(logs.join(' ')).toContain('MISSION ERROR');
   expect(robot.getRobotPose().x).toBeCloseTo(449.82,1);expect(robot.getGripper()).toEqual({left:90,right:90});
  });
  it('exits a lost-line operation locally, allowing the following operation to run',()=>{
-  const {logs}=execute('Serial.println(followLineDistance(100));Serial.println(Rotate(2000,10));');
-  expect(logs).toContain('false');expect(logs).toContain('true');expect(logs.join(' ')).toContain('MISSION ERROR');
+  const {logs}=execute('followLineDistance(100);Serial.println("line-returned");Rotate(2000,10);Serial.println("turn-returned");');
+  expect(logs).toContain('line-returned');expect(logs).toContain('turn-returned');expect(logs.join(' ')).toContain('MISSION ERROR');
  });
 });

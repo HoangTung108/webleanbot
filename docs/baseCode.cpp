@@ -75,7 +75,7 @@ const int GRIP_SETTLE_MS = 120;
 enum ErrorCode {
   ERR_NONE = 0, ERR_INVALID_MOVE, ERR_MOVE_TIMEOUT, ERR_MOVE_STALL,
   ERR_TURN_TIMEOUT, ERR_TURN_STALL, ERR_LINE_LOST,
-  ERR_JUNCTION_TIMEOUT, ERR_COLOR_SENSOR, ERR_COLOR_MISMATCH, ERR_IOT_TIMEOUT
+  ERR_JUNCTION_TIMEOUT, ERR_COLOR_SENSOR, ERR_COLOR_MISMATCH, ERR_IOT_TIMEOUT, ERR_WIFI_CONFIG
 };
 
 ErrorCode missionError = ERR_NONE;
@@ -84,9 +84,7 @@ int lastLineError = 0;
 int lastLineCmdL = 0;
 int lastLineCmdR = 0;
 unsigned long lastLineSeenTime = 0;
-#if BOARD_MODE != BOARD_PRIMARY
 bool colorSensorReady = false;
-#endif
 
 static int clampMotor(int v) { return constrain(v, -MAX_MOTOR_SPEED, MAX_MOTOR_SPEED); }
 static int signInt(int n) { return (n > 0) - (n < 0); }
@@ -108,12 +106,12 @@ void resetMotionState() {
   lastLineSeenTime = millis();
 }
 
-bool turn_angle(int speed, float angle_deg, TurnMode mode) {
+void turn_angle(int speed, float angle_deg, TurnMode mode) {
   if (!isfinite(angle_deg) || speed < TURN_FINISH_SPEED || speed > MAX_MOTOR_SPEED ||
       mode < TWO_WHEELS || mode > RIGHT_ONLY) {
-    failMission(ERR_INVALID_MOVE); return false;
+    failMission(ERR_INVALID_MOVE); return;
   }
-  if (fabsf(angle_deg) < 0.8f) return true;
+  if (fabsf(angle_deg) < 0.8f) return;
 
   LbMotion.stopAndWait();
   resetMotionState();
@@ -133,8 +131,8 @@ bool turn_angle(int speed, float angle_deg, TurnMode mode) {
 
     const unsigned long now = millis();
     if (progress > bestProgress + 0.5f) { bestProgress = progress; lastAdvance = now; }
-    if (now - started > timeoutMs) { failMission(ERR_TURN_TIMEOUT); return false; }
-    if (now - lastAdvance > 1700UL) { failMission(ERR_TURN_STALL); return false; }
+    if (now - started > timeoutMs) { failMission(ERR_TURN_TIMEOUT); return; }
+    if (now - lastAdvance > 1700UL) { failMission(ERR_TURN_STALL); return; }
 
     const float ratio = constrain((remaining - TURN_BRAKE_LEAD_DEG) / TURN_SLOW_ZONE, 0.0f, 1.0f);
     // Braking velocity follows sqrt(remaining distance). The old linear
@@ -155,27 +153,26 @@ bool turn_angle(int speed, float angle_deg, TurnMode mode) {
     LbDelay(MOTION_FEEDBACK_MS);
   }
   LbMotion.stopAndWait();
-  return true;
 }
 
-bool turn_one_wheel(int speed, float angle, const char* info) {
-  if (info == nullptr) { failMission(ERR_INVALID_MOVE); return false; }
-  if (strcmp(info, "L") == 0) return turn_angle(speed, -angle, LEFT_ONLY);
-  else if (strcmp(info, "R") == 0) return turn_angle(speed, angle, RIGHT_ONLY);
-  else { failMission(ERR_INVALID_MOVE); return false; }
+void turn_one_wheel(int speed, float angle, const char* info) {
+  if (info == nullptr) { failMission(ERR_INVALID_MOVE); return; }
+  if (strcmp(info, "L") == 0) turn_angle(speed, -angle, LEFT_ONLY);
+  else if (strcmp(info, "R") == 0) turn_angle(speed, angle, RIGHT_ONLY);
+  else { failMission(ERR_INVALID_MOVE); return; }
 }
-bool turn_two_wheels(int speed, float angle) {
-  return turn_angle(speed, angle, TWO_WHEELS);
+void turn_two_wheels(int speed, float angle) {
+  turn_angle(speed, angle, TWO_WHEELS);
 }
 
-bool move_tank(int motor_L, int motor_R, float distance_cm) {
+void move_tank(int motor_L, int motor_R, float distance_cm) {
   if (!isfinite(distance_cm) || distance_cm < 0.0f ||
       motor_L == 0 || motor_R == 0 || signInt(motor_L) != signInt(motor_R)) {
-    failMission(ERR_INVALID_MOVE); return false;
+    failMission(ERR_INVALID_MOVE); return;
   }
-  if (distance_cm == 0.0f) return true;
+  if (distance_cm == 0.0f) return;
   const float targetMm = distance_cm * 10.0f * DISTANCE_SCALE;
-  if (!isfinite(targetMm) || targetMm > 12000.0f) { failMission(ERR_INVALID_MOVE); return false; }
+  if (!isfinite(targetMm) || targetMm > 12000.0f) { failMission(ERR_INVALID_MOVE); return; }
 
   motor_L = clampMotor(motor_L);
   motor_R = clampMotor(motor_R);
@@ -183,7 +180,7 @@ bool move_tank(int motor_L, int motor_R, float distance_cm) {
   const int targetL = (int)lroundf(fabsf((float)motor_L) * LEFT_SCALE);
   const int targetR = (int)lroundf(fabsf((float)motor_R) * RIGHT_SCALE);
   const int maxMagnitude = max(targetL, targetR);
-  if (maxMagnitude < MOVE_FINISH_SPEED) { failMission(ERR_INVALID_MOVE); return false; }
+  if (maxMagnitude < MOVE_FINISH_SPEED) { failMission(ERR_INVALID_MOVE); return; }
 
   LbMotion.stopAndWait();
   resetMotionState();
@@ -201,8 +198,8 @@ bool move_tank(int motor_L, int motor_R, float distance_cm) {
     if (remaining <= MOVE_BRAKE_LEAD_MM) break;
     const unsigned long now = millis();
     if (progressed > bestProgress + 1.0f) { bestProgress = progressed; lastAdvance = now; }
-    if (now - started > timeoutMs) { failMission(ERR_MOVE_TIMEOUT); return false; }
-    if (now - lastAdvance > 1800UL) { failMission(ERR_MOVE_STALL); return false; }
+    if (now - started > timeoutMs) { failMission(ERR_MOVE_TIMEOUT); return; }
+    if (now - lastAdvance > 1800UL) { failMission(ERR_MOVE_STALL); return; }
 
     const float ratio = constrain((remaining - MOVE_BRAKE_LEAD_MM) / MOVE_SLOW_ZONE_MM, 0.0f, 1.0f);
     const int allowed = min(maxMagnitude,
@@ -226,7 +223,6 @@ bool move_tank(int motor_L, int motor_R, float distance_cm) {
     LbDelay(MOTION_FEEDBACK_MS);
   }
   LbMotion.stopAndWait();
-  return true;
 }
 
 void close_hand(int degree) {
@@ -239,16 +235,42 @@ void open_hand() {
   LbDelay(GRIP_MOVE_MS + GRIP_SETTLE_MS);
 }
 
-void set_wifi(string )
+// BEGIN WIFI HELPERS
+// Stored copies remain valid after caller-owned String objects are changed.
+String wifiSsid;
+String wifiPassword;
+String wifiAssetId;
 
-bool Forward(int speed, int distanceMm) {
-  return move_tank(abs(speed), abs(speed), distanceMm / 10.0f);
+void declare_wifi(const String &ssid, const String &password, const String &assetId = "") {
+  wifiSsid = ssid;
+  wifiPassword = password;
+  wifiAssetId = assetId;
 }
-bool Backward(int speed, int distanceMm) {
-  return move_tank(-abs(speed), -abs(speed), distanceMm / 10.0f);
+
+void set_wifi() {
+  if (wifiSsid.length() == 0) {
+    failMission(ERR_WIFI_CONFIG);
+    return;
+  }
+  // An empty password is valid for an open network. Never print credentials.
+  LbIoT.Wifi.begin(wifiSsid.c_str(), wifiPassword.c_str());
+  if (wifiAssetId.length() > 0) LbIoT.Asset.begin(wifiAssetId.c_str());
 }
-bool Rotate(int speed, float angleDeg) {
-  return turn_two_wheels(abs(speed), ((speed >= 0) ? 1.0f : -1.0f) * angleDeg);
+
+void set_wifi(const String &ssid, const String &password, const String &assetId = "") {
+  declare_wifi(ssid, password, assetId);
+  set_wifi();
+}
+// END WIFI HELPERS
+
+void Forward(int speed, int distanceMm) {
+  move_tank(abs(speed), abs(speed), distanceMm / 10.0f);
+}
+void Backward(int speed, int distanceMm) {
+  move_tank(-abs(speed), -abs(speed), distanceMm / 10.0f);
+}
+void Rotate(int speed, float angleDeg) {
+  turn_two_wheels(abs(speed), ((speed >= 0) ? 1.0f : -1.0f) * angleDeg);
 }
 
 
@@ -268,12 +290,12 @@ static int lineErrorForMask(int mask) {
   }
 }
 
-bool runFollowLine(int bits) {
+void runFollowLine(int bits) {
   if (bits != 0) {
     lastLineSeenTime = millis();
     lastLineError = lineErrorForMask(bits);
   } else if (millis() - lastLineSeenTime >= LINE_LOST_MS) {
-    failMission(ERR_LINE_LOST); return false;
+    failMission(ERR_LINE_LOST); return;
   }
   const int correction = LINE_KP * lastLineError;
   const int desiredL = constrain(LINE_SPEED + correction, 100, 1250);
@@ -281,11 +303,10 @@ bool runFollowLine(int bits) {
   lastLineCmdL += constrain(desiredL - lastLineCmdL, -110, 110);
   lastLineCmdR += constrain(desiredR - lastLineCmdR, -110, 110);
   LbMotion.runLR(lastLineCmdL, lastLineCmdR);
-  return true;
 }
-bool runFollowLine() { return runFollowLine(LbIRLine.read()); }
+void runFollowLine() { runFollowLine(LbIRLine.read()); }
 
-bool followLineUntilJunction() {
+void followLineUntilJunction() {
   resetMotionState();
   const unsigned long started = millis();
   const long origin = LbMotion.getDistanceMm();
@@ -310,50 +331,51 @@ bool followLineUntilJunction() {
           LbMotion.stopAndWait();
           junctionPending = true;
           resetMotionState();
-          return true;
+          return;
         }
       } else crossingFrames = 0;
     }
-    if (!runFollowLine(bits)) return false;
+    if (bits == 0 && now - lastLineSeenTime >= LINE_LOST_MS) { failMission(ERR_LINE_LOST); return; }
+    runFollowLine(bits);
     LbDelay((unsigned int)LINE_STEP_MS);
   }
   LbMotion.stopAndWait();
-  return false;
 }
 
-bool centerDetectedJunction() {
-  if (!junctionPending) return true;
+void centerDetectedJunction() {
+  if (!junctionPending) return;
   junctionPending = false;
-  return move_tank(450, 450, JUNCTION_CENTER_MM / 10.0f);
+  move_tank(450, 450, JUNCTION_CENTER_MM / 10.0f);
 }
 
-bool followLineMultipleJunctions(int junctionCount) {
-  if (junctionCount <= 0) return false;
+void followLineMultipleJunctions(int junctionCount) {
+  if (junctionCount <= 0) return;
   for (int i = 0; i < junctionCount; ++i) {
-    if (i > 0 && !centerDetectedJunction()) return false;
-    if (!followLineUntilJunction()) return false;
+    if (i > 0) centerDetectedJunction();
+    followLineUntilJunction();
+    if (!junctionPending) return;
   }
-  return true;
 }
 
-bool goToJunction() {
-  if (!junctionPending && !followLineUntilJunction()) return false;
-  return centerDetectedJunction();
+void goToJunction() {
+  if (!junctionPending) followLineUntilJunction();
+  centerDetectedJunction();
 }
 
-bool followLineDistance(int distanceMm) {
-  if (distanceMm < 0) return false;
+void followLineDistance(int distanceMm) {
+  if (distanceMm < 0) return;
   resetMotionState();
   long origin = LbMotion.getDistanceMm();
   unsigned long started = millis();
   while ((long)LbMotion.getDistanceMm() - origin < distanceMm) {
-    if (millis() - started > 9000UL) { failMission(ERR_JUNCTION_TIMEOUT); return false; }
-    if (!runFollowLine()) return false;
+    if (millis() - started > 9000UL) { failMission(ERR_JUNCTION_TIMEOUT); return; }
+    const int bits = LbIRLine.read();
+    if (bits == 0 && millis() - lastLineSeenTime >= LINE_LOST_MS) { failMission(ERR_LINE_LOST); return; }
+    runFollowLine(bits);
     LbDelay((unsigned int)LINE_STEP_MS);
   }
   LbMotion.stopAndWait();
   resetMotionState();
-  return true;
 }
 
 
@@ -401,32 +423,28 @@ ObjectColor Obj_detectColor() {
   return color;
 }
 
-bool requireColor(ObjectColor expected) {
-  if (Obj_detectColor() != expected) { failMission(ERR_COLOR_MISMATCH); return false; }
-  return true;
+void requireColor(ObjectColor expected) {
+#if BOARD_MODE != BOARD_PRIMARY
+  if (Obj_detectColor() != expected) failMission(ERR_COLOR_MISMATCH);
+#else
+  // Primary missions do not require an object-color check.
+  (void)expected;
+#endif
 }
-
-// Primary XML has NO object-color checks in its Fullmision.
-bool requireColor(ObjectColor) { return true; }
-
-
-
-
 
 // ----- SECONDARY / HIGHSCHOOL: optional 2-LeanBot IoT flow -----
 #if MISSION_ROLE != ROLE_SINGLE
-bool missionIotA() {
-  STEP(FromCRLtoE2());
+void missionIotA() {
+  FromCRLtoE2();
   const ObjectColor color = Obj_detectColor();
   if (color == OBJECT_BLUE) IoTColor.write("Blue");
-  else { IoTColor.write("Unknown"); failMission(ERR_COLOR_MISMATCH); return false; }
+  else { IoTColor.write("Unknown"); failMission(ERR_COLOR_MISMATCH); return; }
   // Source Fullmision_LeanbotA route, distinct from standalone.
-  STEP(Rotate(500,50)); STEP(Backward(ROUTE_SPEED,25)); STEP(Rotate(-ROUTE_SPEED,83));
-  STEP(followLineMultipleJunctions(3)); STEP(goToJunction());
-  STEP(Rotate(ROUTE_SPEED,60)); STEP(followLineMultipleJunctions(1)); STEP(goToJunction());
-  STEP(Rotate(ROUTE_SPEED,33)); STEP(Forward(ROUTE_SPEED,25));
-  STEP(requireColor(OBJECT_GREEN)); STEP(Rotate(500,50));
-  return true;
+  Rotate(500,50); Backward(ROUTE_SPEED,25); Rotate(-ROUTE_SPEED,83);
+  followLineMultipleJunctions(3); goToJunction();
+  Rotate(ROUTE_SPEED,60); followLineMultipleJunctions(1); goToJunction();
+  Rotate(ROUTE_SPEED,33); Forward(ROUTE_SPEED,25);
+  requireColor(OBJECT_GREEN); Rotate(500,50);
 }
 bool waitIotBlue() {
   const unsigned long started = millis();
@@ -440,24 +458,24 @@ bool waitIotBlue() {
   }
   failMission(ERR_IOT_TIMEOUT); return false;
 }
-bool missionIotB() {
-  STEP(waitIotBlue());
+void missionIotB() {
+  if (!waitIotBlue()) return;
   // Source Fullmission_LeanbotB route, with bounded wait.
-  STEP(Forward(ROUTE_SPEED,65)); STEP(Rotate(-ROUTE_SPEED,61)); STEP(Forward(ROUTE_SPEED,50));
-  STEP(PickupNeutralizeS3()); STEP(Backward(ROUTE_SPEED,50)); STEP(Rotate(-ROUTE_SPEED,155));
-  STEP(followLineMultipleJunctions(2)); STEP(goToJunction());
-  STEP(Rotate(-ROUTE_SPEED,60)); STEP(followLineMultipleJunctions(1)); STEP(goToJunction());
-  STEP(Rotate(ROUTE_SPEED,60)); STEP(Forward(ROUTE_SPEED,40)); STEP(DropNeutralizeE2());
-  STEP(Backward(ROUTE_SPEED,40)); STEP(Rotate(ROUTE_SPEED,60));
-  STEP(followLineMultipleJunctions(1)); STEP(goToJunction());
-  STEP(Rotate(-ROUTE_SPEED,60)); STEP(followLineMultipleJunctions(2)); STEP(goToJunction());
-  STEP(Rotate(ROUTE_SPEED,60)); STEP(followLineMultipleJunctions(1)); STEP(goToJunction());
-  STEP(Rotate(-ROUTE_SPEED,33)); STEP(Forward(ROUTE_SPEED,24));
-  STEP(requireColor(OBJECT_RED)); STEP(PickupPollutionF4());
-  STEP(Backward(ROUTE_SPEED,24)); STEP(Rotate(ROUTE_SPEED,33));
-  STEP(followLineMultipleJunctions(1)); STEP(goToJunction());
-  STEP(Rotate(ROUTE_SPEED,60)); STEP(followLineMultipleJunctions(2)); STEP(goToJunction());
-  STEP(Rotate(ROUTE_SPEED,30)); STEP(DropPollutionCRL()); return true;
+  Forward(ROUTE_SPEED,65); Rotate(-ROUTE_SPEED,61); Forward(ROUTE_SPEED,50);
+  PickupNeutralizeS3(); Backward(ROUTE_SPEED,50); Rotate(-ROUTE_SPEED,155);
+  followLineMultipleJunctions(2); goToJunction();
+  Rotate(-ROUTE_SPEED,60); followLineMultipleJunctions(1); goToJunction();
+  Rotate(ROUTE_SPEED,60); Forward(ROUTE_SPEED,40); DropNeutralizeE2();
+  Backward(ROUTE_SPEED,40); Rotate(ROUTE_SPEED,60);
+  followLineMultipleJunctions(1); goToJunction();
+  Rotate(-ROUTE_SPEED,60); followLineMultipleJunctions(2); goToJunction();
+  Rotate(ROUTE_SPEED,60); followLineMultipleJunctions(1); goToJunction();
+  Rotate(-ROUTE_SPEED,33); Forward(ROUTE_SPEED,24);
+  requireColor(OBJECT_RED); PickupPollutionF4();
+  Backward(ROUTE_SPEED,24); Rotate(ROUTE_SPEED,33);
+  followLineMultipleJunctions(1); goToJunction();
+  Rotate(ROUTE_SPEED,60); followLineMultipleJunctions(2); goToJunction();
+  Rotate(ROUTE_SPEED,30); DropPollutionCRL();
 }
 #endif
 
@@ -479,8 +497,8 @@ void setup() {
 #endif
 #endif
 #if MISSION_ROLE != ROLE_SINGLE
-  LbIoT.Wifi.begin(WIFI_SSID, WIFI_PASSWORD);
-  LbIoT.Asset.begin(IOT_ASSET_ID);
+  declare_wifi(WIFI_SSID, WIFI_PASSWORD, IOT_ASSET_ID);
+  set_wifi();
   if (MISSION_ROLE == ROLE_IOT_A) IoTColor.write("waiting");
 #endif
   LbDelay(300);
@@ -492,7 +510,6 @@ void loop() {
   missionError = ERR_NONE;
   junctionPending = false;
   resetMotionState();
-  bool finished = false;
 #if TEST_MODE == 0 && OPEN_GRIPPER_AT_START && MISSION_ROLE != ROLE_IOT_A
   open_hand();
 #endif
@@ -504,20 +521,20 @@ void loop() {
 #endif
   {
 #if TEST_MODE != 0
-    finished = runHardwareTest();
+    runHardwareTest();
 #elif MISSION_ROLE == ROLE_IOT_A
     IoTColor.write("waiting");
-    finished = missionIotA();
+    missionIotA();
 #elif MISSION_ROLE == ROLE_IOT_B
-    finished = missionIotB();
+    missionIotB();
 #elif BOARD_MODE == BOARD_PRIMARY
-    finished = missionPrimaryFull();
+    missionPrimaryFull();
 #else
-    finished = missionSecondaryOrHighSchoolSingle();
+    missionSecondaryOrHighSchoolSingle();
 #endif
   }
   LbMotion.stopAndWait();
-  if (finished && missionError == ERR_NONE) {
+  if (missionError == ERR_NONE) {
     LbRGB.fillColor(CRGB::Green);
     LbRGB.show();
 #if DEBUG_SERIAL

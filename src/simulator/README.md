@@ -326,4 +326,24 @@ Kiểm thử dùng profile encoder 1,0 để tách kiểm tra scheduler/động 
 
 ### Kết quả từng thao tác trong base code
 
-Base code và code sinh từ lộ trình không dùng cờ `missionOK`. Các thao tác di chuyển/quay/dò line trả về `bool` để báo thành công hoặc lỗi tại chỗ; kiểm tra đầu vào, timeout, stall và log `missionError` vẫn hoạt động. Một thao tác lỗi không tự khóa các lệnh tiếp theo trong `plannedRoute()`. Các hàm ghép có thể kiểm tra kết quả trả về để kết thúc riêng thao tác đó; trạng thái lỗi chỉ dùng cho chẩn đoán và hiển thị kết quả cuối.
+Base code và code sinh từ lộ trình không dùng cờ `missionOK`. Các thao tác di chuyển/quay/dò line dùng `void`, không dùng giá trị trả về để điều khiển lộ trình; kiểm tra đầu vào, timeout, stall và log `missionError` vẫn hoạt động. Một thao tác lỗi không tự khóa các lệnh tiếp theo trong `plannedRoute()`. Các hàm dò line dùng trạng thái giao lộ và kiểm tra mất line để kết thúc riêng thao tác đó; trạng thái lỗi chỉ dùng cho chẩn đoán và hiển thị kết quả cuối.
+
+
+### Khai báo và kết nối Wi-Fi trên Leanbot
+
+Các hàm thao tác trong base code dùng `void`. Hàm tính toán (`clampMotor`, `lineErrorForMask`...), đọc màu và chờ nhận dữ liệu IoT vẫn trả về dữ liệu/trạng thái cần thiết.
+
+Cấu hình được sao chép vào các `String` riêng, sau đó gọi API `LbIoT.Wifi.begin` và, khi có Asset ID, `LbIoT.Asset.begin`:
+
+```cpp
+declare_wifi("TEN_WIFI", "MAT_KHAU", "ASSET_ID");
+set_wifi();
+// Hoặc gộp cả hai bước:
+set_wifi("TEN_WIFI", "MAT_KHAU", "ASSET_ID");
+// Chỉ kết nối Wi-Fi, chưa khởi tạo asset:
+set_wifi("TEN_WIFI", "MAT_KHAU");
+```
+
+Đặt các lệnh sau `Leanbot.begin()` trong `setup()`. Với chế độ IoT A/B, `setup()` đã gọi khai báo/kết nối bằng các macro `WIFI_SSID`, `WIFI_PASSWORD`, `IOT_ASSET_ID`; sửa các macro này hoặc thay đoạn đó bằng cấu hình tùy chọn. SSID trống báo lỗi cấu hình; password trống được truyền nguyên vẹn cho mạng mở. Không in mật khẩu ra Serial.
+
+Kiểm thử Wi-Fi biên dịch/chạy C++ với API giả lập để kiểm tra lưu cấu hình, thứ tự/tham số gọi hàm và các trường hợp cấu hình trống; chưa xác minh kết nối Wi-Fi trên mạch thật. Các hàm tuyến đường/nhiệm vụ như `missionPrimaryFull`, `FromCRLtoE2` vẫn là phần sketch riêng cần cung cấp khi nạp toàn bộ base file. Code lộ trình simulator chỉ lấy nhóm hàm chuyển động/dò line, không chạy kết nối mạng phần cứng.
