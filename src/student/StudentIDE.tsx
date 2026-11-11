@@ -1,3 +1,4 @@
+import { SerialDebugPanel } from './SerialDebugPanel'
 import { PanelLeft } from 'lucide-react'
 import { Cloud, Save, Sparkles, FilePlus2, FolderOpen, Download, FileCode2, Blocks, Trash2 } from '../components/ui/icons'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -200,6 +201,7 @@ export function StudentIDE({ onSourceChange }: { onSourceChange?: (source: strin
           <small>Tự động lưu từng tệp trên trình duyệt. Đổi tên ở thanh trên.</small>
         </details>
       </aside>
+      <div className="student-editor-column">
       <section className="editor-stage" aria-label="Không gian lập trình">
         {project.sourceMode === 'blocks'
           ? project.legacyXml !== undefined
@@ -207,6 +209,8 @@ export function StudentIDE({ onSourceChange }: { onSourceChange?: (source: strin
             : <BlocklyEditor key={`${project.id}-${project.baselineBlocksHash}`} ref={blocksRef} state={project.blockWorkspace} onChange={(state) => setProject((current) => updateBlocks(current, state))} />
           : <CppEditor key={project.id} ref={cppRef} value={project.cppSource} diagnostics={project.diagnostics} onChange={(source) => setProject((current) => updateCpp(current, source))} onSave={() => saveAs('cpp')} />}
       </section>
+      <SerialDebugPanel serial={serial} connected={connected} busy={busy} />
+      </div>
     </div>
     <footer className="student-footer"><span><Cloud />Lưu trên trình duyệt</span><span className="footer-help" title={compilerDescription}>{compilerDescription}</span></footer>
     <ConversionDialog candidate={candidate} onCancel={() => setCandidate(null)} onStay={() => { setCandidate(null); setProject((current) => ({ ...current, sourceMode: 'cpp', syncState: 'unsupported-cpp', diagnostics: candidate?.result.diagnostics ?? [] })) }} onPartial={() => { if (candidate) setProject(acceptBlocksCandidate(project, candidate, true)); setCandidate(null) }} />

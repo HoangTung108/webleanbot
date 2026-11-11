@@ -6,6 +6,17 @@
 #include <Arduino_APDS9960.h>
 
 
+enum ObjectColor { OBJECT_UNKNOWN, OBJECT_RED, OBJECT_GREEN, OBJECT_BLUE };
+static ObjectColor classifyColor(int red, int green, int blue);
+ObjectColor readObjectColor(bool &valid);
+ObjectColor Obj_detectColor();
+void requireColor(ObjectColor expected);
+void send_iot_color(ObjectColor color);
+ObjectColor peek_iot_color();
+ObjectColor pop_iot_color();
+ObjectColor read_iot_color();
+bool wait_iot_color(ObjectColor expected, unsigned long timeoutMs = 30000UL);
+
 auto IoTColor = LbIoT.Asset.attribute(F("Color"));
 
 // Hiệu chỉnh thông số
@@ -69,8 +80,6 @@ bool colorSensorReady = false;
 
 static int clampMotor(int v) { return constrain(v, -MAX_MOTOR_SPEED, MAX_MOTOR_SPEED); }
 static int signInt(int n) { return (n > 0) - (n < 0); }
-static float fminLocal(float a, float b) { return a < b ? a : b; }
-static float fmaxLocal(float a, float b) { return a > b ? a : b; }
 
 void failMission(ErrorCode code) {
   if (missionError == ERR_NONE) missionError = code;
@@ -242,9 +251,10 @@ void move_tank(int motor_L, int motor_R, float distance_cm) {
 
 String wifiSsid;
 String wifiPassword;
-String wifiAssetId;
+// Asset.begin yêu cầu chuỗi flash F("..."); không ép kiểu từ c_str().
+const __FlashStringHelper *wifiAssetId = nullptr;
 
-void declare_wifi(const String &ssid, const String &password, const String &assetId = "") {
+void declare_wifi(const String &ssid, const String &password, const __FlashStringHelper *assetId = nullptr) {
   wifiSsid = ssid;
   wifiPassword = password;
   wifiAssetId = assetId;
@@ -256,10 +266,10 @@ void set_wifi() {
     return;
   }
   LbIoT.Wifi.begin(wifiSsid.c_str(), wifiPassword.c_str());
-  if (wifiAssetId.length() > 0) LbIoT.Asset.begin(wifiAssetId.c_str());
+  if (wifiAssetId != nullptr) LbIoT.Asset.begin(wifiAssetId);
 }
 
-void set_wifi(const String &ssid, const String &password, const String &assetId = "") {
+void set_wifi(const String &ssid, const String &password, const __FlashStringHelper *assetId = nullptr) {
   declare_wifi(ssid, password, assetId);
   set_wifi();
 }
@@ -356,7 +366,6 @@ void goToJunction() {
   centerDetectedJunction();
 }
 
-enum ObjectColor { OBJECT_UNKNOWN, OBJECT_RED, OBJECT_GREEN, OBJECT_BLUE };
 
 bool readAPDSUnderLight(CRGB light, int &r, int &g, int &b) {
   LbRGB.fillColor(light); LbRGB.show();
@@ -392,10 +401,10 @@ ObjectColor readObjectColor(bool &valid) {
   const int red = max(0, samples[0][0] - samples[3][0]);
   const int green = max(0, samples[1][1] - samples[3][1]);
   const int blue = max(0, samples[2][2] - samples[3][2]);
-#if DEBUG_SERIAL
+
   Serial.print(F("Color RGB: ")); Serial.print(red); Serial.print(' ');
   Serial.print(green); Serial.print(' '); Serial.println(blue);
-#endif
+
   valid = true;
   const ObjectColor color = classifyColor(red, green, blue);
   const CRGB colors[4] = {CRGB(50, 50, 50), CRGB::Red, CRGB::Green, CRGB::Blue};
@@ -405,13 +414,10 @@ ObjectColor readObjectColor(bool &valid) {
 
 ObjectColor Obj_detectColor() { bool valid; return readObjectColor(valid); }
 void requireColor(ObjectColor expected) {
-#if BOARD_MODE != BOARD_PRIMARY
   bool valid;
   const ObjectColor color = readObjectColor(valid);
   if (valid && color != expected) failMission(ERR_COLOR_MISMATCH);
-#else
-  (void)expected;
-#endif
+
 }
 
 void send_iot_color(ObjectColor color) {
@@ -479,7 +485,7 @@ void poll_iot_color() { read_iot_color(); }
 
 void reset_iot_color() { IoTColor.write("waiting"); }
 
-bool wait_iot_color(ObjectColor expected, unsigned long timeoutMs = 30000UL) {
+bool wait_iot_color(ObjectColor expected, unsigned long timeoutMs) {
   if (expected != OBJECT_RED && expected != OBJECT_GREEN && expected != OBJECT_BLUE) {
     failMission(ERR_COLOR_MISMATCH);
     return false;
@@ -499,9 +505,9 @@ bool wait_iot_color(ObjectColor expected, unsigned long timeoutMs = 30000UL) {
 
 /*
 KHỞI TẠO / WIFI (đặt trong setup, sau Leanbot.begin):
-  declare_wifi("TenWifi", "MatKhau", "AssetID");
+  declare_wifi("TenWifi", "MatKhau", F("AssetID"));
   set_wifi();                         Kết nối theo cấu hình đã khai báo.
-  set_wifi("TenWifi", "MatKhau", "AssetID");  Khai báo và kết nối một lần.
+  set_wifi("TenWifi", "MatKhau", F("AssetID"));  Khai báo và kết nối một lần.
 
 ĐI VÀ QUAY (speed tối đa 2000; giữ nguyên thuật toán điều khiển):
   move_tank(1800, 1800, 10);            Đi tới 10 cm; dùng hai số âm để lùi.
@@ -533,10 +539,15 @@ TAY GẮP:
 
 CẢM BIẾN MÀU:
   ObjectColor color = Obj_detectColor();  Đọc màu khối bằng APDS.
-  readObjectColor(valid);             Đọc màu và trả cờ valid qua biến bool.
+  bool valid = false;                 Khai báo cờ trước khi đọc màu.
+  ObjectColor color = readObjectColor(valid);
+  if (valid && color == OBJECT_BLUE) { send_iot_color(color); }
+                                      Chỉ dùng màu khi cảm biến đọc thành công.
+  Hai cách Obj_detectColor / readObjectColor là lựa chọn thay thế, không cần đọc hai lần.
+  Trong setup cần: colorSensorReady = APDS.begin();
   requireColor(OBJECT_BLUE);           Kiểm tra màu; báo lỗi nếu không đúng.
   Màu: OBJECT_RED, OBJECT_GREEN, OBJECT_BLUE, OBJECT_UNKNOWN.
-  Cảm biến cần APDS.begin thành công; requireColor được bỏ qua trên BOARD_PRIMARY.
+  Cảm biến cần APDS.begin thành công trước khi đọc hoặc requireColor.
 
 TÍN HIỆU MÀU GIỮA CÁC ROBOT IOT:
   Cả hai robot cần WiFi và cùng Asset ID / thuộc tính Color được phép truy cập.
@@ -554,31 +565,22 @@ HÀNG CHỜ TÍN HIỆU (FIFO, tối đa 16 màu):
   clear_iot_queue();                   Xóa hàng chờ và cờ đầy, giữ bộ lọc nhận trùng.
   iotQueueOverflow                    true khi hàng chờ từng bị đầy; không ghi đè.
 
-  Ví dụ vòng điều phối của robot nhận (sau khi kết nối WiFi):
-    poll_iot_color();
-    if (iot_queue_count() > 0) {
-      ObjectColor next = pop_iot_color();
-      // Xử lý nhiệm vụ theo next ở đây.
-    }
-    robot_delay(250);
 
-  Cùng một màu lưu trên server chỉ được xếp hàng một lần. Muốn gửi lại cùng màu,
-  robot nhận phải đọc được trạng thái waiting giữa hai lần gửi.
-  wait_iot_color cũng đọc và xếp hàng; không tự lấy màu khỏi hàng chờ.
-  Chỉ nhận khi gọi poll/read/wait; không có luồng mạng chạy nền trong lúc di chuyển.
-  Thuộc tính Color chỉ lưu màu cuối: các màu bị ghi đè giữa hai lần đọc có thể mất.
-  Hàng chờ giữ các tín hiệu đã đọc, không đảm bảo giao nhận từng gói qua mạng.
 */
 
 void setup() {
   Leanbot.begin();
+  Serial.begin(115200); // Web: mở Serial Debug sau khi kết nối USB.
+  Serial.println(F("Leanbot ready"));
 
 }
 
 void loop() {
  
   LbMission.begin(TB1A + TB1B);
-  
+  bool valid = false;
+  ObjectColor color = readObjectColor(valid);
+  // if (valid) send_iot_color(color);
   LbMission.end();
 }
 
