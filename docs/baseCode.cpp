@@ -22,29 +22,32 @@ bool wait_iot_color(ObjectColor expected, unsigned long timeoutMs = 30000UL);
 auto IoTColor = LbIoT.Asset.attribute(F("Color"));
 
 // Hiệu chỉnh thông số
-const float DISTANCE_SCALE = 1.0f;
+
+
+const float DISTANCE_SCALE = 1.00625f;
 const float LEFT_SCALE = 1.0f;
 const float RIGHT_SCALE = 1.0f;
 const float TURN_ONE_SCALE = 1.0f;
 const float TURN_TWO_SCALE = 1.0f;
 enum TurnMode { TWO_WHEELS, LEFT_ONLY, RIGHT_ONLY };
-const float TURN_SCALE[3] = {1.05f, 1.05f, 1.05f};
+const float TURN_SCALE[3] = {1.0f, 1.0f, 1.0f};
 
 const int MAX_MOTOR_SPEED = 2000;
 const int MOVE_START_SPEED = 165;
 const int MOVE_FINISH_SPEED = 165;
-const float MOVE_SLOW_ZONE_MM = 45.0f;
-const float MOVE_BRAKE_LEAD_MM = 3.0f;
-const int MOVE_ACCEL_INCREMENT = 22;  
+const float MOVE_SLOW_ZONE_MM = 30.0f;
+const float MOVE_BRAKE_LEAD_MM = 0.0f; // Giảm tốc trước đích, chỉ kết thúc khi đủ quãng đường.
+const int MOVE_ACCEL_INCREMENT = 100;  
 const int HEADING_KP = 9;          
 
 const int TURN_FINISH_SPEED = 120;
-const float TURN_SLOW_ZONE = 30.0f;
-const float TURN_BRAKE_LEAD_DEG = 1.5f;
-const int TURN_ACCEL_INCREMENT = 18;
+const float TURN_SLOW_ZONE = 20.0f;
+const float TURN_BRAKE_LEAD_DEG = 0.5f; // Sai số dừng theo phản hồi, không phải bảo đảm góc vật lý.
+const int TURN_ACCEL_INCREMENT = 90;
 const unsigned long MOTION_FEEDBACK_MS = 1UL;
+const unsigned long MOTION_RAMP_MS = 8UL; // Tăng tốc theo bước thời gian, không phụ thuộc FPS.
 
-const int ROUTE_SPEED = 1800;       
+const int ROUTE_SPEED = 2000;       
 const int LINE_SPEED = 850;         
 const int LINE_KP = 220;
 const unsigned long LINE_STEP_MS = 10UL;
@@ -122,8 +125,12 @@ void robot_delay(unsigned long duration) {
 }
 void close_hand_async(int degree) {
   update_hand();
+  const int target = constrain(degree, -30, 120);
+  // Không khởi động lại tác vụ hoặc thời gian ổn định khi lặp cùng lệnh.
+  if (handBusy && target == handTarget) return;
+  if (!handBusy && target == handAngle) return;
   handFrom = handAngle;
-  handTarget = constrain(degree, -30, 120);
+  handTarget = target;
   handStarted = millis();
   handBusy = true;
 }
@@ -143,7 +150,7 @@ void turn_angle(int speed, float angle_deg, TurnMode mode) {
   resetMotionState();
   const float target = fabsf(angle_deg) * TURN_SCALE[(int)mode] *(mode == TWO_WHEELS ? TURN_TWO_SCALE : TURN_ONE_SCALE);
   const int direction = angle_deg > 0.0f ? 1 : -1;
-  const long origin = LbMotion.getRotationDeg();
+  const float origin = (float)LbMotion.getRotationDeg();
   unsigned long started = millis(), lastAdvance = started, lastRamp = started;
   float bestProgress = 0.0f;
   int currentSpeed = TURN_FINISH_SPEED;
@@ -151,7 +158,7 @@ void turn_angle(int speed, float angle_deg, TurnMode mode) {
   const unsigned long timeoutMs = 3500UL + (unsigned long)(target * 90.0f);
 
   while (true) {
-    const float progress = (float)((long)LbMotion.getRotationDeg() - origin) * direction;
+    const float progress = ((float)LbMotion.getRotationDeg() - origin) * direction;
     const float remaining = target - progress;
     if (remaining <= TURN_BRAKE_LEAD_DEG) break;
 
@@ -163,7 +170,7 @@ void turn_angle(int speed, float angle_deg, TurnMode mode) {
     const float ratio = constrain((remaining - TURN_BRAKE_LEAD_DEG) / TURN_SLOW_ZONE, 0.0f, 1.0f);
     int allowedSpeed = TURN_FINISH_SPEED + (int)lroundf((speed - TURN_FINISH_SPEED) * sqrtf(ratio));
     if (currentSpeed > allowedSpeed) currentSpeed = allowedSpeed;
-    else if (now - lastRamp >= 12UL) {
+    else if (now - lastRamp >= MOTION_RAMP_MS) {
       currentSpeed = min(currentSpeed + TURN_ACCEL_INCREMENT, allowedSpeed);
       lastRamp = now;
     }
@@ -227,9 +234,9 @@ void move_tank(int motor_L, int motor_R, float distance_cm) {
 
     const float ratio = constrain((remaining - MOVE_BRAKE_LEAD_MM) / MOVE_SLOW_ZONE_MM, 0.0f, 1.0f);
     const int allowed = min(maxMagnitude,
-      MOVE_FINISH_SPEED + (int)lroundf((maxMagnitude - MOVE_FINISH_SPEED) * ratio));
+      MOVE_FINISH_SPEED + (int)lroundf((maxMagnitude - MOVE_FINISH_SPEED) * sqrtf(ratio)));
     if (currentMagnitude > allowed) currentMagnitude = allowed;
-    else if (now - lastRamp >= 12UL) {
+    else if (now - lastRamp >= MOTION_RAMP_MS) {
       currentMagnitude = min(currentMagnitude + MOVE_ACCEL_INCREMENT, allowed);
       lastRamp = now;
     }
@@ -280,17 +287,19 @@ void set_line(int leftOuter, int leftInner, int rightInner, int rightOuter) {
 int measure_line() { return LbIRLine.read(); }
 void print_line() { Serial.println(measure_line()); }
 
+// Tâm có trọng số: cả các mẫu không liên tiếp khi line cắt chéo mảng cảm biến.
 static int lineErrorForMask(int mask) {
-  switch (mask) {
-    case 0b1000: return -3;
-    case 0b1100: return -2;
-    case 0b0100: case 0b1110: return -1;
-    case 0b0110: case 0b1111: return 0;
-    case 0b0010: case 0b0111: return 1;
-    case 0b0011: return 2;
-    case 0b0001: return 3;
-    default: return lastLineError;
+  mask = mask & 0x0F;
+  if (mask == 0 || mask == 0b1111) return mask == 0 ? lastLineError : 0;
+  // Hai mép cùng thấy đen không cho biết nhánh nào đúng: giữ hướng đã bám.
+  if (mask == 0b1001 && lastLineError != 0) return lastLineError;
+  const int weights[4] = {-3, -1, 1, 3};
+  int sum = 0;
+  int count = 0;
+  for (int i = 0; i < 4; ++i) {
+    if (mask & (1 << (3 - i))) { sum += weights[i]; ++count; }
   }
+  return count > 0 ? (int)lroundf((float)sum / count) : lastLineError;
 }
 
 static bool lineAvailable(int bits) {
@@ -301,10 +310,14 @@ static bool lineAvailable(int bits) {
 }
 
 static void driveLine(int bits) {
+  bits = bits & 0x0F;
   if (bits != 0) lastLineError = lineErrorForMask(bits);
+  const int severity = abs(lastLineError);
+  // Càng lệch càng chậm; cho bánh trong lùi nhẹ để bắt lại góc chéo gắt.
+  const int baseSpeed = bits == 0 ? 180 : max(300, LINE_SPEED - severity * 150);
   const int correction = LINE_KP * lastLineError;
-  const int desiredL = constrain(LINE_SPEED + correction, 100, 1250);
-  const int desiredR = constrain(LINE_SPEED - correction, 100, 1250);
+  const int desiredL = constrain(baseSpeed + correction, -450, 1250);
+  const int desiredR = constrain(baseSpeed - correction, -450, 1250);
   lastLineCmdL += constrain(desiredL - lastLineCmdL, -110, 110);
   lastLineCmdR += constrain(desiredR - lastLineCmdR, -110, 110);
   LbMotion.runLR(lastLineCmdL, lastLineCmdR);
@@ -340,7 +353,30 @@ static void followLineCore(int distanceMm, bool untilJunction) {
       }
     }
     driveLine(bits);
-    LbDelay((unsigned int)LINE_STEP_MS);
+    robot_delay(LINE_STEP_MS); // Cho tay tiếp tục chạy trong lúc dò line.
+  }
+  LbMotion.stopAndWait();
+  resetMotionState();
+}
+
+// Dò line theo giây; có thể kết thúc sớm khi mất line, luôn dừng bánh.
+// Ví dụ followLineSeconds(2.5f); Không thay thế thời hạn bằng quãng đường.
+void followLineSeconds(float seconds) {
+  if (!isfinite(seconds) || seconds < 0.0f || seconds > 3600.0f) {
+    failMission(ERR_INVALID_MOVE); return;
+  }
+  LbMotion.stopAndWait();
+  resetMotionState();
+  junctionPending = false;
+  const unsigned long duration = (unsigned long)lroundf(seconds * 1000.0f);
+  const unsigned long started = millis();
+  while (millis() - started < duration) {
+    const int bits = LbIRLine.read();
+    if (!lineAvailable(bits)) { resetMotionState(); return; }
+    driveLine(bits);
+    const unsigned long elapsed = millis() - started;
+    if (elapsed >= duration) break;
+    robot_delay(min(LINE_STEP_MS, duration - elapsed));
   }
   LbMotion.stopAndWait();
   resetMotionState();
@@ -639,11 +675,15 @@ void loop() {
   // bool valid = false;
   // ObjectColor color = readObjectColor(valid);
   // Serial.print(color);
-  // LbMission.begin(TB1A + TB1B);
-  // bool valid = false;
-  // ObjectColor color = readObjectColor(valid);
-  // // if (valid) send_iot_color(color);
-  // LbMission.end();
+  LbMission.begin(TB1A + TB1B);
+  move_tank(2000, 2000, 32.5);
+  turn_two_wheels(2000, 90);
+  move_tank(2000, 2000, 32.5);
+  turn_two_wheels(2000, 90);
+  move_tank(2000, 2000, 32.5);
+  turn_two_wheels(2000, 90);
+  move_tank(2000, 2000, 32.5);
+  LbMission.end();
 }
 
 

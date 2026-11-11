@@ -1160,5 +1160,15 @@ export const apiReference: ApiReference[] = [
     "notes": "Có xếp hàng nhưng không tự pop; thời hạn kiểm tra giữa các lần đọc mạng.",
     "code": "// Đợi màu đích với thời hạn.\nwait_iot_color(OBJECT_BLUE, 30000UL);",
     "source": "baseCode.cpp"
+  },
+  {
+    "group": "helpers",
+    "api": "followLineSeconds(2.5f);",
+    "description": "Dò line trong khoảng thời gian tính bằng giây rồi dừng.",
+    "parameters": "seconds: số thực hữu hạn 0..3600; 2.5 nghĩa là 2 giây rưỡi.",
+    "returns": "void.",
+    "notes": "Kết thúc sớm khi mất line quá LINE_LOST_MS; tay async vẫn cập nhật. Không đảm bảo một quãng đường cố định.",
+    "code": "// Cần định nghĩa các hàm từ baseCode.cpp.\nfollowLineSeconds(2.5f); // Dò line tối đa 2,5 giây rồi dừng bánh",
+    "source": "baseCode.cpp"
   }
 ]
