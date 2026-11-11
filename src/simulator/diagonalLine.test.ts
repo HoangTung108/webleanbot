@@ -43,10 +43,10 @@ ${base.match(/const float DISTANCE_SCALE\s*=.*?;/)![0]}
 ${base.match(/const int LINE_SPEED\s*=.*?;/)![0]}
 ${base.match(/const int LINE_STEERING_SIGN\s*=.*?;/)![0]}
 ${base.match(/const float JUNCTION_CENTER_MM\s*=.*?;/)![0]}
-unsigned long clockMs=0,lastLineControlTime=0,lastLineSeenTime=0;
+unsigned long clockMs=0,lastLineControlTime=0;
 unsigned long millis(){return clockMs;}
-float lastLineError=0,filteredLineError=0,physicalDistance=0;
-int lastLineCmdL=0,lastLineCmdR=0,peak=0,services=0,error=0;
+float lastLineError=0,physicalDistance=0;
+int peak=0,services=0,error=0;
 bool lineControlReady=false,junctionPending=false,stalled=false;
 struct {int left=0,right=0;void runLR(int l,int r){assert(abs(l)<=2000&&abs(r)<=2000);left=l;right=r;peak=max(peak,max(abs(l),abs(r)));}void stopAndWait(){left=right=0;}float getDistanceMm(){return physicalDistance*DISTANCE_SCALE;}float getRotationDeg(){return 0;}} LbMotion;
 int bits=6;int raw[4]={10,100,100,10};
@@ -54,7 +54,7 @@ const int ir2L=0,ir0L=1,ir1R=2,ir3R=3;
 struct {int read(int sensor){return raw[sensor];}} LbIRArray;
 int measure_line(){return bits;}
 void robot_delay(unsigned long ms){clockMs+=ms;++services;if(!stalled)physicalDistance+=(LbMotion.left+LbMotion.right)*0.5f*65/2000*ms/1000;}
-void resetMotionState(){lastLineError=filteredLineError=0;lastLineCmdL=lastLineCmdR=0;lastLineControlTime=clockMs;lineControlReady=false;}
+void resetMotionState(){lastLineError=0;lastLineControlTime=clockMs;lineControlReady=false;}
 void failMission(ErrorCode e){error=e;LbMotion.stopAndWait();}
 void move_tank(int,int,float cm){physicalDistance+=cm*10;}
 ${core}
@@ -124,16 +124,16 @@ for(float angle:{-45.0f,-25.0f,0.0f,25.0f,45.0f})checkTrack(angle,0);
 for(float radius:{-140.0f,-100.0f,100.0f,140.0f})checkTrack(0,radius);
 reset();physicalDistance=10.75f;followLineDistance(325);assert(error==0&&lineOperationCompleted);assert(fabsf(physicalDistance-335.75f)<1.1f);assert(peak==2000);assert(LbMotion.left==0&&LbMotion.right==0);assert(services>0);
 reset();followLineCm(100);assert(error==0&&fabsf(physicalDistance-1000)<1.1f);
-reset();lbmbFollowDistance(50,10);assert(error==0&&fabsf(physicalDistance-100)<1.1f);assert(peak<=1000);
+reset();followLineCm(10,50);assert(error==0&&fabsf(physicalDistance-100)<1.1f);assert(peak<=1000);
 reset();followLineSeconds(.255f);assert(error==0&&clockMs>=255&&clockMs<=265);assert(LbMotion.left==0&&LbMotion.right==0);
 reset();bits=8;raw[0]=150;raw[1]=80;raw[2]=raw[3]=10;for(int i=0;i<30;++i){runFollowLine();robot_delay(10);}assert(LbMotion.left<LbMotion.right);assert(lastLineError<0);
 reset();bits=1;raw[3]=150;raw[2]=80;raw[0]=raw[1]=10;for(int i=0;i<30;++i){runFollowLine();robot_delay(10);}assert(LbMotion.left>LbMotion.right);assert(lastLineError>0);
 bits=0;for(int i=0;i<20;++i){runFollowLine();robot_delay(10);}assert(LbMotion.left>0&&LbMotion.right<0);while(clockMs<3500){runFollowLine();robot_delay(10);}assert(error==ERR_LINE_LOST);assert(LbMotion.left==0&&LbMotion.right==0);
 reset();stalled=true;followLineCm(20);assert(error==ERR_MOVE_STALL&&!lineOperationCompleted);assert(LbMotion.left==0&&LbMotion.right==0);
 reset();bits=0;followLineCm(20);assert(error==ERR_LINE_LOST&&!lineOperationCompleted);
-reset();bits=15;lbmbFollowMarker(100,3);assert(error==0&&junctionPending&&lineOperationCompleted);assert(clockMs==20);
-reset();bits=12;lbmbFollowMarker(100,1);assert(error==0&&junctionPending);
-reset();bits=3;lbmbFollowMarker(100,2);assert(error==0&&junctionPending);
+reset();bits=15;followLineUntilJunction(3,100);assert(error==0&&junctionPending&&lineOperationCompleted);assert(clockMs==20);
+reset();bits=12;followLineUntilJunction(1,100);assert(error==0&&junctionPending);
+reset();bits=3;followLineUntilJunction(2,100);assert(error==0&&junctionPending);
 reset();followLineCm(-1);assert(error==ERR_INVALID_MOVE);reset();followLineSeconds(NAN);assert(error==ERR_INVALID_MOVE);reset();followLineCm(0);assert(error==0&&clockMs==0);
 }
 `

@@ -173,10 +173,6 @@ enum ErrorCode {
 ErrorCode missionError = ERR_NONE;
 bool junctionPending = false;
 float lastLineError = 0.0f;
-float filteredLineError = 0.0f;
-int lastLineCmdL = 0;
-int lastLineCmdR = 0;
-unsigned long lastLineSeenTime = 0;
 unsigned long lastLineControlTime = 0;
 bool lineControlReady = false;
 bool colorSensorReady = false;
@@ -192,12 +188,9 @@ void failMission(ErrorCode code) {
 }
 
 void resetMotionState() {
-  lastLineCmdL = lastLineCmdR = 0;
   lastLineError = 0;
-  filteredLineError = 0.0f;
   lineControlReady = false;
   lastLineControlTime = millis();
-  lastLineSeenTime = millis();
 }
 // Tay gắp đồng thời
 int handAngle = 0;
@@ -413,7 +406,7 @@ void measure_line_values() {
   Serial.print(LbIRArray.read(ir1R)); Serial.print(' ');
   Serial.print(LbIRArray.read(ir3R));
   Serial.print(F(" mask: ")); Serial.print(measure_line());
-  Serial.print(F(" last error: ")); Serial.print(filteredLineError);
+  Serial.print(F(" last error: ")); Serial.print(lastLineError);
   Serial.print(F(" steering sign: ")); Serial.println(LINE_STEERING_SIGN);
 }
 
@@ -933,35 +926,32 @@ float measure_line_error() {
   return lbmbLinePosition1000(&state, (int16_t)lroundf(lastLineError * 1000.0f)) / 1000.0f;
 }
 
-static void applyMyBlockLineCommand(const LbmbCommand* command) {
+// Dùng chung phần xuất lệnh và cập nhật sai số; PID nằm nguyên trong core.
+static void applyMyBlockLineCommand(const LbmbFollowCtx* ctx, const LbmbCommand* command) {
+  lastLineError = ctx->prevError * 3.0f;
+  if (command->isDone) { LbMotion.stopAndWait(); return; }
   const int left = LINE_STEERING_SIGN == -1 ? command->rightSpeed : command->leftSpeed;
   const int right = LINE_STEERING_SIGN == -1 ? command->leftSpeed : command->rightSpeed;
-  lastLineCmdL = left; lastLineCmdR = right;
   LbMotion.runLR(left, right);
 }
 
 // Cập nhật một bước theo đúng lõi MyBlock, dùng khi tự viết loop.
-void runFollowLine(int bits) {
+void runFollowLine(int bits = -1) {
   const uint32_t now = (uint32_t)millis();
   if (lineControlReady && now - lastLineControlTime < LBMB_TICK_MS) return;
   LbmbState state = lbmbReadState();
   if (bits >= 0) state.lineState = (uint8_t)(bits & 0x0F);
   if (!lineControlReady) lbmbFollowCoreInit(&defaultLineContext, &state);
   lastLineControlTime = now; lineControlReady = true;
-  LbmbCommand command = lbmbFollowCoreStep(&defaultLineContext, &state,LINE_SPEED / 20.0f, 5, 600.0f);
-  lastLineError = defaultLineContext.prevError * 3.0f;
-  filteredLineError = lastLineError;
-  if (command.isDone) {
-    LbMotion.stopAndWait();
-    lastLineCmdL = lastLineCmdR = 0;
-    if (now - defaultLineContext.lastValidTime >= (defaultLineContext.hasValidError ? LBMB_LOST_LINE_TIMEOUT_MS : LBMB_ACQUIRE_TIMEOUT_MS)) failMission(ERR_LINE_LOST);
-    return; 
+  LbmbCommand command = lbmbFollowCoreStep(&defaultLineContext, &state, LINE_SPEED / 20.0f, 5, 600.0f);
+  applyMyBlockLineCommand(&defaultLineContext, &command);
+  if (command.isDone && now - defaultLineContext.lastValidTime >=
+      (defaultLineContext.hasValidError ? LBMB_LOST_LINE_TIMEOUT_MS : LBMB_ACQUIRE_TIMEOUT_MS)) {
+    failMission(ERR_LINE_LOST);
   }
-  applyMyBlockLineCommand(&command);
 }
-void runFollowLine() { runFollowLine(-1); }
 
-void lbmbFollow(float speedPercent, uint8_t mode, float targetVal) {
+static void lbmbFollow(float speedPercent, uint8_t mode, float targetVal) {
   lineOperationCompleted = false;
   if (!isfinite(speedPercent) || speedPercent <= 0 || !isfinite(targetVal) ||
       mode < 1 || mode > 5 || ((mode == 4 || mode == 5) && targetVal < 0) ||
@@ -992,25 +982,28 @@ void lbmbFollow(float speedPercent, uint8_t mode, float targetVal) {
       }
     }
     LbmbCommand command = lbmbFollowCoreStep(&ctx, &state, speedPercent, mode, targetVal);
-    lastLineError = ctx.prevError * 3.0f;
-    filteredLineError = lastLineError;
+    applyMyBlockLineCommand(&ctx, &command);
     if (command.isDone) {
-      LbMotion.stopAndWait(); lastLineCmdL = lastLineCmdR = 0;
       lineOperationCompleted = true;
       junctionPending = mode <= 3 && ctx.markerCount >= 3;
       return;
     }
-    applyMyBlockLineCommand(&command);
     robot_delay(LBMB_TICK_MS); 
   }
 }
-void lbmbFollowMarker(float speedPercent, byte markerMode) { lbmbFollow(speedPercent, markerMode, 0); }
-void lbmbFollowDistance(float speedPercent, float distanceCm) { lbmbFollow(speedPercent, 4, distanceCm); }
-void lbmbFollowTime(float speedPercent, float timeSec) { lbmbFollow(speedPercent, 5, timeSec); }
-void followLineDistance(int distanceMm) { lbmbFollowDistance(LINE_SPEED / 20.0f, distanceMm / 10.0f); }
-void followLineCm(float distanceCm) { lbmbFollowDistance(LINE_SPEED / 20.0f, distanceCm); }
-void followLineSeconds(float seconds) { lbmbFollowTime(LINE_SPEED / 20.0f, seconds); }
-void followLineUntilJunction() { lbmbFollowMarker(LINE_SPEED / 20.0f, 3); }
+// API dò line: tốc độ tùy chọn tính theo %, mặc định LINE_SPEED / 20.
+void followLineCm(float distanceCm, float speedPercent = LINE_SPEED / 20.0f) {
+  lbmbFollow(speedPercent, 4, distanceCm);
+}
+void followLineDistance(int distanceMm, float speedPercent = LINE_SPEED / 20.0f) {
+  followLineCm(distanceMm / 10.0f, speedPercent);
+}
+void followLineSeconds(float seconds, float speedPercent = LINE_SPEED / 20.0f) {
+  lbmbFollow(speedPercent, 5, seconds);
+}
+void followLineUntilJunction(byte markerMode = 3, float speedPercent = LINE_SPEED / 20.0f) {
+  lbmbFollow(speedPercent, markerMode, 0);
+}
 void centerDetectedJunction() {
   if (!junctionPending) return;
   junctionPending = false;

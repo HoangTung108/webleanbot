@@ -945,9 +945,9 @@ export const apiReference: ApiReference[] = [
     "group": "helpers",
     "api": "runFollowLine();",
     "description": "Cập nhật một bước bám line bằng lõi PID analog.",
-    "parameters": "Không có hoặc int mặt nạ.",
+    "parameters": "bits tùy chọn: -1 (mặc định) tự đọc cảm biến, hoặc mặt nạ 0..15.",
     "returns": "void.",
-    "notes": "PID , chu kỳ 10 ms. Bắt line ở tối đa 600, cần 5 mẫu giữa line mới tăng tốc. Cua gắt có trần 1000 và cho bánh trong lùi nhẹ; hysteresis tránh chuyển chế độ liên tục. Không thấy line từ đầu: quét hai phía tối đa 3,5 giây; mất line đã bám: tìm theo hướng cũ tối đa 2,5 giây. Quá hạn thì dừng/báo lỗi; không bảo đảm tìm được line nằm ngoài vùng quét cảm biến. Tâm analog chỉ dùng các cảm biến được mặt nạ hiệu chuẩn xác nhận đang thấy line. Quyền đánh lái tăng theo tốc độ khi lệch lớn, giữ gain vùng giữa để hạn chế lắc.",
+    "notes": "PID analog, chu kỳ 10 ms. Bắt line ở tối đa 600, cần 5 mẫu giữa line mới tăng tốc. Cua gắt có trần 1000 và cho bánh trong lùi nhẹ; hysteresis tránh chuyển chế độ liên tục. Không thấy line từ đầu: quét hai phía tối đa 3,5 giây; mất line đã bám: tìm theo hướng cũ tối đa 2,5 giây. Quá hạn thì dừng/báo lỗi; không bảo đảm tìm được line nằm ngoài vùng quét cảm biến. Tâm analog chỉ dùng các cảm biến được mặt nạ hiệu chuẩn xác nhận đang thấy line. Quyền đánh lái tăng theo tốc độ khi lệch lớn, giữ gain vùng giữa để hạn chế lắc.",
     "code": "// Đặt trong loop, khi robot đang theo line.\nrunFollowLine(); // Cập nhật điều khiển một lần\nrobot_delay(LINE_STEP_MS); // Giữ chu kỳ 10 ms và phục vụ tay async",
     "source": "baseCode.cpp"
   },
@@ -955,20 +955,20 @@ export const apiReference: ApiReference[] = [
     "group": "helpers",
     "api": "followLineDistance(100);",
     "description": "Dò line theo quãng đường rồi dừng.",
-    "parameters": "distanceMm: khoảng cách theo mm. 100 = 100 mm = 10 cm; muốn 100 cm dùng followLineCm(100).",
+    "parameters": "distanceMm: mm; 100 = 10 cm. speedPercent tùy chọn: tốc độ %, mặc định LINE_SPEED / 20.",
     "returns": "void.",
-    "notes": "Dùng lbmbFollowDistance; 100 mm = 10 cm. Quãng đường phản hồi được chia DISTANCE_SCALE một lần; lõi dùng mm nguyên. Có giảm tốc cuối đoạn, phát hiện kẹt/mất line.",
-    "code": "// Dò line theo quãng đường rồi dừng.\nfollowLineDistance(100);",
+    "notes": "Chuyển mm sang cm rồi dùng chung bộ thực thi PID. Quãng đường phản hồi được chia DISTANCE_SCALE một lần; lõi dùng mm nguyên. Có giảm tốc cuối đoạn, phát hiện kẹt/mất line.",
+    "code": "// Dò 100 mm = 10 cm với tốc độ mặc định.\nfollowLineDistance(100);\n// Hoặc giới hạn ở 50% tốc độ:\nfollowLineDistance(100, 50);",
     "source": "baseCode.cpp"
   },
   {
     "group": "helpers",
     "api": "followLineUntilJunction();",
     "description": "Dò tới giao lộ đã xác nhận.",
-    "parameters": "Không có.",
+    "parameters": "markerMode tùy chọn: 1=trái, 2=phải, 3=chữ T (mặc định). speedPercent tùy chọn: tốc độ %, mặc định LINE_SPEED / 20.",
     "returns": "void.",
-    "notes": "Gọi chế độ marker 3 (chữ T / 1111), cần 3 mẫu xác nhận. Nếu bắt đầu ngay trên marker thì có thể kết thúc ngay sau 3 mẫu.",
-    "code": "// Dò tới giao lộ đã xác nhận.\nfollowLineUntilJunction();",
+    "notes": "Cần 3 mẫu xác nhận marker. Bắt đầu ngay trên marker có thể kết thúc sau 3 mẫu. Thay lbmbFollowMarker(50, 1) bằng followLineUntilJunction(1, 50).",
+    "code": "// Tới giao lộ chữ T với tốc độ mặc định.\nfollowLineUntilJunction();\n// Tới marker trái ở tốc độ 50%:\nfollowLineUntilJunction(1, 50);",
     "source": "baseCode.cpp"
   },
   {
@@ -1165,20 +1165,20 @@ export const apiReference: ApiReference[] = [
     "group": "helpers",
     "api": "followLineSeconds(2.5f);",
     "description": "Dò line trong khoảng thời gian tính bằng giây rồi dừng.",
-    "parameters": "seconds: thời gian 0..600 giây; 2.5 là 2 giây rưỡi.",
+    "parameters": "seconds: 0..600 giây. speedPercent tùy chọn: tốc độ %, mặc định LINE_SPEED / 20.",
     "returns": "void.",
-    "notes": "Dùng lbmbFollowTime, có giảm tốc trước hết giờ. Tay async vẫn cập nhật; mất line sẽ tìm có giới hạn rồi báo lỗi/dừng. Không bảo đảm quãng đường cố định.",
-    "code": "// Cần định nghĩa các hàm từ baseCode.cpp.\nfollowLineSeconds(2.5f); // Dò line tối đa 2,5 giây rồi dừng bánh",
+    "notes": "Dùng chung bộ thực thi PID, có giảm tốc trước hết giờ. Tay async vẫn cập nhật; mất line sẽ tìm có giới hạn rồi báo lỗi/dừng. Thay lbmbFollowTime(50, 2.5f) bằng followLineSeconds(2.5f, 50).",
+    "code": "// Dò tối đa 2,5 giây rồi dừng bánh.\nfollowLineSeconds(2.5f);\n// Giới hạn tốc độ 50%:\nfollowLineSeconds(2.5f, 50);",
     "source": "baseCode.cpp"
   },
   {
     "group": "helpers",
     "api": "followLineCm(100);",
     "description": "Dò line theo cm, cùng đơn vị nhập với move_tank.",
-    "parameters": "distanceCm: số thực hữu hạn 0..1200 cm; 100 nghĩa là 1 mét.",
+    "parameters": "distanceCm: số thực hữu hạn 0..1200 cm; 100 = 1 mét. speedPercent tùy chọn: tốc độ %, mặc định LINE_SPEED / 20.",
     "returns": "void.",
-    "notes": "Gọi lbmbFollowDistance với tốc độ mặc định LINE_SPEED/20 %.Lõi dùng PID analog. Dừng sớm và báo lỗi nếu kẹt/mất line; độ phân giải quãng đường trong lõi là mm nguyên. Tự giảm tốc khi bắt line/cua gắt; không tính xoay tìm line không tịnh tiến thành lỗi kẹt ngay sau 900 ms.",
-    "code": "// Dùng các định nghĩa trong baseCode.cpp.\nfollowLineCm(32.5f); // Dò line 32,5 cm\n// followLineDistance(325) tương đương 325 mm.",
+    "notes": "Dùng chung bộ thực thi PID analog. Có giảm tốc cuối đoạn và xử lý kẹt/mất line. Thay lbmbFollowDistance(50, 32.5f) bằng followLineCm(32.5f, 50).",
+    "code": "// Dò 32,5 cm ở tốc độ mặc định.\nfollowLineCm(32.5f);\n// Giới hạn tốc độ 50%:\nfollowLineCm(32.5f, 50);",
     "source": "baseCode.cpp"
   },
   {
@@ -1220,46 +1220,6 @@ export const apiReference: ApiReference[] = [
     "notes": "Dùng khi đứng yên chẩn đoán. Đây là IR đen/trắng, không phải đọc màu APDS. Thay đổi LED chỉ khi chủ động gọi hàm này.",
     "code": "// Chế độ chẩn đoán, không chạy bánh:\ndisplay_line(); // Đọc và hiển thị LED\nmeasure_line_values(); // Xem số IR trên Serial Debug\nrobot_delay(200);",
     "source": "baseCode.cpp"
-  },
-  {
-    "group": "helpers",
-    "api": "lbmbFollow(100, 4, 32.5f);",
-    "description": "Hàm dò line.",
-    "parameters": "speedPercent: 0 < tốc độ <=100%; lớn hơn 100 được giới hạn. mode: 1 trái, 2 phải, 3 chữ T, 4 cm, 5 giây; targetVal dùng cho mode 4/5.",
-    "returns": "void.",
-    "notes": "Không truyền tốc độ runLR 2000 vào tham số phần trăm. Cần toàn bộ lõi đã tích hợp trong baseCode. Kết quả lượt gần nhất ở lineOperationCompleted; lỗi ở missionError.",
-    "code": "// Các định nghĩa đã có trong baseCode.cpp.\nlbmbFollow(100, 4, 32.5f); // Tốc độ tính theo %, 100% là trần 2000",
-    "source": "lớp tích hợp baseCode.cpp"
-  },
-  {
-    "group": "helpers",
-    "api": "lbmbFollowMarker(100, 1);",
-    "description": "Bám line tới marker trái/phải/chữ T.",
-    "parameters": "Tốc độ %, markerMode 1=trái, 2=phải, 3=T.",
-    "returns": "void.",
-    "notes": "Cần 3 mẫu liên tiếp xác nhận marker. Dùng cùng chế độ bắt line/cua; tìm lại line có giới hạn, quá hạn dừng và báo lỗi.",
-    "code": "// Các định nghĩa đã có trong baseCode.cpp.\nlbmbFollowMarker(100, 1); // Tốc độ tính theo %, 100% là trần 2000",
-    "source": "lớp tích hợp baseCode.cpp"
-  },
-  {
-    "group": "helpers",
-    "api": "lbmbFollowDistance(100, 32.5f);",
-    "description": "Bám line theo cm bằng PID.",
-    "parameters": "Tốc độ %; khoảng cách 0..1200 cm.",
-    "returns": "void.",
-    "notes": "100% đặt trần 2000, lõi tự giảm tốc theo độ lệch và khoảng cách còn lại. Dùng chung DISTANCE_SCALE với move_tank. Tự giảm tốc khi bắt line/cua gắt; không tính xoay tìm line không tịnh tiến thành lỗi kẹt ngay sau 900 ms.",
-    "code": "// đã có trong baseCode.cpp.\nlbmbFollowDistance(100, 32.5f); // Tốc độ tính theo %, 100% là trần 2000",
-    "source": " lớp tích hợp baseCode.cpp"
-  },
-  {
-    "group": "helpers",
-    "api": "lbmbFollowTime(100, 2.5f);",
-    "description": "Bám line theo thời gian.",
-    "parameters": "Tốc độ %; thời gian 0..600 giây.",
-    "returns": "void.",
-    "notes": "Giảm tốc trước khi hết giờ; robot có thể dừng sớm khi mất line hoặc lỗi.",
-    "code": "// đã có trong baseCode.cpp.\nlbmbFollowTime(100, 2.5f); // Tốc độ tính theo %, 100% là trần 2000",
-    "source": "lớp tích hợp baseCode.cpp"
   },
   {
     "group": "helpers",

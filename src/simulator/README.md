@@ -345,3 +345,18 @@ Kiểm thử Wi-Fi biên dịch/chạy C++ với API giả lập để kiểm tr
 ### Dò line và kiểm tra màu trong base code
 
 Các hàm tương thích vẫn gồm `runFollowLine`, `followLineDistance`, `followLineUntilJunction`, `followLineMultipleJunctions`, `goToJunction`, `Obj_detectColor`, `requireColor`. Hàm gọi đơn giản để đọc khối là `read_color()`; `get_color()` lấy màu đã đo, `is_color(RED)` kiểm tra cache. Không dùng mẫu RGB của giả lập để thay các mẫu hiệu chuẩn thực tế của từng khối.
+
+### API dò line tinh gọn
+
+Giữ nguyên lõi PID MyBlock và cấu hình điều khiển. Các lớp gọi `lbmbFollowDistance`, `lbmbFollowTime`, `lbmbFollowMarker` đã được gộp vào API `followLine…`; `lbmbFollow` là bộ thực thi nội bộ. Lệnh gọi cũ không có tốc độ vẫn dùng `LINE_SPEED / 20` phần trăm:
+
+```cpp
+followLineDistance(100);          // 100 mm = 10 cm
+followLineCm(32.5f, 50);           // 32,5 cm, tốc độ 50%
+followLineSeconds(2.5f, 50);       // 2,5 giây, tốc độ 50%
+followLineUntilJunction(1, 50);    // Marker trái; 2=phải, 3=T
+runFollowLine();                  // Một bước PID, tự đọc IR
+runFollowLine(0b0110);            // Một bước với mask đã đọc
+```
+
+`followLineDistance` chỉ đổi đơn vị sang cm; không chứa thuật toán riêng. Nhóm căn tâm/đi qua nhiều giao lộ vẫn dùng trạng thái `junctionPending`. Sai số chẩn đoán chỉ lưu ở `lastLineError`; đã bỏ bản sao `filteredLineError` và các biến thời gian/lệnh bánh không được đọc.
