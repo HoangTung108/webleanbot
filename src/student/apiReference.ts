@@ -196,9 +196,9 @@ export const apiReference: ApiReference[] = [
     "api": "LbIRLine.read();",
     "description": "Đọc và cập nhật trạng thái bốn cảm biến line.",
     "parameters": "Không có tham số.",
-    "returns": "Mặt nạ bốn bit 0..15 trong cách dùng của project.",
+    "returns": "Ví dụ không dùng giá trị trả về; lấy mặt nạ bằng LbIRLine.value() sau khi cập nhật.",
     "notes": "Đọc lại cảm biến trước khi dùng trạng thái được lưu.",
-    "code": "// Đọc và cập nhật trạng thái bốn cảm biến line.\nLbIRLine.read();",
+    "code": "LbIRLine.read(); // Cập nhật\nint bits = LbIRLine.value(); // Mặt nạ digital 0..15\nSerial.println(bits);",
     "source": "Bộ sinh Blockly trong project / các lời gọi SDK hiện có"
   },
   {
@@ -237,8 +237,8 @@ export const apiReference: ApiReference[] = [
     "description": "Hiệu chuẩn line bằng thao tác nút chạm.",
     "parameters": "Nút dùng để xác nhận các bước hiệu chuẩn.",
     "returns": "Ví dụ không sử dụng kết quả trả về; đối chiếu kiểu trả về với SDK đang cài.",
-    "notes": "Làm theo quy trình nền đen/trắng của thư viện; có thể chặn.",
-    "code": "// Hiệu chuẩn line bằng thao tác nút chạm.\nLbIRLine.doManualCalibration(TB1A);",
+    "notes": "Gọi sau Leanbot.begin khi robot đứng yên. Quy trình tương tác do SDK quyết định. Không gọi setThreshold/set_line sau đó vì sẽ ghi đè ngưỡng vừa học; không khẳng định ngưỡng được lưu qua mất nguồn.",
+    "code": "#include <Leanbot.h>\n\nvoid setup() {\n  Leanbot.begin();\n  Serial.begin(115200);\n  LbMotion.stopAndWait(); // Đứng yên khi hiệu chuẩn\n  LbIRLine.doManualCalibration(TB1A); // Theo các bước SDK, chạm TB1A xác nhận\n  // Không setThreshold ở đây: sẽ ghi đè ngưỡng vừa hiệu chuẩn.\n}\n\nvoid loop() {\n  LbIRLine.read(); // Cập nhật trước khi hiển thị\n  LbIRLine.displayOnRGB(CRGB::Green); // LED báo cảm biến thấy line\n  LbRGB.show();\n  Serial.println(LbIRLine.value()); // Mặt nạ 0..15, không phải RGB\n  LbDelay(200); // Xem lần lượt trên nền đen và nền trắng\n}",
     "source": "Bộ sinh Blockly trong project / các lời gọi SDK hiện có"
   },
   {
@@ -247,8 +247,8 @@ export const apiReference: ApiReference[] = [
     "description": "Hiển thị trạng thái line trên LED.",
     "parameters": "Màu hiển thị.",
     "returns": "Ví dụ không sử dụng kết quả trả về; đối chiếu kiểu trả về với SDK đang cài.",
-    "notes": "Không dùng cùng yêu cầu LED chỉ báo màu vật đã đo.",
-    "code": "// Hiển thị trạng thái line trên LED.\nLbIRLine.displayOnRGB(CRGB::Green);",
+    "notes": "Chỉ dùng trong chế độ xem line; sẽ thay màu LED thông báo khối. Cảm biến IR phân biệt nền đen/trắng, không phân loại năm màu như APDS.",
+    "code": "// Trong loop chẩn đoán, sau khi đã khởi tạo Leanbot và ngưỡng line:\nLbIRLine.read(); // Cập nhật cảm biến\nLbIRLine.displayOnRGB(CRGB::Green); // Hiển thị trạng thái line, không đo màu RGB\nLbRGB.show();\nLbDelay(100);",
     "source": "Bộ sinh Blockly trong project / các lời gọi SDK hiện có"
   },
   {
@@ -857,7 +857,7 @@ export const apiReference: ApiReference[] = [
     "description": "Quay có phản hồi, tăng/giảm tốc và kiểm tra kẹt.",
     "parameters": "Tốc độ, góc độ, TurnMode.",
     "returns": "void.",
-    "notes": "Dùng TURN_SCALE và ngưỡng phanh hiện tại.",
+    "notes": "Dùng TURN_SCALE và ngưỡng phanh hiện tại. Trần quay TURN_MAX_SPEED hiện là 2000; giới hạn tốc độ theo góc còn lại giữ chậm các độ cuối để hạn chế vượt góc.",
     "code": "// Quay có phản hồi, tăng/giảm tốc và kiểm tra kẹt.\nturn_angle(2000, 90, TWO_WHEELS);",
     "source": "baseCode.cpp"
   },
@@ -867,7 +867,7 @@ export const apiReference: ApiReference[] = [
     "description": "Quay bằng một bánh.",
     "parameters": "Tốc độ, góc độ, \"L\" hoặc \"R\".",
     "returns": "void.",
-    "notes": "Giữ quy ước dấu riêng của hàm trong baseCode.",
+    "notes": "Giữ quy ước dấu riêng của hàm trong baseCode. Trần quay TURN_MAX_SPEED hiện là 2000; giới hạn tốc độ theo góc còn lại giữ chậm các độ cuối để hạn chế vượt góc.",
     "code": "// Quay bằng một bánh.\nturn_one_wheel(2000, 90, \"L\");",
     "source": "baseCode.cpp"
   },
@@ -877,7 +877,7 @@ export const apiReference: ApiReference[] = [
     "description": "Quay bằng hai bánh.",
     "parameters": "Tốc độ, góc độ có dấu.",
     "returns": "void.",
-    "notes": "Không gọi từ bên trong vòng điều khiển khác.",
+    "notes": "Không gọi từ bên trong vòng điều khiển khác. Trần quay TURN_MAX_SPEED hiện là 2000; giới hạn tốc độ theo góc còn lại giữ chậm các độ cuối để hạn chế vượt góc.",
     "code": "// Quay bằng hai bánh.\nturn_two_wheels(2000, 90);",
     "source": "baseCode.cpp"
   },
@@ -927,7 +927,7 @@ export const apiReference: ApiReference[] = [
     "description": "Đọc mặt nạ line hiện tại.",
     "parameters": "Không có.",
     "returns": "int 0..15.",
-    "notes": "Không phải ADC hoặc khoảng cách.",
+    "notes": "Hàm gọi read() để cập nhật rồi lấy value() và giữ bốn bit thấp. Không phải ADC hoặc khoảng cách.",
     "code": "// Đọc mặt nạ line hiện tại.\nmeasure_line();",
     "source": "baseCode.cpp"
   },
@@ -944,20 +944,20 @@ export const apiReference: ApiReference[] = [
   {
     "group": "helpers",
     "api": "runFollowLine();",
-    "description": "Cập nhật điều khiển line một lần.",
+    "description": "Cập nhật một bước bám line bằng lõi PID analog của Blockly MyBlock.",
     "parameters": "Không có hoặc int mặt nạ.",
     "returns": "void.",
-    "notes": "Gọi lặp lại; không tự đi cả đoạn.",
-    "code": "// Cập nhật điều khiển line một lần.\nrunFollowLine();",
+    "notes": "Đọc bốn IR thô, PID chống tích lũy bão hòa, tăng tốc giới hạn độ giật, tự giảm tốc khi lệch. LINE_SPEED mặc định 2000 (100%). Gọi mỗi 10 ms; mất line tìm có giới hạn 800 ms rồi dừng/báo lỗi. Muốn bắt đầu lượt mới sau khi dừng cần resetMotionState().",
+    "code": "// Đặt trong loop, khi robot đang theo line.\nrunFollowLine(); // Cập nhật điều khiển một lần\nrobot_delay(LINE_STEP_MS); // Giữ chu kỳ 10 ms và phục vụ tay async",
     "source": "baseCode.cpp"
   },
   {
     "group": "helpers",
     "api": "followLineDistance(100);",
     "description": "Dò line theo quãng đường rồi dừng.",
-    "parameters": "Khoảng cách mm.",
+    "parameters": "distanceMm: khoảng cách theo mm. 100 = 100 mm = 10 cm; muốn 100 cm dùng followLineCm(100).",
     "returns": "void.",
-    "notes": "Có timeout và kiểm tra mất line.",
+    "notes": "Dùng lbmbFollowDistance MyBlock; 100 mm = 10 cm. Quãng đường phản hồi được chia DISTANCE_SCALE một lần; lõi dùng mm nguyên. Có giảm tốc cuối đoạn, phát hiện kẹt/mất line.",
     "code": "// Dò line theo quãng đường rồi dừng.\nfollowLineDistance(100);",
     "source": "baseCode.cpp"
   },
@@ -967,7 +967,7 @@ export const apiReference: ApiReference[] = [
     "description": "Dò tới giao lộ đã xác nhận.",
     "parameters": "Không có.",
     "returns": "void.",
-    "notes": "Bỏ qua giao lộ lúc mới xuất phát theo cấu hình.",
+    "notes": "Gọi chế độ marker 3 (chữ T / 1111) của MyBlock, cần 3 mẫu xác nhận. Nếu bắt đầu ngay trên marker thì có thể kết thúc ngay sau 3 mẫu, đúng hành vi MyBlock.",
     "code": "// Dò tới giao lộ đã xác nhận.\nfollowLineUntilJunction();",
     "source": "baseCode.cpp"
   },
@@ -1165,10 +1165,100 @@ export const apiReference: ApiReference[] = [
     "group": "helpers",
     "api": "followLineSeconds(2.5f);",
     "description": "Dò line trong khoảng thời gian tính bằng giây rồi dừng.",
-    "parameters": "seconds: số thực hữu hạn 0..3600; 2.5 nghĩa là 2 giây rưỡi.",
+    "parameters": "seconds: thời gian 0..600 giây; 2.5 là 2 giây rưỡi.",
     "returns": "void.",
-    "notes": "Kết thúc sớm khi mất line quá LINE_LOST_MS; tay async vẫn cập nhật. Không đảm bảo một quãng đường cố định.",
+    "notes": "Dùng lbmbFollowTime MyBlock, có giảm tốc trước hết giờ. Tay async vẫn cập nhật; mất line sẽ tìm có giới hạn rồi báo lỗi/dừng. Không bảo đảm quãng đường cố định.",
     "code": "// Cần định nghĩa các hàm từ baseCode.cpp.\nfollowLineSeconds(2.5f); // Dò line tối đa 2,5 giây rồi dừng bánh",
     "source": "baseCode.cpp"
+  },
+  {
+    "group": "helpers",
+    "api": "followLineCm(100);",
+    "description": "Dò line theo cm, cùng đơn vị nhập với move_tank.",
+    "parameters": "distanceCm: số thực hữu hạn 0..1200 cm; 100 nghĩa là 1 mét.",
+    "returns": "void.",
+    "notes": "Gọi lbmbFollowDistance với tốc độ mặc định LINE_SPEED/20 %. Lõi MyBlock dùng PID analog. Dừng sớm và báo lỗi nếu kẹt/mất line; độ phân giải quãng đường trong lõi là mm nguyên.",
+    "code": "// Dùng các định nghĩa trong baseCode.cpp.\nfollowLineCm(32.5f); // Dò line 32,5 cm\n// followLineDistance(325) tương đương 325 mm.",
+    "source": "baseCode.cpp"
+  },
+  {
+    "group": "helpers",
+    "api": "measure_line_values();",
+    "description": "Đo và in bốn giá trị IR thực để kiểm tra ngưỡng line.",
+    "parameters": "Không có.",
+    "returns": "void.",
+    "notes": "Dừng robot trước khi đo; không gọi in liên tục trong vòng bám line. Log gồm ADC theo 2L/0L/1R/3R, mặt nạ và sai số điều khiển gần nhất.",
+    "code": "// Khi robot đứng yên, xem Serial Debug 115200 baud.\nmeasure_line_values();\nrobot_delay(200); // Không in quá dày",
+    "source": "baseCode.cpp"
+  },
+  {
+    "group": "helpers",
+    "api": "measure_line_error();",
+    "description": "Đọc tâm line analog theo đúng thuật toán MyBlock.",
+    "parameters": "Không có.",
+    "returns": "float -3..3; NAN nếu không thấy line.",
+    "notes": "Kết quả -3..3, NAN nếu mặt nạ không hợp lệ. Khi độ tương phản IR yếu, dùng bảng digital MyBlock. Cần đo lại ngưỡng dưới ánh sáng thật.",
+    "code": "float error = measure_line_error(); // Không làm robot di chuyển\nif (isfinite(error)) Serial.println(error);\nelse Serial.println(\"No line\");",
+    "source": "baseCode.cpp"
+  },
+  {
+    "group": "helpers",
+    "api": "calibrate_line();",
+    "description": "Hiệu chuẩn line bằng nút TB1A qua API Leanbot.",
+    "parameters": "Không có tham số.",
+    "returns": "void.",
+    "notes": "Dừng bánh, đợi tay, gọi doManualCalibration. Chỉ gọi một lần khi cần; SDK có thể chặn chờ thao tác. Không gọi set_line sau đó.",
+    "code": "// Trong setup, sau Leanbot.begin và Serial.begin(115200):\ncalibrate_line(); // Đặt cảm biến theo quy trình SDK, chạm TB1A xác nhận\n// Sau đó mới bắt đầu nhiệm vụ.",
+    "source": "baseCode.cpp"
+  },
+  {
+    "group": "helpers",
+    "api": "display_line();",
+    "description": "Đọc line rồi hiển thị trạng thái cảm biến bằng LED xanh.",
+    "parameters": "Không có tham số.",
+    "returns": "void.",
+    "notes": "Dùng khi đứng yên chẩn đoán. Đây là IR đen/trắng, không phải đọc màu APDS. Thay đổi LED chỉ khi chủ động gọi hàm này.",
+    "code": "// Chế độ chẩn đoán, không chạy bánh:\ndisplay_line(); // Đọc và hiển thị LED\nmeasure_line_values(); // Xem số IR trên Serial Debug\nrobot_delay(200);",
+    "source": "baseCode.cpp"
+  },
+  {
+    "group": "helpers",
+    "api": "lbmbFollow(100, 4, 32.5f);",
+    "description": "Hàm dò line tổng quát đúng API Blockly MyBlock.",
+    "parameters": "speedPercent: 0 < tốc độ <=100%; lớn hơn 100 được giới hạn. mode: 1 trái, 2 phải, 3 chữ T, 4 cm, 5 giây; targetVal dùng cho mode 4/5.",
+    "returns": "void.",
+    "notes": "Không truyền tốc độ runLR 2000 vào tham số phần trăm. Cần toàn bộ lõi MyBlock đã tích hợp trong baseCode. Kết quả lượt gần nhất ở lineOperationCompleted; lỗi ở missionError.",
+    "code": "// Các định nghĩa MyBlock đã có trong baseCode.cpp.\nlbmbFollow(100, 4, 32.5f); // Tốc độ tính theo %, 100% là trần 2000",
+    "source": "Blockly MyBlock: myblocks.js + lớp tích hợp baseCode.cpp"
+  },
+  {
+    "group": "helpers",
+    "api": "lbmbFollowMarker(100, 1);",
+    "description": "Bám line tới marker trái/phải/chữ T.",
+    "parameters": "Tốc độ %, markerMode 1=trái, 2=phải, 3=T.",
+    "returns": "void.",
+    "notes": "Cần 3 mẫu liên tiếp xác nhận marker. Mất line quá 800 ms hoặc quá thời hạn sẽ dừng và báo lỗi.",
+    "code": "// Các định nghĩa MyBlock đã có trong baseCode.cpp.\nlbmbFollowMarker(100, 1); // Tốc độ tính theo %, 100% là trần 2000",
+    "source": "Blockly MyBlock: myblocks.js + lớp tích hợp baseCode.cpp"
+  },
+  {
+    "group": "helpers",
+    "api": "lbmbFollowDistance(100, 32.5f);",
+    "description": "Bám line theo cm bằng PID analog MyBlock.",
+    "parameters": "Tốc độ %; khoảng cách 0..1200 cm.",
+    "returns": "void.",
+    "notes": "100% đặt trần 2000, lõi tự giảm tốc theo độ lệch và khoảng cách còn lại. Dùng chung DISTANCE_SCALE với move_tank.",
+    "code": "// Các định nghĩa MyBlock đã có trong baseCode.cpp.\nlbmbFollowDistance(100, 32.5f); // Tốc độ tính theo %, 100% là trần 2000",
+    "source": "Blockly MyBlock: myblocks.js + lớp tích hợp baseCode.cpp"
+  },
+  {
+    "group": "helpers",
+    "api": "lbmbFollowTime(100, 2.5f);",
+    "description": "Bám line theo thời gian bằng MyBlock.",
+    "parameters": "Tốc độ %; thời gian 0..600 giây.",
+    "returns": "void.",
+    "notes": "Giảm tốc trước khi hết giờ; robot có thể dừng sớm khi mất line hoặc lỗi.",
+    "code": "// Các định nghĩa MyBlock đã có trong baseCode.cpp.\nlbmbFollowTime(100, 2.5f); // Tốc độ tính theo %, 100% là trần 2000",
+    "source": "Blockly MyBlock: myblocks.js + lớp tích hợp baseCode.cpp"
   }
 ]

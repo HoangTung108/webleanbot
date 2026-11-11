@@ -127,6 +127,7 @@ export class CppRuntime {
   private nodes: Node[]; private functions = new Map<string, Node>(); private scopes: Scope[] = [new Map()];
   private iterator?: Generator<Yield, void, unknown>; private pending = 0;
   private missionStarted=false;
+  private cachedLineMask=0;
   running = false; time = 0; distance = 0; rotation = 0; left = 0; right = 0;
   constructor(source: string, private host: RuntimeHost, private readonly distanceScale: number = MOTION_CALIBRATION.physicalMmPerEncoderMm) {
     if(!Number.isFinite(distanceScale)||distanceScale<=0)throw new Error('Hệ số hiệu chuẩn quãng đường phải là số dương hữu hạn.');
@@ -135,7 +136,7 @@ export class CppRuntime {
     const builtins = new Set(['Leanbot.begin', 'LbMission.begin', 'LbMission.end', 'LbMotion.runLR', 'LbMotion.runLRrpm', 'LbMotion.stopAndWait', 'LbMotion.setZeroOrigin', 'LbMotion.getDistanceMm', 'LbMotion.getRotationDeg', 'LbMotion.waitDistanceMm', 'LbMotion.waitRotationDeg', 'LbDelay', 'delay', 'millis', 'isfinite', 'fabsf', 'fabs', 'abs', 'lroundf', 'round', 'sqrtf', 'sqrt', 'min', 'max', 'constrain', 'strcmp', 'Serial.begin', 'Serial.println', 'Serial.print', 'LbGripper.open', 'LbGripper.close', 'LbGripper.moveToLR', 'LbGripper.moveTo', 'Leanbot.pingCm', 'Leanbot.pingMm', 'Leanbot.tone', 'LbRGB.show']);
     const validate = (n: any) => {
       if (!n || typeof n !== 'object') return;
-      if (n.k === 'call' && !this.functions.has(n.name) && !builtins.has(n.name) && !['LbIRLine.read', 'LbIRLine.setThreshold'].includes(n.name)) throw new Error(`Hàm chưa hỗ trợ trong giả lập: ${n.name}`);
+      if (n.k === 'call' && !this.functions.has(n.name) && !builtins.has(n.name) && !['LbIRLine.read', 'LbIRLine.value', 'LbIRLine.setThreshold'].includes(n.name)) throw new Error(`Hàm chưa hỗ trợ trong giả lập: ${n.name}`);
       for (const v of Object.values(n)) if (Array.isArray(v)) v.forEach(validate); else if (typeof v === 'object') validate(v);
     };
     this.nodes.forEach(validate);
@@ -193,7 +194,8 @@ export class CppRuntime {
     }
     switch (name) {
       case 'LbIRLine.setThreshold': return null; // Board geometry supplies digital black/white readings.
-      case 'LbIRLine.read': return this.host.lineMask?.() ?? 0;
+      case 'LbIRLine.read': this.cachedLineMask=(this.host.lineMask?.() ?? 0) & 0x0f; return this.cachedLineMask;
+      case 'LbIRLine.value': return this.cachedLineMask;
       case 'Leanbot.begin': case 'Serial.begin': case 'LbRGB.show': return null;
       case 'LbMission.begin':
         // Run supplies one start signal. The hardware waits for touch buttons
@@ -278,7 +280,7 @@ export class CppRuntime {
       yield { ms: 1 };
     }
   }
-  start() { this.missionStarted=false;this.scopes = [new Map()]; this.iterator = this.program(); this.running = true; this.time = this.distance = this.rotation = this.pending = 0; this.motors(0, 0); }
+  start() { this.missionStarted=false;this.cachedLineMask=0;this.scopes = [new Map()]; this.iterator = this.program(); this.running = true; this.time = this.distance = this.rotation = this.pending = 0; this.motors(0, 0); }
   stop() { this.running = false; this.motors(0, 0); }
   tick(milliseconds: number) {
     if (!Number.isFinite(milliseconds) || milliseconds < 0) return;

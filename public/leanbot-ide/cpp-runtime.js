@@ -1451,7 +1451,7 @@ var LeanbotCpp = (() => {
       const builtins = /* @__PURE__ */ new Set(["Leanbot.begin", "LbMission.begin", "LbMission.end", "LbMotion.runLR", "LbMotion.runLRrpm", "LbMotion.stopAndWait", "LbMotion.setZeroOrigin", "LbMotion.getDistanceMm", "LbMotion.getRotationDeg", "LbMotion.waitDistanceMm", "LbMotion.waitRotationDeg", "LbDelay", "delay", "millis", "isfinite", "fabsf", "fabs", "abs", "lroundf", "round", "sqrtf", "sqrt", "min", "max", "constrain", "strcmp", "Serial.begin", "Serial.println", "Serial.print", "LbGripper.open", "LbGripper.close", "LbGripper.moveToLR", "LbGripper.moveTo", "Leanbot.pingCm", "Leanbot.pingMm", "Leanbot.tone", "LbRGB.show"]);
       const validate = (n) => {
         if (!n || typeof n !== "object") return;
-        if (n.k === "call" && !this.functions.has(n.name) && !builtins.has(n.name) && !["LbIRLine.read", "LbIRLine.setThreshold"].includes(n.name)) throw new Error(`H\xE0m ch\u01B0a h\u1ED7 tr\u1EE3 trong gi\u1EA3 l\u1EADp: ${n.name}`);
+        if (n.k === "call" && !this.functions.has(n.name) && !builtins.has(n.name) && !["LbIRLine.read", "LbIRLine.value", "LbIRLine.setThreshold"].includes(n.name)) throw new Error(`H\xE0m ch\u01B0a h\u1ED7 tr\u1EE3 trong gi\u1EA3 l\u1EADp: ${n.name}`);
         for (const v of Object.values(n)) if (Array.isArray(v)) v.forEach(validate);
         else if (typeof v === "object") validate(v);
       };
@@ -1463,6 +1463,7 @@ var LeanbotCpp = (() => {
     iterator;
     pending = 0;
     missionStarted = false;
+    cachedLineMask = 0;
     running = false;
     time = 0;
     distance = 0;
@@ -1600,7 +1601,10 @@ var LeanbotCpp = (() => {
           return null;
         // Board geometry supplies digital black/white readings.
         case "LbIRLine.read":
-          return this.host.lineMask?.() ?? 0;
+          this.cachedLineMask = (this.host.lineMask?.() ?? 0) & 15;
+          return this.cachedLineMask;
+        case "LbIRLine.value":
+          return this.cachedLineMask;
         case "Leanbot.begin":
         case "Serial.begin":
         case "LbRGB.show":
@@ -1782,6 +1786,7 @@ var LeanbotCpp = (() => {
     }
     start() {
       this.missionStarted = false;
+      this.cachedLineMask = 0;
       this.scopes = [/* @__PURE__ */ new Map()];
       this.iterator = this.program();
       this.running = true;

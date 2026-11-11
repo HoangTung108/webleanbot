@@ -78,3 +78,12 @@ it('supports the square-root braking profile used by generated route turns',()=>
  const runtime=new CppRuntime('void loop(){Serial.println(sqrtf(9));Serial.println(sqrt(0.25));Serial.println(isfinite(sqrtf(-1)));LbMission.end();}',{motors(){},advance(){},log:message=>logs.push(message)});
  runtime.start();runtime.tick(0);expect(runtime.running).toBe(false);expect(logs).toEqual(['3','0.5','false']);
 });
+
+it('caches line read results for value() and clears them on restart',()=>{
+ const logs:string[]=[];let reads=0;
+ const runtime=new CppRuntime('void setup(){Serial.println(LbIRLine.value());LbIRLine.read();Serial.println(LbIRLine.value());Serial.println(LbIRLine.value());} void loop(){LbMission.begin(0);LbMission.end();}',{motors(){},advance(){},lineMask(){reads++;return 10;},log(text){logs.push(text);}});
+ runtime.start();runtime.tick(10);
+ expect(logs).toEqual(['0','10','10']);expect(reads).toBe(1);
+ logs.length=0;runtime.start();runtime.tick(10);
+ expect(logs).toEqual(['0','10','10']);expect(reads).toBe(2);
+});
