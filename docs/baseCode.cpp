@@ -6,12 +6,14 @@
 #include <Arduino_APDS9960.h>
 
 
-enum ObjectColor { OBJECT_UNKNOWN, OBJECT_RED, OBJECT_GREEN, OBJECT_BLUE };
+enum ObjectColor { OBJECT_UNKNOWN, OBJECT_RED, OBJECT_GREEN, OBJECT_BLUE, OBJECT_YELLOW, OBJECT_PURPLE };
 static ObjectColor classifyColor(int red, int green, int blue);
 ObjectColor readObjectColor(bool &valid);
 ObjectColor Obj_detectColor();
 void requireColor(ObjectColor expected);
 void send_iot_color(ObjectColor color);
+void set_color_reference(ObjectColor color, int red, int green, int blue);
+void calibrate_color(ObjectColor color);
 ObjectColor peek_iot_color();
 ObjectColor pop_iot_color();
 ObjectColor read_iot_color();
@@ -84,10 +86,8 @@ static int signInt(int n) { return (n > 0) - (n < 0); }
 void failMission(ErrorCode code) {
   if (missionError == ERR_NONE) missionError = code;
   LbMotion.stopAndWait();
-  LbRGB.fillColor(CRGB::Red);
-  LbRGB.show();
   Serial.print(F("MISSION ERROR: "));
-  Serial.println((int)code);
+  Serial.println(code);
 }
 
 void resetMotionState() {
@@ -251,7 +251,6 @@ void move_tank(int motor_L, int motor_R, float distance_cm) {
 
 String wifiSsid;
 String wifiPassword;
-// Asset.begin yêu cầu chuỗi flash F("..."); không ép kiểu từ c_str().
 const __FlashStringHelper *wifiAssetId = nullptr;
 
 void declare_wifi(const String &ssid, const String &password, const __FlashStringHelper *assetId = nullptr) {
@@ -366,49 +365,171 @@ void goToJunction() {
   centerDetectedJunction();
 }
 
+const int COLOR_SAMPLE_COUNT = 5;
+const int COLOR_REQUIRED_VOTES = 4;
+const int COLOR_MIN_CHANNEL = 4;
+const float COLOR_MIN_SATURATION = 0.20f;
+const float COLOR_RED_YELLOW_HUE = 25.0f;
+const float COLOR_YELLOW_GREEN_HUE = 80.0f;
+const float COLOR_GREEN_BLUE_HUE = 170.0f;
+const float COLOR_BLUE_PURPLE_HUE = 250.0f;
+const float COLOR_PURPLE_RED_HUE = 345.0f;
+float colorRedGain = 1.0f;
+float colorGreenGain = 1.0f;
+float colorBlueGain = 1.0f;
 
-bool readAPDSUnderLight(CRGB light, int &r, int &g, int &b) {
-  LbRGB.fillColor(light); LbRGB.show();
-  APDS.colorAvailable(); // Enable sampling before the light-settling delay.
-  LbDelay(35);
+void set_color_white(int red, int green, int blue) {
+  if (min(red, min(green, blue)) < COLOR_MIN_CHANNEL) return;
+  const float average = ((float)red + green + blue) / 3.0f;
+  colorRedGain = average / red;
+  colorGreenGain = average / green;
+  colorBlueGain = average / blue;
+}
+
+bool readAPDSColor(int &r, int &g, int &b) {
+  APDS.colorAvailable();
+  robot_delay(35);
   const unsigned long started = millis();
   while (!APDS.colorAvailable()) {
     if (millis() - started > 850UL) return false;
-    LbDelay(5);
+    robot_delay(5);
   }
   return APDS.readColor(r, g, b);
 }
 
+float colorReference[6][3];
+bool colorReferenceReady[6] = {false, false, false, false, false, false};
+const float COLOR_REFERENCE_MAX_DISTANCE = 0.004f;
+const float COLOR_REFERENCE_MARGIN = 0.00005f;
+
+void set_color_reference(ObjectColor color, int red, int green, int blue) {
+  if (color < OBJECT_RED || color > OBJECT_PURPLE || red < 0 || green < 0 || blue < 0) return;
+  const float total = (float)red + green + blue;
+  if (max(red, max(green, blue)) < COLOR_MIN_CHANNEL || total <= 0) return;
+  colorReference[(int)color][0] = red / total;
+  colorReference[(int)color][1] = green / total;
+  colorReference[(int)color][2] = blue / total;
+  colorReferenceReady[(int)color] = true;
+}
+
+void calibrate_color(ObjectColor color) {
+  if (color < OBJECT_RED || color > OBJECT_PURPLE) return;
+  if (!colorSensorReady) { failMission(ERR_COLOR_SENSOR); return; }
+  long sums[3] = {0, 0, 0};
+  for (int i = 0; i < COLOR_SAMPLE_COUNT; ++i) {
+    int r = 0, g = 0, b = 0;
+    if (!readAPDSColor(r, g, b) || r < 0 || g < 0 || b < 0) {
+      failMission(ERR_COLOR_SENSOR); return;
+    }
+    sums[0] += r; sums[1] += g; sums[2] += b;
+  }
+  const int r = sums[0] / COLOR_SAMPLE_COUNT;
+  const int g = sums[1] / COLOR_SAMPLE_COUNT;
+  const int b = sums[2] / COLOR_SAMPLE_COUNT;
+  if (max(r, max(g, b)) < COLOR_MIN_CHANNEL) {
+    Serial.println(F("Calibration failed: too dark")); return;
+  }
+  set_color_reference(color, r, g, b);
+  Serial.print(F("set_color_reference((ObjectColor)")); Serial.print((int)color);
+  Serial.print(F(", ")); Serial.print(r); Serial.print(F(", ")); Serial.print(g);
+  Serial.print(F(", ")); Serial.print(b); Serial.println(F(");"));
+}
+
+static float colorHue(float red, float green, float blue) {
+  const float top = max(red, max(green, blue));
+  const float bottom = min(red, min(green, blue));
+  const float span = top - bottom;
+  if (span <= 0.0f) return -1.0f;
+  float hue;
+  if (top == red) hue = 60.0f * (green - blue) / span;
+  else if (top == green) hue = 120.0f + 60.0f * (blue - red) / span;
+  else hue = 240.0f + 60.0f * (red - green) / span;
+  if (hue < 0.0f) hue += 360.0f;
+  return hue;
+}
+
 static ObjectColor classifyColor(int red, int green, int blue) {
-  if (red > 3 && red - max(green, blue) >= 2) return OBJECT_RED;
-  if (green > 3 && green - max(red, blue) >= 2) return OBJECT_GREEN;
-  if (blue > 3 && blue - max(red, green) >= 2) return OBJECT_BLUE;
-  return OBJECT_UNKNOWN;
+  int referenceCount = 0;
+  for (int i = OBJECT_RED; i <= OBJECT_PURPLE; ++i) {
+    if (colorReferenceReady[i]) ++referenceCount;
+  }
+  if (referenceCount > 0) {
+    if (referenceCount != 5) return OBJECT_UNKNOWN;
+    const float total = (float)max(0, red) + max(0, green) + max(0, blue);
+    if (total <= 0 || max(red, max(green, blue)) < COLOR_MIN_CHANNEL) return OBJECT_UNKNOWN;
+    const float channels[3] = {red / total, green / total, blue / total};
+    float best = 10.0f, second = 10.0f;
+    ObjectColor result = OBJECT_UNKNOWN;
+    for (int i = OBJECT_RED; i <= OBJECT_PURPLE; ++i) {
+      float distance = 0.0f;
+      for (int j = 0; j < 3; ++j) {
+        const float delta = channels[j] - colorReference[i][j];
+        distance += delta * delta;
+      }
+      if (distance < best) { second = best; best = distance; result = (ObjectColor)i; }
+      else if (distance < second) second = distance;
+    }
+    if (best > COLOR_REFERENCE_MAX_DISTANCE || second - best <= COLOR_REFERENCE_MARGIN ||
+        second <= best * 1.5f) return OBJECT_UNKNOWN;
+    return result;
+  }
+  const float r = max(0, red) * colorRedGain;
+  const float g = max(0, green) * colorGreenGain;
+  const float b = max(0, blue) * colorBlueGain;
+  const float top = max(r, max(g, b));
+  const float bottom = min(r, min(g, b));
+  if (top < COLOR_MIN_CHANNEL || (top - bottom) / top < COLOR_MIN_SATURATION)
+    return OBJECT_UNKNOWN;
+  const float hue = colorHue(r, g, b);
+  if (hue < COLOR_RED_YELLOW_HUE || hue >= COLOR_PURPLE_RED_HUE) return OBJECT_RED;
+  if (hue < COLOR_YELLOW_GREEN_HUE) return OBJECT_YELLOW;
+  if (hue < COLOR_GREEN_BLUE_HUE) return OBJECT_GREEN;
+  if (hue < COLOR_BLUE_PURPLE_HUE) return OBJECT_BLUE;
+  return OBJECT_PURPLE;
 }
 
 ObjectColor readObjectColor(bool &valid) {
   valid = false;
   if (!colorSensorReady) { failMission(ERR_COLOR_SENSOR); return OBJECT_UNKNOWN; }
-  const CRGB lights[4] = {CRGB::Red, CRGB::Lime, CRGB::Blue, CRGB::Black};
-  // Rows: red/green/blue illumination and ambient; columns: sensor R/G/B.
-  int samples[4][3];
-  const int saved = LbRGB.getBrightness();
-  LbRGB.setBrightness(255);
-  bool good = true;
-  for (int i = 0; i < 4 && good; ++i) good = readAPDSUnderLight(lights[i], samples[i][0], samples[i][1], samples[i][2]);
-  LbRGB.setBrightness(saved);
-  if (!good) { failMission(ERR_COLOR_SENSOR); return OBJECT_UNKNOWN; }
-  const int red = max(0, samples[0][0] - samples[3][0]);
-  const int green = max(0, samples[1][1] - samples[3][1]);
-  const int blue = max(0, samples[2][2] - samples[3][2]);
-
+  int votes[6] = {0, 0, 0, 0, 0, 0};
+  long totalRed = 0, totalGreen = 0, totalBlue = 0;
+  for (int sample = 0; sample < COLOR_SAMPLE_COUNT; ++sample) {
+    int red = 0, green = 0, blue = 0;
+    if (!readAPDSColor(red, green, blue) || red < 0 || green < 0 || blue < 0) {
+      failMission(ERR_COLOR_SENSOR);
+      return OBJECT_UNKNOWN;
+    }
+    ++votes[(int)classifyColor(red, green, blue)];
+    totalRed += red; totalGreen += green; totalBlue += blue;
+  }
+  ObjectColor color = OBJECT_UNKNOWN;
+  for (int candidate = OBJECT_RED; candidate <= OBJECT_PURPLE; ++candidate) {
+    if (votes[candidate] >= COLOR_REQUIRED_VOTES) color = (ObjectColor)candidate;
+  }
+  const int red = totalRed / COLOR_SAMPLE_COUNT;
+  const int green = totalGreen / COLOR_SAMPLE_COUNT;
+  const int blue = totalBlue / COLOR_SAMPLE_COUNT;
   Serial.print(F("Color RGB: ")); Serial.print(red); Serial.print(' ');
-  Serial.print(green); Serial.print(' '); Serial.println(blue);
-
-  valid = true;
-  const ObjectColor color = classifyColor(red, green, blue);
-  const CRGB colors[4] = {CRGB(50, 50, 50), CRGB::Red, CRGB::Green, CRGB::Blue};
-  LbRGB.fillColor(colors[(int)color]); LbRGB.show();
+  Serial.print(green); Serial.print(' '); Serial.print(blue);
+  Serial.print(F(" Hue: ")); Serial.print(colorHue(red * colorRedGain, green * colorGreenGain, blue * colorBlueGain));
+  Serial.print(F(" -> "));
+  switch (color) {
+    case OBJECT_RED: Serial.println(F("RED")); break;
+    case OBJECT_GREEN: Serial.println(F("GREEN")); break;
+    case OBJECT_BLUE: Serial.println(F("BLUE")); break;
+    case OBJECT_YELLOW: Serial.println(F("YELLOW")); break;
+    case OBJECT_PURPLE: Serial.println(F("PURPLE")); break;
+    default: Serial.println(F("UNKNOWN / unstable")); break;
+  }
+  valid = true; // Đọc đủ mẫu; UNKNOWN nghĩa là chưa chắc chắn, không được coi là màu đích.
+  if (color != OBJECT_UNKNOWN) {
+    const CRGB colors[6] = {CRGB(0, 0, 0), CRGB(255, 0, 0), CRGB(0, 255, 0),
+                            CRGB(0, 0, 255), CRGB(255, 255, 0), CRGB(128, 0, 128)};
+    LbRGB.fillColor(colors[(int)color]);
+    LbRGB.show();
+  }
+  // Giữ LED không đổi trong quá trình đo; không nháy các màu chiếu sáng.
+  // Nếu LED báo màu chiếu vào vật, che hướng chiếu hoặc dùng đèn trắng ổn định.
   return color;
 }
 
@@ -425,6 +546,8 @@ void send_iot_color(ObjectColor color) {
     case OBJECT_RED:   IoTColor.write("Red"); break;
     case OBJECT_GREEN: IoTColor.write("Green"); break;
     case OBJECT_BLUE:  IoTColor.write("Blue"); break;
+    case OBJECT_YELLOW: IoTColor.write("Yellow"); break;
+    case OBJECT_PURPLE: IoTColor.write("Purple"); break;
     default:          IoTColor.write("Unknown"); break;
   }
 }
@@ -468,6 +591,8 @@ ObjectColor read_iot_color() {
   if (signal == "RED") color = OBJECT_RED;
   else if (signal == "GREEN") color = OBJECT_GREEN;
   else if (signal == "BLUE") color = OBJECT_BLUE;
+  else if (signal == "YELLOW") color = OBJECT_YELLOW;
+  else if (signal == "PURPLE") color = OBJECT_PURPLE;
   if (color != OBJECT_UNKNOWN && color != lastQueuedIotColor) {
     if (iotQueueSize < IOT_QUEUE_CAPACITY) {
       const int tail = (iotQueueHead + iotQueueSize) % IOT_QUEUE_CAPACITY;
@@ -486,7 +611,8 @@ void poll_iot_color() { read_iot_color(); }
 void reset_iot_color() { IoTColor.write("waiting"); }
 
 bool wait_iot_color(ObjectColor expected, unsigned long timeoutMs) {
-  if (expected != OBJECT_RED && expected != OBJECT_GREEN && expected != OBJECT_BLUE) {
+  if (expected != OBJECT_RED && expected != OBJECT_GREEN && expected != OBJECT_BLUE &&
+      expected != OBJECT_YELLOW && expected != OBJECT_PURPLE) {
     failMission(ERR_COLOR_MISMATCH);
     return false;
   }
@@ -504,6 +630,79 @@ bool wait_iot_color(ObjectColor expected, unsigned long timeoutMs) {
 }
 
 /*
+BẢNG TRA CỨU API THƯ VIỆN
+Các API dưới đây được dùng trong script hoặc bộ sinh Blockly của project.
+Đây là bảng API liên quan, không phải danh sách đầy đủ của mọi phiên bản SDK.
+
+LEANBOT — #include <Leanbot.h>
+| API / ví dụ                                  | Công dụng / đơn vị                         |
+|----------------------------------------------|--------------------------------------------|
+| Leanbot.begin();                             | Khởi tạo phần cứng, gọi đầu setup.          |
+| LbMission.begin(TB1A + TB1B);                  | Đợi tổ hợp nút bắt đầu nhiệm vụ.            |
+| LbMission.end();                              | Kết thúc nhiệm vụ.                         |
+| LbMotion.runLR(1000, 1000);                   | Đặt tốc độ L/R; âm để đảo chiều bánh.       |
+| LbMotion.runLRrpm(30, 30);                    | Đặt tốc độ bánh theo vòng/phút.             |
+| LbMotion.stopAndWait();                       | Dừng bánh và đợi hoàn tất việc dừng.        |
+| LbMotion.getDistanceMm();                     | Đọc quãng đường phản hồi, mm.              |
+| LbMotion.getRotationDeg();                    | Đọc góc quay phản hồi, độ.                 |
+| LbMotion.setZeroOrigin();                     | Đặt lại mốc đo chuyển động.                |
+| LbMotion.waitDistanceMm(100);                 | Đợi theo quãng đường, mm.                  |
+| LbMotion.waitRotationDeg(90);                 | Đợi theo góc quay, độ.                     |
+| LbGripper.open();                            | Mở tay bằng API thư viện.                  |
+| LbGripper.close();                           | Đóng tay bằng API thư viện.                |
+| LbGripper.moveTo(50);                        | Đặt cùng góc cho hai càng, độ.             |
+| LbGripper.moveToLR(50, 50, 750);              | Đặt góc L/R và thời gian chuyển động, ms.  |
+| LbIRLine.setThreshold(69, 78, 106, 70);       | Ngưỡng theo thứ tự 2L, 0L, 1R, 3R.         |
+| LbIRLine.read();                             | Đọc cảm biến line, mặt nạ 4 bit.           |
+| LbIRLine.value();                            | Lấy kết quả line đã lưu sau lần đọc.       |
+| LbTouch.read(TB1A);                          | Đọc nút cảm ứng; so sánh với HIGH/LOW.     |
+| Leanbot.pingCm();                            | Đọc khoảng cách siêu âm, cm.               |
+| Leanbot.tone(1000, 200);                      | Phát âm 1000 Hz trong 200 ms.              |
+| LbRGB.fillColor(CRGB(255, 0, 0));             | Đặt màu bộ đệm LED; chưa hiển thị.         |
+| LbRGB.show();                                | Đẩy màu trong bộ đệm ra LED.               |
+| LbRGB.getBrightness();                       | Đọc mức sáng LED hiện tại.                |
+| LbRGB.setBrightness(64);                     | Đặt độ sáng LED 0..255.                    |
+| LbDelay(100);                                | Đợi 100 ms theo API Leanbot.               |
+
+Lưu ý: runLR đặt tốc độ, không tự giới hạn quãng đường. Các lệnh wait cần
+chuyển động được khởi động phù hợp; không thay thế bộ điều khiển move_tank.
+Trong script này dùng tốc độ runLR trong -2000..2000. Khi dùng tay async,
+tránh gọi trực tiếp LbGripper vì bộ điều khiển handAngle sẽ mất đồng bộ.
+Không gọi đổi LED trong nhiệm vụ nếu muốn LED chỉ báo màu đã đo được.
+
+LEANBOT IOT — #include <LeanbotIoT.h>
+| API / ví dụ                                  | Công dụng / điều kiện                      |
+|----------------------------------------------|--------------------------------------------|
+| LbIoT.Wifi.begin(ssid, password);             | Kết nối WiFi; script truyền const char*.   |
+| LbIoT.Asset.begin(F("AssetID"));              | Chọn Asset; ID phải là chuỗi flash.        |
+| LbIoT.Asset.attribute(F("Color"));            | Tạo đối tượng truy cập thuộc tính Color.   |
+| IoTColor.write("Blue");                      | Ghi giá trị màu lên thuộc tính.            |
+| String value = IoTColor.read();              | Đọc giá trị đang lưu trên máy chủ.         |
+
+IoTColor là biến đã khai báo ở đầu file, không phải tên đối tượng có sẵn
+trong thư viện. Hai robot dùng chung Asset/Color mới trao đổi trên cùng kênh.
+Không ép wifiAssetId.c_str() thành con trỏ flash; hãy dùng F("AssetID").
+Lệnh mạng có thể chặn; tránh gọi trong vòng phản hồi động cơ 1 ms.
+Thuộc tính chỉ giữ giá trị cuối, không phải hàng đợi tin nhắn của máy chủ.
+FIFO trong script chỉ lưu tín hiệu đã đọc; cùng màu lặp lại cần thấy waiting
+ở giữa. Giá trị đọc được không tự chứng minh tín hiệu thuộc lượt nhiệm vụ mới.
+
+CẢM BIẾN VÀ DEBUG — THƯ VIỆN RIÊNG / ARDUINO
+| API / ví dụ                                  | Công dụng                                 |
+|----------------------------------------------|-------------------------------------------|
+| APDS.begin();                               | Khởi tạo Arduino_APDS9960, kiểm tra bool. |
+| APDS.colorAvailable();                      | Kiểm tra dữ liệu màu sẵn sàng.            |
+| APDS.readColor(red, green, blue);            | Đọc RGB vào ba biến int, kiểm tra kết quả.|
+| Serial.begin(115200);                        | Mở Serial trùng baud của Web Debug.      |
+| Serial.print(value);                        | In giá trị, không xuống dòng.            |
+| Serial.println(value);                      | In giá trị rồi xuống dòng.               |
+| millis();                                   | Thời gian từ lúc khởi động, ms.           |
+
+APDS thuộc Arduino_APDS9960, Serial/millis thuộc Arduino, không phải LeanbotIoT.
+Các hàm move_tank, turn_two_wheels, set_wifi, set_line, readObjectColor,
+calibrate_color, send_iot_color, poll_iot_color và pop_iot_color ở phần sau
+là HÀM HỖ TRỢ CỦA SCRIPT, không phải API gốc của thư viện.
+
 KHỞI TẠO / WIFI (đặt trong setup, sau Leanbot.begin):
   declare_wifi("TenWifi", "MatKhau", F("AssetID"));
   set_wifi();                         Kết nối theo cấu hình đã khai báo.
@@ -538,6 +737,11 @@ TAY GẮP:
   Không xen lệnh LbGripper trực tiếp khi dùng bộ điều khiển tay async.
 
 CẢM BIẾN MÀU:
+  calibrate_color(OBJECT_RED);         Đặt khối ĐỎ, giữ yên rồi gọi để học mẫu.
+  Lặp lại riêng với GREEN, BLUE, YELLOW, PURPLE khi đã đặt đúng từng khối.
+  Mới học 1..4 màu: trả UNKNOWN; đủ 5 màu mới phân loại theo mẫu đã học.
+  Serial in set_color_reference(...); lưu 5 dòng vào setup sau APDS.begin để dùng lại.
+  set_color_white(100, 120, 80);       Ví dụ RGB mẫu TRẮNG; thay bằng số đo thực tế.
   ObjectColor color = Obj_detectColor();  Đọc màu khối bằng APDS.
   bool valid = false;                 Khai báo cờ trước khi đọc màu.
   ObjectColor color = readObjectColor(valid);
@@ -546,7 +750,7 @@ CẢM BIẾN MÀU:
   Hai cách Obj_detectColor / readObjectColor là lựa chọn thay thế, không cần đọc hai lần.
   Trong setup cần: colorSensorReady = APDS.begin();
   requireColor(OBJECT_BLUE);           Kiểm tra màu; báo lỗi nếu không đúng.
-  Màu: OBJECT_RED, OBJECT_GREEN, OBJECT_BLUE, OBJECT_UNKNOWN.
+  Màu: OBJECT_RED, OBJECT_GREEN, OBJECT_BLUE, OBJECT_YELLOW, OBJECT_PURPLE, OBJECT_UNKNOWN.
   Cảm biến cần APDS.begin thành công trước khi đọc hoặc requireColor.
 
 TÍN HIỆU MÀU GIỮA CÁC ROBOT IOT:
@@ -570,18 +774,20 @@ HÀNG CHỜ TÍN HIỆU (FIFO, tối đa 16 màu):
 
 void setup() {
   Leanbot.begin();
-  Serial.begin(115200); // Web: mở Serial Debug sau khi kết nối USB.
-  Serial.println(F("Leanbot ready"));
-
+  Serial.begin(115200);
+  colorSensorReady = APDS.begin();
+  LbDelay(300);
 }
 
 void loop() {
- 
-  LbMission.begin(TB1A + TB1B);
-  bool valid = false;
-  ObjectColor color = readObjectColor(valid);
-  // if (valid) send_iot_color(color);
-  LbMission.end();
+  // bool valid = false;
+  // ObjectColor color = readObjectColor(valid);
+  // Serial.print(color);
+  // LbMission.begin(TB1A + TB1B);
+  // bool valid = false;
+  // ObjectColor color = readObjectColor(valid);
+  // // if (valid) send_iot_color(color);
+  // LbMission.end();
 }
 
 

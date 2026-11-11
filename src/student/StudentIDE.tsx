@@ -1,3 +1,5 @@
+import { ApiLibrary } from './ApiLibrary'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '../components/ui/tabs'
 import { SerialDebugPanel } from './SerialDebugPanel'
 import { PanelLeft } from 'lucide-react'
 import { Cloud, Save, Sparkles, FilePlus2, FolderOpen, Download, FileCode2, Blocks, Trash2 } from '../components/ui/icons'
@@ -201,7 +203,9 @@ export function StudentIDE({ onSourceChange }: { onSourceChange?: (source: strin
           <small>Tự động lưu từng tệp trên trình duyệt. Đổi tên ở thanh trên.</small>
         </details>
       </aside>
-      <div className="student-editor-column">
+      <Tabs defaultValue="editor" className="student-editor-column">
+      <TabsList className="workspace-view-tabs" aria-label="Nội dung không gian làm việc"><TabsTrigger value="editor">Lập trình</TabsTrigger><TabsTrigger value="library">Thư viện</TabsTrigger></TabsList>
+      <TabsContent value="editor" forceMount className="workspace-view-content">
       <section className="editor-stage" aria-label="Không gian lập trình">
         {project.sourceMode === 'blocks'
           ? project.legacyXml !== undefined
@@ -210,7 +214,9 @@ export function StudentIDE({ onSourceChange }: { onSourceChange?: (source: strin
           : <CppEditor key={project.id} ref={cppRef} value={project.cppSource} diagnostics={project.diagnostics} onChange={(source) => setProject((current) => updateCpp(current, source))} onSave={() => saveAs('cpp')} />}
       </section>
       <SerialDebugPanel serial={serial} connected={connected} busy={busy} />
-      </div>
+      </TabsContent>
+      <TabsContent value="library" className="workspace-library-content"><ApiLibrary /></TabsContent>
+      </Tabs>
     </div>
     <footer className="student-footer"><span><Cloud />Lưu trên trình duyệt</span><span className="footer-help" title={compilerDescription}>{compilerDescription}</span></footer>
     <ConversionDialog candidate={candidate} onCancel={() => setCandidate(null)} onStay={() => { setCandidate(null); setProject((current) => ({ ...current, sourceMode: 'cpp', syncState: 'unsupported-cpp', diagnostics: candidate?.result.diagnostics ?? [] })) }} onPartial={() => { if (candidate) setProject(acceptBlocksCandidate(project, candidate, true)); setCandidate(null) }} />
