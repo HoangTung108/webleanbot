@@ -2,7 +2,7 @@ import {OnlineCompetition} from './onlineCompetition';
 import type {OnlineCommand} from '../src/simulator/onlineCompetition';
 import {isFinitePose,separateRobots} from '../src/simulator/robotCollision';
 import {isValidRobotMessage} from '../src/lib/robotMessage';
-import {normalizeRobotColor} from '../src/lib/robotColorSignal';
+import {normalizeRobotColor, parseSerialColorSignal} from '../src/lib/robotColorSignal';
 /**
  * Multi-Robot WebSocket Server
  * Handles room management and robot state synchronization
@@ -80,7 +80,7 @@ class RobotNetworkServer {
 
   private async handleHttpRequest(request: http.IncomingMessage, response: http.ServerResponse) {
     response.setHeader('Access-Control-Allow-Origin', '*');
-    response.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    response.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS');
     response.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
     if (request.method === 'OPTIONS') {
@@ -105,41 +105,15 @@ class RobotNetworkServer {
       return;
     }
 
-    // GET /api/rooms/:roomId/color
+    // GET / POST / PUT /api/rooms/:roomId/color
     const roomColorMatch = pathname.match(/^\/api\/rooms\/([^/]+)\/color$/);
-    if (roomColorMatch && request.method === 'GET') {
-      const roomId = decodeURIComponent(roomColorMatch[1]).toUpperCase();
-      const wifiClientId = parsedUrl.searchParams.get('clientId');
-      let room = this.rooms.get(roomId);
-      if (wifiClientId) {
-        if (!room) {
-          this.handleCreateRoom({ type: 'create-room', roomId, maxPeers: 2 }, roomId);
-          room = this.rooms.get(roomId);
-        }
-        room?.wifiPeers.add(wifiClientId);
-      }
-      const signal = room?.lastColorSignal;
-      const iotColor = normalizeRobotColor(this.iotAttributes.get(JSON.stringify([roomId, 'Color'])));
-      response.writeHead(200, { 'Content-Type': 'application/json' });
-      response.end(JSON.stringify({
-        ok: true,
-        roomId,
-        color: signal?.color ?? iotColor ?? 'WAITING',
-        peerId: signal?.peerId ?? null,
-        senderRobotId: signal?.senderRobotId ?? null,
-        timestamp: signal?.timestamp ?? null,
-        wifiPeers: room ? [...room.wifiPeers] : [],
-      }));
-      return;
-    }
-
-    // POST /api/rooms/:roomId/color
-    if (roomColorMatch && request.method === 'POST') {
+    if (roomColorMatch && (request.method === 'POST' || request.method === 'PUT' || (request.method === 'GET' && parsedUrl.searchParams.has('color')))) {
       const roomId = decodeURIComponent(roomColorMatch[1]).toUpperCase();
       try {
-        const body = await this.readJsonBody(request);
-        const rawColor = body.color ?? body.payload ?? body;
-        const color = normalizeRobotColor(rawColor);
+        const body = request.method === 'GET' ? {} : await this.readJsonBody(request);
+        const queryColor = parsedUrl.searchParams.get('color');
+        const rawCandidate = queryColor ?? body.color ?? body.value ?? parseSerialColorSignal(String(body.payload ?? '')) ?? body.payload ?? body;
+        const color = normalizeRobotColor(rawCandidate);
         if (!color) {
           response.writeHead(400, { 'Content-Type': 'application/json' });
           response.end(JSON.stringify({
@@ -155,14 +129,15 @@ class RobotNetworkServer {
           room = this.rooms.get(roomId);
         }
 
-        if (room?.password && body.password !== undefined && room.password !== body.password) {
+        const reqPassword = parsedUrl.searchParams.get('password') ?? body.password;
+        if (room?.password && reqPassword !== undefined && room.password !== reqPassword) {
           response.writeHead(403, { 'Content-Type': 'application/json' });
           response.end(JSON.stringify({ ok: false, message: 'Sai mật khẩu phòng.' }));
           return;
         }
 
         const timestamp = typeof body.timestamp === 'number' && Number.isFinite(body.timestamp) ? body.timestamp : Date.now();
-        const senderRobotId = String(body.senderRobotId || body.clientId || 'wifi-robot');
+        const senderRobotId = String(parsedUrl.searchParams.get('senderRobotId') || parsedUrl.searchParams.get('clientId') || body.senderRobotId || body.clientId || 'wifi-robot');
         const colorPayload = {
           type: 'color-signal',
           peerId: senderRobotId,
@@ -172,9 +147,11 @@ class RobotNetworkServer {
         };
 
         this.iotAttributes.set(JSON.stringify([roomId, 'Color']), color);
+        this.iotAttributes.set(JSON.stringify(['', 'Color']), color);
         if (room) {
           room.wifiPeers.add(senderRobotId);
           room.lastColorSignal = { peerId: senderRobotId, color, timestamp, senderRobotId };
+          room.competition?.setIotAttribute('Color', color, roomId);
           const data = JSON.stringify(colorPayload);
           for (const recipient of room.clients.values()) {
             if (recipient.ws.readyState === WebSocket.OPEN) {
@@ -200,54 +177,66 @@ class RobotNetworkServer {
       }
     }
 
-    // GET /api/iot/attribute?assetId=...&attribute=...
-    if (pathname === '/api/iot/attribute' && request.method === 'GET') {
-      const assetId = parsedUrl.searchParams.get('assetId') || '';
-      const attribute = parsedUrl.searchParams.get('attribute') || 'Color';
+    if (roomColorMatch && request.method === 'GET') {
+      const roomId = decodeURIComponent(roomColorMatch[1]).toUpperCase();
       const wifiClientId = parsedUrl.searchParams.get('clientId');
-      const key = JSON.stringify([assetId, attribute]);
-      const upperKey = JSON.stringify([assetId.toUpperCase(), attribute]);
-      const room = assetId ? this.rooms.get(assetId.toUpperCase()) : undefined;
-      if (wifiClientId && room) {
-        room.wifiPeers.add(wifiClientId);
+      let room = this.rooms.get(roomId);
+      if (wifiClientId) {
+        if (!room) {
+          this.handleCreateRoom({ type: 'create-room', roomId, maxPeers: 2 }, roomId);
+          room = this.rooms.get(roomId);
+        }
+        room?.wifiPeers.add(wifiClientId);
       }
-      const value =
-        this.iotAttributes.get(key) ??
-        this.iotAttributes.get(upperKey) ??
-        (attribute === 'Color' && room?.lastColorSignal ? room.lastColorSignal.color : undefined) ??
-        'waiting';
+      const signal = room?.lastColorSignal;
+      const iotColor = normalizeRobotColor(
+        this.iotAttributes.get(JSON.stringify([roomId, 'Color'])) ??
+        room?.competition?.getIotAttribute('Color', roomId)
+      );
       response.writeHead(200, { 'Content-Type': 'application/json' });
-      response.end(JSON.stringify({ ok: true, assetId, attribute, value }));
+      response.end(JSON.stringify({
+        ok: true,
+        roomId,
+        color: signal?.color ?? iotColor ?? 'WAITING',
+        peerId: signal?.peerId ?? null,
+        senderRobotId: signal?.senderRobotId ?? null,
+        timestamp: signal?.timestamp ?? null,
+        wifiPeers: room ? [...room.wifiPeers] : [],
+      }));
       return;
     }
 
-    // POST /api/iot/attribute
-    if (pathname === '/api/iot/attribute' && request.method === 'POST') {
+    // POST / PUT / GET(with value) /api/iot/attribute
+    if (pathname === '/api/iot/attribute' && (request.method === 'POST' || request.method === 'PUT' || (request.method === 'GET' && parsedUrl.searchParams.has('value')))) {
       try {
-        const body = await this.readJsonBody(request);
-        const assetId = String(body.assetId || '');
-        const attribute = String(body.attribute || 'Color');
-        const value = String(body.value ?? '');
+        const body = request.method === 'GET' ? {} : await this.readJsonBody(request);
+        const assetId = String(parsedUrl.searchParams.get('assetId') ?? body.assetId ?? '');
+        const attribute = String(parsedUrl.searchParams.get('attribute') ?? body.attribute ?? 'Color');
+        const value = String(parsedUrl.searchParams.get('value') ?? body.value ?? body.color ?? body.payload ?? '');
         const key = JSON.stringify([assetId, attribute]);
         this.iotAttributes.set(key, value);
+        this.iotAttributes.set(JSON.stringify(['', attribute]), value);
         if (assetId) {
           this.iotAttributes.set(JSON.stringify([assetId.toUpperCase(), attribute]), value);
         }
 
+        const roomId = assetId.toUpperCase();
+        let room = roomId ? this.rooms.get(roomId) : undefined;
+        room?.competition?.setIotAttribute(attribute, value, assetId);
+
         if (attribute === 'Color') {
           const color = normalizeRobotColor(value);
           if (color) {
-            const roomId = assetId.toUpperCase();
-            let room = this.rooms.get(roomId);
             if (!room && roomId) {
               this.handleCreateRoom({ type: 'create-room', roomId, maxPeers: 2 }, roomId);
               room = this.rooms.get(roomId);
             }
             if (room) {
               const timestamp = Date.now();
-              const sender = String(body.clientId || body.senderRobotId || 'iot-wifi-robot');
+              const sender = String(parsedUrl.searchParams.get('clientId') || body.clientId || body.senderRobotId || 'iot-wifi-robot');
               room.wifiPeers.add(sender);
               room.lastColorSignal = { peerId: sender, color, timestamp, senderRobotId: sender };
+              room.competition?.setIotAttribute('Color', color, roomId);
               const data = JSON.stringify({
                 type: 'color-signal',
                 peerId: sender,
@@ -274,6 +263,30 @@ class RobotNetworkServer {
       }
     }
 
+    // GET /api/iot/attribute?assetId=...&attribute=...
+    if (pathname === '/api/iot/attribute' && request.method === 'GET') {
+      const assetId = parsedUrl.searchParams.get('assetId') || '';
+      const attribute = parsedUrl.searchParams.get('attribute') || 'Color';
+      const wifiClientId = parsedUrl.searchParams.get('clientId');
+      const key = JSON.stringify([assetId, attribute]);
+      const upperKey = JSON.stringify([assetId.toUpperCase(), attribute]);
+      const room = assetId ? this.rooms.get(assetId.toUpperCase()) : undefined;
+      if (wifiClientId && room) {
+        room.wifiPeers.add(wifiClientId);
+      }
+      const compValue = room?.competition?.getIotAttribute(attribute, assetId);
+      const value =
+        this.iotAttributes.get(key) ??
+        this.iotAttributes.get(upperKey) ??
+        (compValue && compValue !== 'waiting' ? compValue : undefined) ??
+        (attribute === 'Color' && room?.lastColorSignal ? room.lastColorSignal.color : undefined) ??
+        (!assetId ? this.iotAttributes.get(JSON.stringify(['', attribute])) : undefined) ??
+        'waiting';
+      response.writeHead(200, { 'Content-Type': 'application/json' });
+      response.end(JSON.stringify({ ok: true, assetId, attribute, value }));
+      return;
+    }
+
     response.writeHead(404, { 'Content-Type': 'application/json' });
     response.end(JSON.stringify({ ok: false, message: 'Endpoint không tồn tại.' }));
   }
@@ -289,11 +302,17 @@ class RobotNetworkServer {
         }
       });
       request.on('end', () => {
-        if (!body.trim()) return resolve({});
+        const trimmed = body.trim();
+        if (!trimmed) return resolve({});
         try {
-          resolve(JSON.parse(body));
+          resolve(JSON.parse(trimmed));
         } catch {
-          resolve({ payload: body.trim() });
+          if (trimmed.includes('=') && !trimmed.startsWith('{')) {
+            const params = Object.fromEntries(new URLSearchParams(trimmed));
+            resolve({ ...params, payload: trimmed });
+            return;
+          }
+          resolve({ payload: trimmed });
         }
       });
       request.on('error', reject);
@@ -433,10 +452,6 @@ class RobotNetworkServer {
       }
 
       case 'color-signal': {
-        if (room.competition) {
-          client.ws.send(JSON.stringify({ type: 'error', message: 'Không thể gửi tín hiệu màu trong phiên thi online.' }));
-          break;
-        }
         const rawColor = message.color ?? (typeof message.payload === 'string' ? message.payload : (message.payload as any)?.color);
         const color = normalizeRobotColor(rawColor);
         if (!color) {
@@ -447,11 +462,9 @@ class RobotNetworkServer {
         const senderRobotId = message.senderRobotId || client.robotId || client.id;
         room.lastColorSignal = { peerId: client.id, color, timestamp, senderRobotId };
         this.iotAttributes.set(JSON.stringify([roomId.toUpperCase(), 'Color']), color);
+        this.iotAttributes.set(JSON.stringify(['', 'Color']), color);
+        room.competition?.setIotAttribute('Color', color, roomId);
         const recipients = [...room.clients.values()].filter(peer => peer !== client && peer.ws.readyState === WebSocket.OPEN);
-        if (!recipients.length && room.wifiPeers.size === 0) {
-          client.ws.send(JSON.stringify({ type: 'error', message: 'Không có robot khác trong phòng để nhận tín hiệu màu.' }));
-          break;
-        }
         if (recipients.some(peer => peer.ws.bufferedAmount > 65536)) {
           client.ws.send(JSON.stringify({ type: 'error', message: 'Kết nối nhận đang bận; tín hiệu màu chưa được gửi.' }));
           break;

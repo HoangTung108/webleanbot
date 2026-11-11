@@ -44,9 +44,83 @@ export class RobotNetworkManager {
   private competitionProtocol=0;
   private robotId: string | null = null;
   private lastColorSignal: ColorSignalMessage | null = null;
+  private roomColorCache = new Map<string, RobotColor>();
   getCompetitionState(){return this.competition;}
   getRobotId(){return this.robotId;}
   getLastColorSignal(){return this.lastColorSignal;}
+  getCachedRoomColor(roomId: string): RobotColor | null {
+    return this.roomColorCache.get(roomId.trim().toUpperCase()) ?? null;
+  }
+  getHttpBaseUrl(): string {
+    const url = new URL(this.serverUrl);
+    if (url.protocol === 'ws:') url.protocol = 'http:';
+    if (url.protocol === 'wss:') url.protocol = 'https:';
+    url.pathname = url.pathname.replace(/\/ws\/?$/, '') || '/';
+    url.search = '';
+    return url.origin + (url.pathname === '/' ? '' : url.pathname);
+  }
+  async postColorSignalHttp(roomId: string, colorInput: RobotColor | string, options?: { senderRobotId?: string; password?: string }): Promise<boolean> {
+    const cleanRoom = roomId.trim().toUpperCase();
+    const color = normalizeRobotColor(colorInput);
+    if (!cleanRoom || !color) return false;
+    this.roomColorCache.set(cleanRoom, color);
+    const timestamp = Date.now();
+    const senderRobotId = options?.senderRobotId || this.robotId || this.clientId;
+    const signal: ColorSignalMessage = {
+      type: 'color-signal',
+      color,
+      peerId: this.clientId,
+      senderRobotId,
+      timestamp,
+    };
+    this.lastColorSignal = signal;
+    this.emit('color-signal', signal);
+    try {
+      const endpoint = `${this.getHttpBaseUrl()}/api/rooms/${encodeURIComponent(cleanRoom)}/color`;
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          color,
+          senderRobotId,
+          clientId: this.clientId,
+          password: options?.password ?? this.password,
+          timestamp,
+        }),
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  }
+  async fetchColorSignalHttp(roomId: string): Promise<RobotColor | null> {
+    const cleanRoom = roomId.trim().toUpperCase();
+    if (!cleanRoom) return null;
+    try {
+      const endpoint = `${this.getHttpBaseUrl()}/api/rooms/${encodeURIComponent(cleanRoom)}/color?clientId=${encodeURIComponent(this.clientId)}`;
+      const res = await fetch(endpoint);
+      if (!res.ok) return this.getCachedRoomColor(cleanRoom);
+      const data = await res.json();
+      const color = normalizeRobotColor(data?.color);
+      if (color) {
+        this.roomColorCache.set(cleanRoom, color);
+        if (color !== 'WAITING') {
+          const signal: ColorSignalMessage = {
+            type: 'color-signal',
+            color,
+            peerId: data.peerId || 'wifi-peer',
+            senderRobotId: data.senderRobotId || data.peerId || 'wifi-peer',
+            timestamp: typeof data.timestamp === 'number' ? data.timestamp : Date.now(),
+          };
+          this.lastColorSignal = signal;
+        }
+        return color;
+      }
+    } catch {
+      // Fallback to cache on network error
+    }
+    return this.getCachedRoomColor(cleanRoom);
+  }
   isHost(){return this.ownerId===this.clientId;}
   sendCompetitionCommand(command:OnlineCommand){
     if(!this.isConnected()||this.competitionProtocol!==1){this.emit('error',undefined,'Máy chủ chưa hỗ trợ phiên thi online. Cần triển khai backend mới.');return;}
@@ -303,6 +377,9 @@ export class RobotNetworkManager {
             timestamp: typeof message.timestamp === 'number' ? message.timestamp : Date.now(),
           };
           this.lastColorSignal = signal;
+          if (this.roomId) {
+            this.roomColorCache.set(this.roomId.toUpperCase(), color);
+          }
           this.emit('color-signal', signal);
         } else {
           this.emit('error', undefined, 'Máy chủ gửi tín hiệu màu không hợp lệ.');
@@ -351,14 +428,19 @@ export class RobotNetworkManager {
   /**
    * Send color signal to other robots in the room
    */
-  sendColorSignal(colorInput: RobotColor | string, options?: { senderRobotId?: string }): boolean {
-    if (!this.isConnected()) {
-      this.emit('error', undefined, 'Chưa kết nối phòng WebSocket.');
-      return false;
-    }
+  sendColorSignal(colorInput: RobotColor | string, options?: { senderRobotId?: string; roomId?: string }): boolean {
     const color = normalizeRobotColor(colorInput);
     if (!color) {
       this.emit('error', undefined, 'Màu không hợp lệ. Các màu được hỗ trợ: RED, GREEN, BLUE, YELLOW, PURPLE, UNKNOWN, WAITING.');
+      return false;
+    }
+    const targetRoom = (options?.roomId || this.roomId || '').trim().toUpperCase();
+    if (!this.isConnected()) {
+      if (targetRoom) {
+        void this.postColorSignalHttp(targetRoom, color, options);
+        return true;
+      }
+      this.emit('error', undefined, 'Chưa kết nối phòng WebSocket.');
       return false;
     }
     if (!this.ws || this.ws.bufferedAmount > 65536) {
@@ -374,8 +456,13 @@ export class RobotNetworkManager {
         senderRobotId,
         timestamp,
       };
-      this.lastColorSignal = { ...payload, peerId: this.clientId };
+      const localSignal: ColorSignalMessage = { ...payload, peerId: this.clientId };
+      this.lastColorSignal = localSignal;
+      if (targetRoom) {
+        this.roomColorCache.set(targetRoom, color);
+      }
       this.ws.send(JSON.stringify(payload));
+      this.emit('color-signal', localSignal);
       return true;
     } catch (error) {
       this.emit('error', undefined, `Không thể gửi tín hiệu màu: ${error instanceof Error ? error.message : String(error)}`);

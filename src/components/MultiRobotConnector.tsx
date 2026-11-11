@@ -47,6 +47,7 @@ export function MultiRobotConnector() {
       if (event.data?.color) {
         setLastColor(event.data.color);
         setLastSender(event.data.senderRobotId || event.data.peerId || null);
+        setError(null);
       }
     };
 
@@ -113,6 +114,7 @@ export function MultiRobotConnector() {
           {isConnected && currentRoom ? (
             <>
               <div style={styles.dropdownHeader}><Check size={14} /> Connected</div>
+              {error && <div style={styles.dropdownError}>{error}</div>}
               <div style={styles.dropdownRow}>
                 <span style={styles.dropdownLabel}>Room:</span>
                 <span style={styles.dropdownValue}>{currentRoom}</span>

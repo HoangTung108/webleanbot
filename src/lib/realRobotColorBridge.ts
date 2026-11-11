@@ -137,6 +137,7 @@ export class RealRobotColorBridge {
     this.boundNetworkListener = (event: NetworkEvent) => {
       const data = event.data as ColorSignalMessage | undefined;
       if (!data || !data.color) return;
+      if (data.peerId && data.peerId === this.networkManager.getClientId()) return;
 
       const entry: ColorExchangeEntry = {
         id: `in-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,

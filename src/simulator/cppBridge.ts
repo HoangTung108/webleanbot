@@ -6,6 +6,7 @@ import { ROUND_LIMIT_MS } from './scoring';
 import { CppRuntime } from './cppRuntime';
 import { RobotSimulator } from './robotSimulator';
 import { robotNetworkManager } from '../lib/robotNetworkManager';
+import { parseSerialColorSignal } from '../lib/robotColorSignal';
 
 export interface SimulatorCommand {
   type: 'motor' | 'delay' | 'sensor' | 'gripper' | 'log';
@@ -62,18 +63,34 @@ export class CppSimulatorBridge {
         rawLine: () => this.simulator.getRawLineReadings(),
         color: () => this.simulator.getColorReading(),
         led: (rgb,brightness) => this.simulator.setLedColors(rgb,brightness),
-        iotRead: (attribute) => {
-          if (attribute === 'Color' && robotNetworkManager.isConnected()) {
-            return robotNetworkManager.getLastColorSignal()?.color ?? 'waiting';
+        iotRead: (attribute, assetId) => {
+          if (attribute === 'Color') {
+            if (robotNetworkManager.isConnected()) {
+              return robotNetworkManager.getLastColorSignal()?.color ?? 'waiting';
+            }
+            if (assetId) {
+              void robotNetworkManager.fetchColorSignalHttp(assetId);
+              return robotNetworkManager.getCachedRoomColor(assetId) ?? 'waiting';
+            }
           }
           return undefined;
         },
-        iotWrite: (attribute, value) => {
-          if (attribute === 'Color' && robotNetworkManager.isConnected()) {
-            robotNetworkManager.sendColorSignal(value);
+        iotWrite: (attribute, value, assetId) => {
+          if (attribute === 'Color') {
+            if (robotNetworkManager.isConnected()) {
+              robotNetworkManager.sendColorSignal(value);
+            } else if (assetId) {
+              void robotNetworkManager.postColorSignalHttp(assetId, value);
+            }
           }
         },
-        log: message => this.logs.push(message),
+        log: message => {
+          this.logs.push(message);
+          const serialColor = parseSerialColorSignal(message);
+          if (serialColor && robotNetworkManager.isConnected()) {
+            robotNetworkManager.sendColorSignal(serialColor);
+          }
+        },
       },this.distanceScale);
       this.commandQueue = { commands: [], currentIndex: 0, isExecuting: false };
       this.logs = [];

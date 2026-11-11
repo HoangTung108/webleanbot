@@ -14,6 +14,17 @@ export class OnlineCompetition {
  readonly sessionId=randomUUID();readonly world=new MissionWorld(SYNAPSE_CITY);readonly flow=new CompetitionFlow();
  readonly players=new Map<string,Player>();revision=0;frame=0;elapsedMs=0;rate=1;notice='';
  private iotAttributes=new Map<string,string>();
+ setIotAttribute(attribute:string,value:string,assetId=''){
+  this.iotAttributes.set(JSON.stringify([assetId,attribute]),value);
+  this.iotAttributes.set(JSON.stringify([assetId.toUpperCase(),attribute]),value);
+  this.iotAttributes.set(JSON.stringify(['',attribute]),value);
+ }
+ getIotAttribute(attribute:string,assetId=''):string{
+  return this.iotAttributes.get(JSON.stringify([assetId,attribute]))
+   ??this.iotAttributes.get(JSON.stringify([assetId.toUpperCase(),attribute]))
+   ??this.iotAttributes.get(JSON.stringify(['',attribute]))
+   ??'waiting';
+ }
  private pending=0;private lastWall?:number;
  constructor(public ownerId:string,ids:string[]){for(const id of ids)this.addPlayer(id);this.resetField();}
  get canJoin(){return ['setup','preparation'].includes(this.flow.phase)&&![...this.players.values()].some(p=>p.locked);}
@@ -41,7 +52,7 @@ export class OnlineCompetition {
   this.pending=0;this.lastWall=undefined;
  }
  private runtime(p:Player,code:string){
-  return new CppRuntime(code,{motors:(l,r)=>p.robot.setMotorSpeeds(l,r),advance:dt=>p.robot.advanceSimulatedTime(dt*1000),gripper:(l,r,d)=>p.robot.setGripper(l,r,d),lineMask:()=>p.robot.getLineMask(),rawLine:()=>p.robot.getRawLineReadings(),color:()=>p.robot.getColorReading(),led:(rgb,b)=>p.robot.setLedColors(rgb,b),iotRead:(attr,asset)=>this.iotAttributes.get(JSON.stringify([asset,attr]))??'waiting',iotWrite:(attr,value,asset)=>{this.iotAttributes.set(JSON.stringify([asset,attr]),value);},sensors:()=>p.robot.getSensorReadings()});
+  return new CppRuntime(code,{motors:(l,r)=>p.robot.setMotorSpeeds(l,r),advance:dt=>p.robot.advanceSimulatedTime(dt*1000),gripper:(l,r,d)=>p.robot.setGripper(l,r,d),lineMask:()=>p.robot.getLineMask(),rawLine:()=>p.robot.getRawLineReadings(),color:()=>p.robot.getColorReading(),led:(rgb,b)=>p.robot.setLedColors(rgb,b),iotRead:(attr,asset)=>this.getIotAttribute(attr,asset),iotWrite:(attr,value,asset)=>{this.setIotAttribute(attr,value,asset);},sensors:()=>p.robot.getSensorReadings()});
  }
  command(id:string,cmd:OnlineCommand){
   const p=this.players.get(id);if(!p)throw new Error('Robot không thuộc phiên thi.');

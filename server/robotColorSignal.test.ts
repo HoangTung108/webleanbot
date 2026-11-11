@@ -64,15 +64,16 @@ afterAll(() => {
 })
 
 describe('Real Robot Color Signals over WebSocket', () => {
-  it('exchanges color signals bidirectionally between 2 robots in the same room', async () => {
+  it('exchanges color signals bidirectionally between 2 robots in the same room and stores signal when sent alone', async () => {
     const { socket: robot1 } = await connect('real-robot-1', 'COLOR_ROOM', true)
 
-    // Cannot send color when alone in the room
-    const missing = next(robot1, 'error')
-    robot1.send(JSON.stringify({ type: 'color-signal', color: 'RED' }))
-    expect((await missing).message).toContain('Không có robot khác')
+    // Robot 1 can send color even before Robot 2 joins the room
+    robot1.send(JSON.stringify({ type: 'color-signal', color: 'YELLOW' }))
+    await new Promise(resolve => setTimeout(resolve, 40))
 
-    const { socket: robot2 } = await connect('real-robot-2', 'COLOR_ROOM', false)
+    // When Robot 2 joins, it immediately receives the lastColorSignal in room-joined
+    const { socket: robot2, joinData: joinData2 } = await connect('real-robot-2', 'COLOR_ROOM', false)
+    expect(joinData2.lastColorSignal?.color).toBe('YELLOW')
 
     // Connect a robot to a different room to verify isolation
     const { socket: robot3 } = await connect('other-robot-3', 'OTHER_ROOM', true)
@@ -170,7 +171,20 @@ describe('Real Robot Color Signals over WebSocket', () => {
     const fromWsJson = await getFromWs.json()
     expect(fromWsJson.color).toBe('YELLOW')
 
-    // 6. Invalid color via POST returns 400
+    // 6. Supports GET with ?color=... and plain text / form-urlencoded POST for ESP8266/ESP32 WiFi modules
+    const getWriteRes = await fetch(`${baseUrl}/api/rooms/WIFI_ROOM/color?color=RED&senderRobotId=esp-get-bot`)
+    expect(getWriteRes.status).toBe(200)
+    expect((await getWriteRes.json()).color).toBe('RED')
+
+    const formWriteRes = await fetch(`${baseUrl}/api/rooms/WIFI_ROOM/color`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'color=BLUE&senderRobotId=esp-form-bot',
+    })
+    expect(formWriteRes.status).toBe(200)
+    expect((await formWriteRes.json()).color).toBe('BLUE')
+
+    // 7. Invalid color via POST returns 400
     const badRes = await fetch(`${baseUrl}/api/rooms/WIFI_ROOM/color`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

@@ -1219,8 +1219,8 @@ bool wait_iot_color(ObjectColor expected, unsigned long timeoutMs) {
 // 3. send_robot_color(BLUE);                // Gửi màu trực tiếp qua WiFi
 // 4. wait_robot_color(GREEN, 30000UL);      // Đợi nhận màu từ robot đối tác qua WiFi
 void send_robot_color(ObjectColor color) {
+  send_iot_color(color);
   if (wifiColorMode) {
-    send_iot_color(color);
     return;
   }
   Serial.print(F("COLOR:"));
@@ -1235,15 +1235,14 @@ void send_robot_color(ObjectColor color) {
 }
 
 ObjectColor read_robot_color() {
-  if (wifiColorMode) {
+  if (wifiColorMode || Serial.available() <= 0) {
     return read_iot_color();
   }
-  if (Serial.available() <= 0) return UNKNOWN;
   String line = Serial.readStringUntil('\n');
   line.trim();
   line.toUpperCase();
   int idx = line.indexOf("COLOR:");
-  if (idx < 0) return UNKNOWN;
+  if (idx < 0) return read_iot_color();
   String colorStr = line.substring(idx + 6);
   colorStr.trim();
   ObjectColor color = UNKNOWN;
@@ -1270,7 +1269,7 @@ bool wait_robot_color(ObjectColor expected, unsigned long timeoutMs) {
   }
   const unsigned long started = millis();
   while (millis() - started < timeoutMs) {
-    const ObjectColor received = read_real_robot_color();
+    const ObjectColor received = read_robot_color();
     if (received == expected) return true;
     if (iot_queue_count() > 0 && peek_iot_color() == expected) {
       pop_iot_color();
@@ -1282,6 +1281,18 @@ bool wait_robot_color(ObjectColor expected, unsigned long timeoutMs) {
   }
   failMission(ERR_IOT_TIMEOUT);
   return false;
+}
+
+void send_real_robot_color(ObjectColor color) {
+  send_robot_color(color);
+}
+
+ObjectColor read_real_robot_color() {
+  return read_robot_color();
+}
+
+bool wait_real_robot_color(ObjectColor expected, unsigned long timeoutMs) {
+  return wait_robot_color(expected, timeoutMs);
 }
 
 // Chỉ nhận lượt mới sau khi nhả cả ba nút ổn định.
