@@ -57,6 +57,7 @@ const int LINE_KP = 220;
 const unsigned long LINE_STEP_MS = 10UL;
 const unsigned long LINE_LOST_MS = 320UL;
 const unsigned long LINE_JUNCTION_TIMEOUT_MS = 14000UL;
+const unsigned long LINE_DISTANCE_TIMEOUT_MS = 9000UL;
 const float LINE_JUNCTION_LIMIT_MM = 750.0f;
 const float LINE_JUNCTION_SKIP_MM = 18.0f;
 const float JUNCTION_CENTER_MM = 20.0f;
@@ -135,8 +136,6 @@ void turn_angle(int speed, float angle_deg, TurnMode mode) {
     if (now - lastAdvance > 1700UL) { failMission(ERR_TURN_STALL); return; }
 
     const float ratio = constrain((remaining - TURN_BRAKE_LEAD_DEG) / TURN_SLOW_ZONE, 0.0f, 1.0f);
-    // Braking velocity follows sqrt(remaining distance). The old linear
-    // envelope spent too long crawling through the last few degrees.
     int allowedSpeed = TURN_FINISH_SPEED + (int)lroundf((speed - TURN_FINISH_SPEED) * sqrtf(ratio));
     if (currentSpeed > allowedSpeed) currentSpeed = allowedSpeed;
     else if (now - lastRamp >= 12UL) {
@@ -278,25 +277,24 @@ static int lineErrorForMask(int mask) {
   switch (mask) {
     case 0b1000: return -3;
     case 0b1100: return -2;
-    case 0b0100: return -1;
-    case 0b1110: return -1;
-    case 0b0110: return  0;
-    case 0b1111: return  0;
-    case 0b0010: return  1;
-    case 0b0111: return  1;
-    case 0b0011: return  2;
-    case 0b0001: return  3;
+    case 0b0100: case 0b1110: return -1;
+    case 0b0110: case 0b1111: return 0;
+    case 0b0010: case 0b0111: return 1;
+    case 0b0011: return 2;
+    case 0b0001: return 3;
     default: return lastLineError;
   }
 }
 
-void runFollowLine(int bits) {
-  if (bits != 0) {
-    lastLineSeenTime = millis();
-    lastLineError = lineErrorForMask(bits);
-  } else if (millis() - lastLineSeenTime >= LINE_LOST_MS) {
-    failMission(ERR_LINE_LOST); return;
-  }
+static bool lineAvailable(int bits) {
+  if (bits != 0) { lastLineSeenTime = millis(); return true; }
+  if (millis() - lastLineSeenTime < LINE_LOST_MS) return true;
+  failMission(ERR_LINE_LOST);
+  return false;
+}
+
+static void driveLine(int bits) {
+  if (bits != 0) lastLineError = lineErrorForMask(bits);
   const int correction = LINE_KP * lastLineError;
   const int desiredL = constrain(LINE_SPEED + correction, 100, 1250);
   const int desiredR = constrain(LINE_SPEED - correction, 100, 1250);
@@ -304,130 +302,116 @@ void runFollowLine(int bits) {
   lastLineCmdR += constrain(desiredR - lastLineCmdR, -110, 110);
   LbMotion.runLR(lastLineCmdL, lastLineCmdR);
 }
+
+void runFollowLine(int bits) { if (lineAvailable(bits)) driveLine(bits); }
 void runFollowLine() { runFollowLine(LbIRLine.read()); }
 
-void followLineUntilJunction() {
+static void followLineCore(int distanceMm, bool untilJunction) {
+  if (distanceMm < 0) { failMission(ERR_INVALID_MOVE); return; }
   resetMotionState();
+  junctionPending = false;
+  const float origin = (float)LbMotion.getDistanceMm();
   const unsigned long started = millis();
-  const long origin = LbMotion.getDistanceMm();
+  const unsigned long timeout = untilJunction ? LINE_JUNCTION_TIMEOUT_MS : LINE_DISTANCE_TIMEOUT_MS;
   bool armed = false;
   int clearFrames = 0, crossingFrames = 0;
-
   while (true) {
-    const unsigned long now = millis();
     const float advanced = fabsf((float)LbMotion.getDistanceMm() - origin);
-    if (now - started > LINE_JUNCTION_TIMEOUT_MS || advanced > LINE_JUNCTION_LIMIT_MM) {
-      failMission(ERR_JUNCTION_TIMEOUT); break;
+    if (!untilJunction && advanced >= distanceMm) break;
+    if (millis() - started > timeout || (untilJunction && advanced > LINE_JUNCTION_LIMIT_MM)) {
+      failMission(ERR_JUNCTION_TIMEOUT); return;
     }
     const int bits = LbIRLine.read();
-    // Ignore the starting intersection, require a clear segment first.
-    if (!armed) {
-      if (advanced >= LINE_JUNCTION_SKIP_MM && bits != 0b1111 && bits != 0) {
-        if (++clearFrames >= 3) armed = true;
-      } else clearFrames = 0;
-    } else {
-      if (bits == 0b1111) {
-        if (++crossingFrames >= 3) {
-          LbMotion.stopAndWait();
-          junctionPending = true;
-          resetMotionState();
-          return;
-        }
-      } else crossingFrames = 0;
+    if (!lineAvailable(bits)) return;
+    if (untilJunction) {
+      if (!armed) {
+        clearFrames = (advanced >= LINE_JUNCTION_SKIP_MM && bits != 0b1111 && bits != 0) ? clearFrames + 1 : 0;
+        armed = clearFrames >= 3;
+      } else {
+        crossingFrames = bits == 0b1111 ? crossingFrames + 1 : 0;
+        if (crossingFrames >= 3) { junctionPending = true; break; }
+      }
     }
-    if (bits == 0 && now - lastLineSeenTime >= LINE_LOST_MS) { failMission(ERR_LINE_LOST); return; }
-    runFollowLine(bits);
+    driveLine(bits);
     LbDelay((unsigned int)LINE_STEP_MS);
   }
   LbMotion.stopAndWait();
+  resetMotionState();
 }
 
+void followLineDistance(int distanceMm) { followLineCore(distanceMm, false); }
+void followLineUntilJunction() { followLineCore(0, true); }
 void centerDetectedJunction() {
   if (!junctionPending) return;
   junctionPending = false;
   move_tank(450, 450, JUNCTION_CENTER_MM / 10.0f);
 }
-
-void followLineMultipleJunctions(int junctionCount) {
-  if (junctionCount <= 0) return;
-  for (int i = 0; i < junctionCount; ++i) {
+void followLineMultipleJunctions(int count) {
+  for (int i = 0; i < count; ++i) {
     if (i > 0) centerDetectedJunction();
     followLineUntilJunction();
     if (!junctionPending) return;
   }
 }
-
 void goToJunction() {
   if (!junctionPending) followLineUntilJunction();
   centerDetectedJunction();
 }
 
-void followLineDistance(int distanceMm) {
-  if (distanceMm < 0) return;
-  resetMotionState();
-  long origin = LbMotion.getDistanceMm();
-  unsigned long started = millis();
-  while ((long)LbMotion.getDistanceMm() - origin < distanceMm) {
-    if (millis() - started > 9000UL) { failMission(ERR_JUNCTION_TIMEOUT); return; }
-    const int bits = LbIRLine.read();
-    if (bits == 0 && millis() - lastLineSeenTime >= LINE_LOST_MS) { failMission(ERR_LINE_LOST); return; }
-    runFollowLine(bits);
-    LbDelay((unsigned int)LINE_STEP_MS);
-  }
-  LbMotion.stopAndWait();
-  resetMotionState();
-}
-
-
 enum ObjectColor { OBJECT_UNKNOWN, OBJECT_RED, OBJECT_GREEN, OBJECT_BLUE };
 
 bool readAPDSUnderLight(CRGB light, int &r, int &g, int &b) {
-  LbRGB.fillColor(light); LbRGB.show(); LbDelay(35);
+  LbRGB.fillColor(light); LbRGB.show();
+  APDS.colorAvailable(); // Enable sampling before the light-settling delay.
+  LbDelay(35);
   const unsigned long started = millis();
   while (!APDS.colorAvailable()) {
     if (millis() - started > 850UL) return false;
     LbDelay(5);
   }
-  APDS.readColor(r, g, b);
-  return true;
+  return APDS.readColor(r, g, b);
 }
 
-ObjectColor Obj_detectColor() {
+static ObjectColor classifyColor(int red, int green, int blue) {
+  if (red > 3 && red - max(green, blue) >= 2) return OBJECT_RED;
+  if (green > 3 && green - max(red, blue) >= 2) return OBJECT_GREEN;
+  if (blue > 3 && blue - max(red, green) >= 2) return OBJECT_BLUE;
+  return OBJECT_UNKNOWN;
+}
+
+ObjectColor readObjectColor(bool &valid) {
+  valid = false;
   if (!colorSensorReady) { failMission(ERR_COLOR_SENSOR); return OBJECT_UNKNOWN; }
-  int rRed=0, gGreen=0, bBlue=0, r=0,g=0,b=0;
-  int ambientR=0, ambientG=0, ambientB=0;
+  const CRGB lights[4] = {CRGB::Red, CRGB::Lime, CRGB::Blue, CRGB::Black};
+  // Rows: red/green/blue illumination and ambient; columns: sensor R/G/B.
+  int samples[4][3];
   const int saved = LbRGB.getBrightness();
   LbRGB.setBrightness(255);
-  bool good = readAPDSUnderLight(CRGB::Red, rRed, g, b);
-  if (good) good = readAPDSUnderLight(CRGB::Lime, r, gGreen, b);
-  if (good) good = readAPDSUnderLight(CRGB::Blue, r, g, bBlue);
-  if (good) good = readAPDSUnderLight(CRGB::Black, ambientR, ambientG, ambientB);
+  bool good = true;
+  for (int i = 0; i < 4 && good; ++i) good = readAPDSUnderLight(lights[i], samples[i][0], samples[i][1], samples[i][2]);
   LbRGB.setBrightness(saved);
   if (!good) { failMission(ERR_COLOR_SENSOR); return OBJECT_UNKNOWN; }
-  const int red = max(0, rRed - ambientR);
-  const int green = max(0, gGreen - ambientG);
-  const int blue = max(0, bBlue - ambientB);
+  const int red = max(0, samples[0][0] - samples[3][0]);
+  const int green = max(0, samples[1][1] - samples[3][1]);
+  const int blue = max(0, samples[2][2] - samples[3][2]);
 #if DEBUG_SERIAL
   Serial.print(F("Color RGB: ")); Serial.print(red); Serial.print(' ');
   Serial.print(green); Serial.print(' '); Serial.println(blue);
 #endif
-  ObjectColor color = OBJECT_UNKNOWN;
-  if (red > 3 && red >= green + 2 && red >= blue + 2) color = OBJECT_RED;
-  if (green > 3 && green >= red + 2 && green >= blue + 2) color = OBJECT_GREEN;
-  if (blue > 3 && blue >= red + 2 && blue >= green + 2) color = OBJECT_BLUE;
-  if (color == OBJECT_RED) LbRGB.fillColor(CRGB::Red);
-  else if (color == OBJECT_GREEN) LbRGB.fillColor(CRGB::Green);
-  else if (color == OBJECT_BLUE) LbRGB.fillColor(CRGB::Blue);
-  else LbRGB.fillColor(CRGB(50, 50, 50));
-  LbRGB.show();
+  valid = true;
+  const ObjectColor color = classifyColor(red, green, blue);
+  const CRGB colors[4] = {CRGB(50, 50, 50), CRGB::Red, CRGB::Green, CRGB::Blue};
+  LbRGB.fillColor(colors[(int)color]); LbRGB.show();
   return color;
 }
 
+ObjectColor Obj_detectColor() { bool valid; return readObjectColor(valid); }
 void requireColor(ObjectColor expected) {
 #if BOARD_MODE != BOARD_PRIMARY
-  if (Obj_detectColor() != expected) failMission(ERR_COLOR_MISMATCH);
+  bool valid;
+  const ObjectColor color = readObjectColor(valid);
+  if (valid && color != expected) failMission(ERR_COLOR_MISMATCH);
 #else
-  // Primary missions do not require an object-color check.
   (void)expected;
 #endif
 }
@@ -436,7 +420,9 @@ void requireColor(ObjectColor expected) {
 #if MISSION_ROLE != ROLE_SINGLE
 void missionIotA() {
   FromCRLtoE2();
-  const ObjectColor color = Obj_detectColor();
+  bool valid;
+  const ObjectColor color = readObjectColor(valid);
+  if (!valid) { IoTColor.write("Unknown"); return; }
   if (color == OBJECT_BLUE) IoTColor.write("Blue");
   else { IoTColor.write("Unknown"); failMission(ERR_COLOR_MISMATCH); return; }
   // Source Fullmision_LeanbotA route, distinct from standalone.

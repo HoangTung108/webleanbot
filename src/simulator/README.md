@@ -347,3 +347,14 @@ set_wifi("TEN_WIFI", "MAT_KHAU");
 Đặt các lệnh sau `Leanbot.begin()` trong `setup()`. Với chế độ IoT A/B, `setup()` đã gọi khai báo/kết nối bằng các macro `WIFI_SSID`, `WIFI_PASSWORD`, `IOT_ASSET_ID`; sửa các macro này hoặc thay đoạn đó bằng cấu hình tùy chọn. SSID trống báo lỗi cấu hình; password trống được truyền nguyên vẹn cho mạng mở. Không in mật khẩu ra Serial.
 
 Kiểm thử Wi-Fi biên dịch/chạy C++ với API giả lập để kiểm tra lưu cấu hình, thứ tự/tham số gọi hàm và các trường hợp cấu hình trống; chưa xác minh kết nối Wi-Fi trên mạch thật. Các hàm tuyến đường/nhiệm vụ như `missionPrimaryFull`, `FromCRLtoE2` vẫn là phần sketch riêng cần cung cấp khi nạp toàn bộ base file. Code lộ trình simulator chỉ lấy nhóm hàm chuyển động/dò line, không chạy kết nối mạng phần cứng.
+
+
+### Dò line và kiểm tra màu trong base code
+
+Các tên hàm cũ được giữ: `runFollowLine`, `followLineDistance`, `followLineUntilJunction`, `followLineMultipleJunctions`, `goToJunction`, `Obj_detectColor`, `requireColor`.
+
+Dò theo khoảng cách và tìm giao lộ dùng chung `followLineCore`; kiểm tra mất line dùng chung `lineAvailable`, phần điều khiển bánh xe nằm trong `driveLine`. Giữ nguyên tốc độ, hệ số PID, bước 10 ms, bỏ qua giao lộ xuất phát 18 mm và xác nhận bằng 3 mẫu liên tiếp. Một lần dò mới xóa trạng thái giao lộ cũ; lỗi không khiến `goToJunction` căn tâm một giao lộ chưa tìm thấy. Khoảng cách bắt đầu giữ phần lẻ encoder.
+
+Đọc màu bật lấy mẫu trước khoảng chờ ổn định 35 ms, lặp qua đèn đỏ/xanh lá/xanh dương/tắt đèn, lấy kênh tương ứng rồi trừ mẫu nền. `readObjectColor(bool &valid)` phân biệt lỗi đọc cảm biến với màu UNKNOWN; `classifyColor` giữ ngưỡng tín hiệu >3 và chênh lệch kênh ít nhất 2. Độ sáng được khôi phục cả khi đọc thất bại/timeout. `requireColor` chỉ báo sai màu sau một lần đọc hợp lệ; Primary vẫn bỏ qua kiểm tra màu. Trạng thái trả về của `APDS.readColor` được xử lý theo [mã nguồn thư viện Arduino](https://github.com/arduino-libraries/Arduino_APDS9960/blob/master/src/Arduino_APDS9960.cpp).
+
+Kiểm thử native C++ dùng dữ liệu cảm biến giả lập cho đường thẳng, nhiều giao lộ, mất line/timeout, màu thiếu tín hiệu/gần bằng nhau, trừ nền, lỗi đọc và vai trò Primary; chưa thay cho kiểm tra cảm biến trên bo thật.
