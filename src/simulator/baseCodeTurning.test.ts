@@ -7,7 +7,7 @@ function run(fractional=false,multiplier=1){
  const physics=vi.spyOn(robot,'advanceSimulatedTime');
  const bridge=new CppSimulatorBridge(robot);let code=generateRouteCode(robot.getRobotPose(),[{kind:'turn',angle:90},{kind:'turn',angle:-90}]);
  code=code.replace('turn_two_wheels(2000, 90.00);','turn_two_wheels(2000, 90.00); Serial.println(LbMotion.getRotationDeg());');
- if(fractional)code=code.replaceAll('LbDelay(MOTION_FEEDBACK_MS)','LbDelay(0.1f)');
+ if(fractional)code=code.replaceAll('robot_delay(MOTION_FEEDBACK_MS)','LbDelay(0.1f)');
  expect(bridge.loadCode(code).success).toBe(true);robot.setSpeedMultiplier(multiplier);robot.start();bridge.startExecution(0);
  for(let wall=0;wall<30000&&bridge.isExecuting();wall+=16.666667)bridge.executeStep(wall);
  expect(bridge.isExecuting()).toBe(false);expect(bridge.getLogs().join(' ')).not.toContain('MISSION ERROR');

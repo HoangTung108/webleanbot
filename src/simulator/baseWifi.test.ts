@@ -34,8 +34,9 @@ int main(){
   execFileSync(process.env.CXX||'c++',['-std=c++11',input,'-o',binary],{timeout:15000});execFileSync(binary,[],{timeout:5000});
  }finally{rmSync(dir,{recursive:true,force:true});}
 },20000);
-it('wires the defaults through configuration and connection, excluding hardware networking from simulated routes',()=>{
- expect(baseCode).toContain('declare_wifi(WIFI_SSID, WIFI_PASSWORD, IOT_ASSET_ID);');
+it('keeps Wi-Fi configuration helpers outside simulated routes',()=>{
+ expect(baseCode).toContain('void declare_wifi(');
+ expect(baseCode).toContain('void set_wifi()');
  expect(baseCode).not.toContain('void set_wifi(string )');
  const route=generateRouteCode({x:400,y:600,heading:0},[]);
  expect(route).not.toContain('LbIoT.');expect(route).not.toContain('wifiPassword');

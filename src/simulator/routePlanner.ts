@@ -19,7 +19,7 @@ export function generateRouteCode(start: Pose, steps: RouteStep[]): string {
   if (![start.x, start.y, start.heading].every(Number.isFinite)) throw new Error('Vị trí xuất phát không hợp lệ');
   const motionStart = baseCode.indexOf('const float DISTANCE_SCALE');
   const motionEnd = baseCode.indexOf('// BEGIN WIFI HELPERS', motionStart);
-  const lineStart = baseCode.indexOf('void Forward(', motionEnd);
+  const lineStart = baseCode.indexOf('// Sensor order:', motionEnd);
   const lineEnd = baseCode.indexOf('enum ObjectColor');
   if (motionStart < 0 || motionEnd < motionStart || lineStart < 0 || lineEnd < lineStart) throw new Error('Cấu trúc baseCode.cpp đã thay đổi');
   const helpers = (baseCode.slice(motionStart, motionEnd) + baseCode.slice(lineStart, lineEnd))

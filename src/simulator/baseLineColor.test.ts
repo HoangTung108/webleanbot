@@ -28,6 +28,7 @@ unsigned long millis(){return clockMs;}
 int constrain(int x,int a,int b){return std::max(a,std::min(b,x));}
 struct Motor{int left=0,right=0,centers=0;float distance=0;void runLR(int l,int r){left=l;right=r;}void stopAndWait(){left=right=0;}float getDistanceMm(){return distance;}} LbMotion;
 void LbDelay(unsigned long ms){clockMs+=ms;LbMotion.distance+=(LbMotion.left+LbMotion.right)*0.5f*65/2000*ms/1000;}
+void robot_delay(unsigned long ms){LbDelay(ms);}
 std::function<int()> mask=[](){return 6;};
 struct Line{int read(){return mask();}} LbIRLine;
 bool junctionPending=false,colorSensorReady=true;
