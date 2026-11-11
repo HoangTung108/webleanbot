@@ -1289,6 +1289,7 @@ var LeanbotCpp = (() => {
     LbMotion: ["runLR", "runLRrpm", "stopAndWait", "setZeroOrigin", "getDistanceMm", "getRotationDeg", "waitDistanceMm", "waitRotationDeg"],
     LbIRLine: ["setThreshold", "read", "value", "isBlackDetected", "doManualCalibration", "displayOnRGB"],
     LbIRArray: ["read"],
+    LbTouch: ["read"],
     LbRGB: ["fillColor", "show", "getBrightness", "setBrightness"],
     LbGripper: ["open", "close", "moveTo", "moveToLR"],
     APDS: ["begin", "colorAvailable", "readColor"],
@@ -1532,7 +1533,7 @@ var LeanbotCpp = (() => {
       for (const n of this.nodes) if (n.k === "prototype") {
         for (const fn of this.functions.get(n.name) ?? []) if (fn.params.length === n.params.length) fn.params.forEach((p, i) => p.value ??= n.params[i].value);
       }
-      const builtins = /* @__PURE__ */ new Set(["F", "CRGB", "millis", "delay", "LbDelay", "isfinite", "isnan", "fabsf", "fabs", "abs", "lroundf", "round", "sqrtf", "sqrt", "min", "max", "constrain", "strcmp"]);
+      const builtins = /* @__PURE__ */ new Set(["F", "CRGB", "BITMAP", "millis", "delay", "LbDelay", "isfinite", "isnan", "fabsf", "fabs", "abs", "lroundf", "round", "sqrtf", "sqrt", "min", "max", "constrain", "strcmp"]);
       const validate = (n) => {
         if (!n || typeof n !== "object") return;
         if (n.k === "call") {
@@ -1591,7 +1592,10 @@ var LeanbotCpp = (() => {
       if (name === "true") return true;
       if (name === "false") return false;
       if (name === "nullptr") return null;
-      if (/^TB[12][AB]$/.test(name)) return 1;
+      if (/^TB[12][AB]$/.test(name)) return 1 << ["TB1A", "TB1B", "TB2A", "TB2B"].indexOf(name);
+      if (name === "HIGH") return 1;
+      if (name === "LOW") return 0;
+      if (/^led[OABCDEF]$/.test(name)) return "OABCDEF".indexOf(name[3]);
       if (name === "NAN") return NaN;
       if (/^ir[0123][LR]$/.test(name)) return Number(name[2]);
       for (let i = this.scopes.length - 1; i >= 0; i--) if (this.scopes[i].has(name)) return isRef(this.scopes[i].get(name)) && this.scopes[i].get(name).alias ? this.scopes[i].get(name).read() : this.scopes[i].get(name);
@@ -1796,6 +1800,10 @@ var LeanbotCpp = (() => {
           return args[0];
         case "CRGB":
           return nums;
+        case "BITMAP":
+          return nums.reduce((mask, index) => mask | 1 << index, 0);
+        case "LbTouch.read":
+          return this.host.touch?.(a) ? 1 : 0;
         case "LbIoT.Asset.attribute":
           return { attribute: String(args[0]) };
         case "LbIoT.Asset.begin":

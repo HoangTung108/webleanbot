@@ -7,7 +7,7 @@ function run(touches: (time: number) => number, duration = 2500, mission = 'robo
   const source = base.slice(0, base.indexOf('void loop()'))
     .replace('// Chạy bài: đặt các lệnh nhiệm vụ tại đây.', `Serial.println("RUN"); ${mission}`)
     .replace('// Kết nối Internet: gọi set_wifi() sau khi đã declare_wifi().', 'Serial.println("WIFI");')
-  const runtime = new CppRuntime(`${source}
+  const runtime: CppRuntime = new CppRuntime(`${source}
     void loop() {
       FullMission();
       if (millis() >= ${duration}) {
@@ -19,7 +19,7 @@ function run(touches: (time: number) => number, duration = 2500, mission = 'robo
     }
   `, {
     motors() {}, advance() {},
-    touch: mask => !!(touches(runtime.time) & mask),
+    touch: (mask: number): boolean => !!(touches(runtime.time) & mask),
     log: value => logs.push(value), led: rgb => lights.push([...rgb]),
   })
   runtime.start()
