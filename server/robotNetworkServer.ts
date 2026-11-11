@@ -1,6 +1,7 @@
 import {OnlineCompetition} from './onlineCompetition';
 import type {OnlineCommand} from '../src/simulator/onlineCompetition';
 import {isFinitePose,separateRobots} from '../src/simulator/robotCollision';
+import {isValidRobotMessage} from '../src/lib/robotMessage';
 /**
  * Multi-Robot WebSocket Server
  * Handles room management and robot state synchronization
@@ -45,6 +46,7 @@ interface Message {
   state?: any;
   robotId?: string;
   maxPeers?: number;
+  payload?: unknown;
 }
 
 class RobotNetworkServer {
@@ -170,6 +172,29 @@ class RobotNetworkServer {
         if(room.competition)return;
         this.handleRobotStateUpdate(client, message, room);
         break;
+
+      case 'robot-message': {
+        if (room.competition) {
+          client.ws.send(JSON.stringify({type:'error', message:'Không thể gửi dữ liệu riêng trong phiên thi online.'}));
+          break;
+        }
+        if (!isValidRobotMessage(message.payload)) {
+          client.ws.send(JSON.stringify({type:'error', message:'Dữ liệu phải là chuỗi UTF-8 từ 1 đến 1024 byte.'}));
+          break;
+        }
+        const recipients = [...room.clients.values()].filter(peer => peer !== client && peer.ws.readyState === WebSocket.OPEN);
+        if (!recipients.length) {
+          client.ws.send(JSON.stringify({type:'error', message:'Không có robot khác trong phòng để nhận dữ liệu.'}));
+          break;
+        }
+        if (recipients.some(peer => peer.ws.bufferedAmount > 65536)) {
+          client.ws.send(JSON.stringify({type:'error', message:'Kết nối nhận đang bận; dữ liệu chưa được gửi.'}));
+          break;
+        }
+        const data = JSON.stringify({type:'robot-message', peerId:client.id, payload:message.payload});
+        for (const recipient of recipients) recipient.ws.send(data);
+        break;
+      }
 
       default:
         console.log('Unknown message type:', message.type);

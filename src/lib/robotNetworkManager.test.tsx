@@ -5,6 +5,7 @@ class Socket {
   static OPEN = 1
   static instances: Socket[] = []
   readyState = 0
+  bufferedAmount = 0
   onopen: (() => void) | null = null
   onclose: (() => void) | null = null
   onerror: (() => void) | null = null
@@ -134,3 +135,23 @@ it('binds competition commands to the current shared session and preserves peer 
  expect(manager.getPeerState('peer')?.gripper).toEqual({left:72,right:73});expect(snapshots).toHaveBeenCalledOnce();expect(manager.isHost()).toBe(true);
  manager.disconnect();expect(manager.getCompetitionState()).toBeNull();
 });
+
+it('sends and receives bounded robot messages without changing state sync', async () => {
+  const manager = new RobotNetworkManager(), received = vi.fn(), errors = vi.fn()
+  manager.on('robot-message', received); manager.on('error', errors)
+  expect(manager.sendRobotMessage('before joining')).toBe(false)
+  const pending = manager.connectToRoom('CITY'), socket = Socket.instances[0]
+  socket.open(); await pending
+  expect(manager.sendRobotMessage('x'.repeat(1024))).toBe(true)
+  expect(JSON.parse(socket.send.mock.calls.at(-1)![0])).toEqual({type:'robot-message', payload:'x'.repeat(1024)})
+  expect(manager.sendRobotMessage('é'.repeat(513))).toBe(false)
+  expect(manager.sendRobotMessage('')).toBe(false)
+  socket.bufferedAmount = 65537
+  expect(manager.sendRobotMessage('busy')).toBe(false)
+  socket.message({type:'robot-message',peerId:'other',payload:'xin chào'})
+  expect(received).toHaveBeenCalledWith({type:'robot-message',data:{peerId:'other',payload:'xin chào'},error:undefined})
+  socket.message({type:'robot-message',peerId:'other',payload:42})
+  expect(received).toHaveBeenCalledTimes(1)
+  expect(errors).toHaveBeenCalledTimes(5)
+  manager.disconnect()
+})

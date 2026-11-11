@@ -1,5 +1,6 @@
 import type {OnlineCommand,OnlineCompetitionState} from '../simulator/onlineCompetition';
 import {isFinitePose} from '../simulator/robotCollision';
+import {isValidRobotMessage} from './robotMessage';
 /**
  * Robot Network Manager - Multi-robot online synchronization
  * Handles WebSocket connection, room management, and state sync
@@ -23,7 +24,7 @@ export interface RoomConfig {
   maxPeers: number;
 }
 
-export type NetworkEventType = 'connected' | 'disconnected' | 'peer-joined' | 'peer-left' | 'state-sync' | 'pose-correction' | 'competition-state' | 'error';
+export type NetworkEventType = 'connected' | 'disconnected' | 'peer-joined' | 'peer-left' | 'state-sync' | 'pose-correction' | 'competition-state' | 'robot-message' | 'error';
 
 export interface NetworkEvent {
   type: NetworkEventType;
@@ -69,7 +70,7 @@ export class RobotNetworkManager {
   }
 
   private initializeListeners() {
-    const eventTypes: NetworkEventType[] = ['connected', 'disconnected', 'peer-joined', 'peer-left', 'state-sync', 'pose-correction', 'competition-state', 'error'];
+    const eventTypes: NetworkEventType[] = ['connected', 'disconnected', 'peer-joined', 'peer-left', 'state-sync', 'pose-correction', 'competition-state', 'robot-message', 'error'];
     eventTypes.forEach(type => {
       this.listeners.set(type, new Set());
     });
@@ -268,6 +269,14 @@ export class RobotNetworkManager {
         this.emit('state-sync', { peerId: message.peerId, state: message.state });
         break;
 
+      case 'robot-message':
+        if (typeof message.peerId === 'string' && isValidRobotMessage(message.payload)) {
+          this.emit('robot-message', {peerId:message.peerId, payload:message.payload});
+        } else {
+          this.emit('error', undefined, 'Máy chủ gửi dữ liệu robot không hợp lệ.');
+        }
+        break;
+
       case 'pose-correction':
         if(isFinitePose(message.pose)){
           for(const peer of Array.isArray(message.peers)?message.peers:[])this.updatePeerState(peer.peerId,peer.state);
@@ -284,6 +293,28 @@ export class RobotNetworkManager {
   /**
    * Send robot state update
    */
+  sendRobotMessage(payload: string): boolean {
+    if (!this.isConnected()) {
+      this.emit('error', undefined, 'Chưa kết nối phòng WebSocket.');
+      return false;
+    }
+    if (!isValidRobotMessage(payload)) {
+      this.emit('error', undefined, 'Dữ liệu phải là chuỗi UTF-8 từ 1 đến 1024 byte.');
+      return false;
+    }
+    if (!this.ws || this.ws.bufferedAmount > 65536) {
+      this.emit('error', undefined, 'Kết nối đang bận; dữ liệu chưa được gửi.');
+      return false;
+    }
+    try {
+      this.ws.send(JSON.stringify({type:'robot-message', payload}));
+      return true;
+    } catch (error) {
+      this.emit('error', undefined, `Không thể gửi dữ liệu: ${error instanceof Error ? error.message : String(error)}`);
+      return false;
+    }
+  }
+
   sendRobotState(pose: { x: number; y: number; heading: number }, motorLeft: number, motorRight: number, details?:{gripper?:{left:number;right:number};supported?:boolean}): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
 
