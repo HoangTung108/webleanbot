@@ -1,32 +1,12 @@
 
-
-#define ROLE_SINGLE       0
-#define ROLE_IOT_A        1
-#define ROLE_IOT_B        2
-#define MISSION_ROLE      ROLE_SINGLE
-
-#define USE_MANUAL_LINE_CALIBRATION 0 // 1: TB1A 3-step black/white setup
-
-
-#define TEST_MODE 0
-// Mission assumes gripper starts empty and open.
-#define OPEN_GRIPPER_AT_START 1
-
-
 #include <Leanbot.h>
 #include <math.h>
 #include <string.h>
 #include <LeanbotIoT.h>
 #include <Arduino_APDS9960.h>
 
-//Khai báo wifi kết nối cho IOT
 
-#define WIFI_SSID     F("Tên wifi")
-#define WIFI_PASSWORD F("Mật khẩu wifi")
-// Replace with YOUR authorized dashboard asset, if needed.
-#define IOT_ASSET_ID  F("YOUR_IOT_ASSET_ID")
 auto IoTColor = LbIoT.Asset.attribute(F("Color"));
-
 
 // Hiệu chỉnh thông số
 const float DISTANCE_SCALE = 1.0f;
@@ -106,6 +86,42 @@ void resetMotionState() {
   lastLineError = 0;
   lastLineSeenTime = millis();
 }
+int handAngle = 0;
+int handFrom = 0;
+int handTarget = 0;
+unsigned long handStarted = 0;
+bool handBusy = false;
+
+void update_hand() {
+  if (!handBusy) return;
+  const unsigned long elapsed = millis() - handStarted;
+  const float ratio = constrain((float)elapsed / GRIP_MOVE_MS, 0.0f, 1.0f);
+  const int angle = handFrom + (int)lroundf((handTarget - handFrom) * ratio);
+  if (angle != handAngle) {
+    LbGripper.moveToLR(angle, angle, 0);
+    handAngle = angle;
+  }
+  if (elapsed >= GRIP_MOVE_MS + GRIP_SETTLE_MS) handBusy = false;
+}
+void robot_delay(unsigned long duration) {
+  const unsigned long started = millis();
+  update_hand();
+  while (millis() - started < duration) {
+    LbDelay(1);
+    update_hand();
+  }
+}
+void close_hand_async(int degree) {
+  update_hand();
+  handFrom = handAngle;
+  handTarget = constrain(degree, -30, 120);
+  handStarted = millis();
+  handBusy = true;
+}
+void open_hand_async() { close_hand_async(0); }
+void wait_hand() { while (handBusy) robot_delay(1); }
+void close_hand(int degree) { close_hand_async(degree); wait_hand(); }
+void open_hand() { open_hand_async(); wait_hand(); }
 
 void turn_angle(int speed, float angle_deg, TurnMode mode) {
   if (!isfinite(angle_deg) || speed < TURN_FINISH_SPEED || speed > MAX_MOTOR_SPEED ||
@@ -149,7 +165,7 @@ void turn_angle(int speed, float angle_deg, TurnMode mode) {
       else LbMotion.runLR(0, -v);
       previousSpeed = currentSpeed;
     }
-    LbDelay(MOTION_FEEDBACK_MS);
+    robot_delay(MOTION_FEEDBACK_MS);
   }
   LbMotion.stopAndWait();
 }
@@ -219,23 +235,11 @@ void move_tank(int motor_L, int motor_R, float distance_cm) {
       LbMotion.runLR(vL, vR);
       previousL = vL; previousR = vR;
     }
-    LbDelay(MOTION_FEEDBACK_MS);
+    robot_delay(MOTION_FEEDBACK_MS);
   }
   LbMotion.stopAndWait();
 }
 
-void close_hand(int degree) {
-  const int angle = constrain(degree, -30, 120);
-  LbGripper.moveToLR(angle, angle, GRIP_MOVE_MS);
-  LbDelay(GRIP_MOVE_MS + GRIP_SETTLE_MS);
-}
-void open_hand() {
-  LbGripper.moveToLR(0, 0, GRIP_MOVE_MS);
-  LbDelay(GRIP_MOVE_MS + GRIP_SETTLE_MS);
-}
-
-// BEGIN WIFI HELPERS
-// Stored copies remain valid after caller-owned String objects are changed.
 String wifiSsid;
 String wifiPassword;
 String wifiAssetId;
@@ -251,7 +255,6 @@ void set_wifi() {
     failMission(ERR_WIFI_CONFIG);
     return;
   }
-  // An empty password is valid for an open network. Never print credentials.
   LbIoT.Wifi.begin(wifiSsid.c_str(), wifiPassword.c_str());
   if (wifiAssetId.length() > 0) LbIoT.Asset.begin(wifiAssetId.c_str());
 }
@@ -260,18 +263,13 @@ void set_wifi(const String &ssid, const String &password, const String &assetId 
   declare_wifi(ssid, password, assetId);
   set_wifi();
 }
-// END WIFI HELPERS
 
-void Forward(int speed, int distanceMm) {
-  move_tank(abs(speed), abs(speed), distanceMm / 10.0f);
-}
-void Backward(int speed, int distanceMm) {
-  move_tank(-abs(speed), -abs(speed), distanceMm / 10.0f);
-}
-void Rotate(int speed, float angleDeg) {
-  turn_two_wheels(abs(speed), ((speed >= 0) ? 1.0f : -1.0f) * angleDeg);
+void set_line(int leftOuter, int leftInner, int rightInner, int rightOuter) {
+  LbIRLine.setThreshold(leftOuter, leftInner, rightInner, rightOuter);
 }
 
+int measure_line() { return LbIRLine.read(); }
+void print_line() { Serial.println(measure_line()); }
 
 static int lineErrorForMask(int mask) {
   switch (mask) {
@@ -416,121 +414,171 @@ void requireColor(ObjectColor expected) {
 #endif
 }
 
-// ----- SECONDARY / HIGHSCHOOL: optional 2-LeanBot IoT flow -----
-#if MISSION_ROLE != ROLE_SINGLE
-void missionIotA() {
-  FromCRLtoE2();
-  bool valid;
-  const ObjectColor color = readObjectColor(valid);
-  if (!valid) { IoTColor.write("Unknown"); return; }
-  if (color == OBJECT_BLUE) IoTColor.write("Blue");
-  else { IoTColor.write("Unknown"); failMission(ERR_COLOR_MISMATCH); return; }
-  // Source Fullmision_LeanbotA route, distinct from standalone.
-  Rotate(500,50); Backward(ROUTE_SPEED,25); Rotate(-ROUTE_SPEED,83);
-  followLineMultipleJunctions(3); goToJunction();
-  Rotate(ROUTE_SPEED,60); followLineMultipleJunctions(1); goToJunction();
-  Rotate(ROUTE_SPEED,33); Forward(ROUTE_SPEED,25);
-  requireColor(OBJECT_GREEN); Rotate(500,50);
-}
-bool waitIotBlue() {
-  const unsigned long started = millis();
-  while (millis() - started < 30000UL) {
-    String color = IoTColor.read();
-    if (color == "Blue" || color == "BLUE") return true;
-    if (color == "Unknown" || color == "Red" || color == "Green") {
-      failMission(ERR_COLOR_MISMATCH); return false;
-    }
-    LbDelay(250);
+void send_iot_color(ObjectColor color) {
+  switch (color) {
+    case OBJECT_RED:   IoTColor.write("Red"); break;
+    case OBJECT_GREEN: IoTColor.write("Green"); break;
+    case OBJECT_BLUE:  IoTColor.write("Blue"); break;
+    default:          IoTColor.write("Unknown"); break;
   }
-  failMission(ERR_IOT_TIMEOUT); return false;
 }
-void missionIotB() {
-  if (!waitIotBlue()) return;
-  // Source Fullmission_LeanbotB route, with bounded wait.
-  Forward(ROUTE_SPEED,65); Rotate(-ROUTE_SPEED,61); Forward(ROUTE_SPEED,50);
-  PickupNeutralizeS3(); Backward(ROUTE_SPEED,50); Rotate(-ROUTE_SPEED,155);
-  followLineMultipleJunctions(2); goToJunction();
-  Rotate(-ROUTE_SPEED,60); followLineMultipleJunctions(1); goToJunction();
-  Rotate(ROUTE_SPEED,60); Forward(ROUTE_SPEED,40); DropNeutralizeE2();
-  Backward(ROUTE_SPEED,40); Rotate(ROUTE_SPEED,60);
-  followLineMultipleJunctions(1); goToJunction();
-  Rotate(-ROUTE_SPEED,60); followLineMultipleJunctions(2); goToJunction();
-  Rotate(ROUTE_SPEED,60); followLineMultipleJunctions(1); goToJunction();
-  Rotate(-ROUTE_SPEED,33); Forward(ROUTE_SPEED,24);
-  requireColor(OBJECT_RED); PickupPollutionF4();
-  Backward(ROUTE_SPEED,24); Rotate(ROUTE_SPEED,33);
-  followLineMultipleJunctions(1); goToJunction();
-  Rotate(ROUTE_SPEED,60); followLineMultipleJunctions(2); goToJunction();
-  Rotate(ROUTE_SPEED,30); DropPollutionCRL();
+
+// FIFO cố định, không cấp phát động trên ATmega328P.
+const int IOT_QUEUE_CAPACITY = 16;
+ObjectColor iotColorQueue[IOT_QUEUE_CAPACITY];
+int iotQueueHead = 0;
+int iotQueueSize = 0;
+ObjectColor lastQueuedIotColor = OBJECT_UNKNOWN;
+bool iotQueueOverflow = false; // Cờ báo đầy, giữ tới khi clear_iot_queue().
+
+int iot_queue_count() { return iotQueueSize; }
+
+void clear_iot_queue() {
+  iotQueueHead = 0;
+  iotQueueSize = 0;
+  iotQueueOverflow = false;
 }
-#endif
+
+ObjectColor peek_iot_color() {
+  if (iotQueueSize == 0) return OBJECT_UNKNOWN;
+  return iotColorQueue[iotQueueHead];
+}
+
+ObjectColor pop_iot_color() {
+  const ObjectColor color = peek_iot_color();
+  if (iotQueueSize > 0) {
+    iotQueueHead = (iotQueueHead + 1) % IOT_QUEUE_CAPACITY;
+    --iotQueueSize;
+  }
+  return color;
+}
+
+ObjectColor read_iot_color() {
+  String signal = IoTColor.read();
+  signal.trim();
+  signal.toUpperCase();
+  if (signal == "WAITING") lastQueuedIotColor = OBJECT_UNKNOWN;
+  ObjectColor color = OBJECT_UNKNOWN;
+  if (signal == "RED") color = OBJECT_RED;
+  else if (signal == "GREEN") color = OBJECT_GREEN;
+  else if (signal == "BLUE") color = OBJECT_BLUE;
+  if (color != OBJECT_UNKNOWN && color != lastQueuedIotColor) {
+    if (iotQueueSize < IOT_QUEUE_CAPACITY) {
+      const int tail = (iotQueueHead + iotQueueSize) % IOT_QUEUE_CAPACITY;
+      iotColorQueue[tail] = color;
+      ++iotQueueSize;
+      lastQueuedIotColor = color;
+    } else {
+      iotQueueOverflow = true;
+    }
+  }
+  return color;
+}
+
+void poll_iot_color() { read_iot_color(); }
+
+void reset_iot_color() { IoTColor.write("waiting"); }
+
+bool wait_iot_color(ObjectColor expected, unsigned long timeoutMs = 30000UL) {
+  if (expected != OBJECT_RED && expected != OBJECT_GREEN && expected != OBJECT_BLUE) {
+    failMission(ERR_COLOR_MISMATCH);
+    return false;
+  }
+  const unsigned long started = millis();
+  while (millis() - started < timeoutMs) {
+    const ObjectColor received = read_iot_color();
+    const unsigned long elapsed = millis() - started;
+    if (elapsed >= timeoutMs) break;
+    if (received == expected) return true;
+    const unsigned long remaining = timeoutMs - elapsed;
+    robot_delay(min(250UL, remaining));
+  }
+  failMission(ERR_IOT_TIMEOUT);
+  return false;
+}
+
+/*
+KHỞI TẠO / WIFI (đặt trong setup, sau Leanbot.begin):
+  declare_wifi("TenWifi", "MatKhau", "AssetID");
+  set_wifi();                         Kết nối theo cấu hình đã khai báo.
+  set_wifi("TenWifi", "MatKhau", "AssetID");  Khai báo và kết nối một lần.
+
+ĐI VÀ QUAY (speed tối đa 2000; giữ nguyên thuật toán điều khiển):
+  move_tank(1800, 1800, 10);            Đi tới 10 cm; dùng hai số âm để lùi.
+  Rotate(1800, 90);                    Quay góc +90 độ; góc âm đảo chiều.
+  turn_two_wheels(1800, -90);          Quay tại chỗ bằng hai bánh.
+  turn_one_wheel(1800, 90, "L");       Chỉ chạy bánh L; "R" chọn bánh R.
+
+LINE (thứ tự cảm biến: 2L, 0L, 1R, 3R):
+  set_line(69, 78, 106, 70);            Đặt bốn ngưỡng nhận biết nền đen.
+  int line = measure_line();           Đọc mặt nạ 4 bit, giá trị 0..15.
+  print_line();                       In mặt nạ; cần Serial.begin(115200).
+  runFollowLine();                    Chỉnh hướng một lần, gọi trong vòng lặp.
+  followLineDistance(100);             Dò line 100 mm rồi dừng.
+  followLineUntilJunction();           Dò tới giao lộ đã được xác nhận rồi dừng.
+  followLineMultipleJunctions(2);      Đi qua các giao lộ tới giao lộ thứ hai.
+  centerDetectedJunction();           Tiến vào tâm giao lộ vừa phát hiện.
+  goToJunction();                     Tìm giao lộ nếu chưa có, sau đó tiến vào tâm.
+  measure_line không đo giá trị analog; 0 = không thấy đen, 15 = cả bốn thấy đen.
+
+TAY GẮP:
+  close_hand(GRIP_CLOSE_ANGLE);         Đóng tay và đợi xong.
+  open_hand();                        Mở tay và đợi xong.
+  close_hand_async(GRIP_CLOSE_ANGLE);  Bắt đầu đóng tay, tiếp tục lệnh tiếp theo.
+  open_hand_async();                  Bắt đầu mở tay, tiếp tục lệnh tiếp theo.
+  wait_hand();                        Đợi tay xong trước khi kết thúc nhiệm vụ.
+  robot_delay(500);                   Đợi 500 ms và cập nhật tay đang chạy.
+  update_hand();                      Cập nhật tay trong vòng lặp tự viết.
+  Không xen lệnh LbGripper trực tiếp khi dùng bộ điều khiển tay async.
+
+CẢM BIẾN MÀU:
+  ObjectColor color = Obj_detectColor();  Đọc màu khối bằng APDS.
+  readObjectColor(valid);             Đọc màu và trả cờ valid qua biến bool.
+  requireColor(OBJECT_BLUE);           Kiểm tra màu; báo lỗi nếu không đúng.
+  Màu: OBJECT_RED, OBJECT_GREEN, OBJECT_BLUE, OBJECT_UNKNOWN.
+  Cảm biến cần APDS.begin thành công; requireColor được bỏ qua trên BOARD_PRIMARY.
+
+TÍN HIỆU MÀU GIỮA CÁC ROBOT IOT:
+  Cả hai robot cần WiFi và cùng Asset ID / thuộc tính Color được phép truy cập.
+  reset_iot_color();                  Robot gửi xóa tín hiệu cũ trước lượt mới.
+  send_iot_color(OBJECT_BLUE);         Robot gửi ghi tín hiệu Blue lên máy chủ.
+  ObjectColor color = read_iot_color();  Đọc màu và tự đưa màu mới vào hàng chờ.
+  if (!wait_iot_color(OBJECT_BLUE, 30000UL)) return;
+                                      Robot nhận đợi tối đa 30 giây, lỗi thì thoát.
+
+HÀNG CHỜ TÍN HIỆU (FIFO, tối đa 16 màu):
+  poll_iot_color();                    Đọc mạng một lần, đưa màu mới vào hàng chờ.
+  iot_queue_count();                   Số tín hiệu chưa xử lý.
+  peek_iot_color();                    Xem tín hiệu đầu, chưa lấy ra.
+  ObjectColor next = pop_iot_color();  Lấy tín hiệu cũ nhất; UNKNOWN nếu rỗng.
+  clear_iot_queue();                   Xóa hàng chờ và cờ đầy, giữ bộ lọc nhận trùng.
+  iotQueueOverflow                    true khi hàng chờ từng bị đầy; không ghi đè.
+
+  Ví dụ vòng điều phối của robot nhận (sau khi kết nối WiFi):
+    poll_iot_color();
+    if (iot_queue_count() > 0) {
+      ObjectColor next = pop_iot_color();
+      // Xử lý nhiệm vụ theo next ở đây.
+    }
+    robot_delay(250);
+
+  Cùng một màu lưu trên server chỉ được xếp hàng một lần. Muốn gửi lại cùng màu,
+  robot nhận phải đọc được trạng thái waiting giữa hai lần gửi.
+  wait_iot_color cũng đọc và xếp hàng; không tự lấy màu khỏi hàng chờ.
+  Chỉ nhận khi gọi poll/read/wait; không có luồng mạng chạy nền trong lúc di chuyển.
+  Thuộc tính Color chỉ lưu màu cuối: các màu bị ghi đè giữa hai lần đọc có thể mất.
+  Hàng chờ giữ các tín hiệu đã đọc, không đảm bảo giao nhận từng gói qua mạng.
+*/
 
 void setup() {
   Leanbot.begin();
-#if DEBUG_SERIAL
-  Serial.begin(115200);
-  Serial.println(F("Synapse City Full Mission"));
-#endif
-#if USE_MANUAL_LINE_CALIBRATION
-  LbIRLine.doManualCalibration(TB1A);
-#else
-  LbIRLine.setThreshold(IR_TH_2L, IR_TH_0L, IR_TH_1R, IR_TH_3R);
-#endif
-#if BOARD_MODE != BOARD_PRIMARY
-  colorSensorReady = APDS.begin();
-#if DEBUG_SERIAL
-  Serial.print(F("APDS ready: ")); Serial.println(colorSensorReady ? F("YES") : F("NO"));
-#endif
-#endif
-#if MISSION_ROLE != ROLE_SINGLE
-  declare_wifi(WIFI_SSID, WIFI_PASSWORD, IOT_ASSET_ID);
-  set_wifi();
-  if (MISSION_ROLE == ROLE_IOT_A) IoTColor.write("waiting");
-#endif
-  LbDelay(300);
+
 }
 
 void loop() {
-  // Always wait for BOTH touch buttons before executing a mission.
+ 
   LbMission.begin(TB1A + TB1B);
-  missionError = ERR_NONE;
-  junctionPending = false;
-  resetMotionState();
-#if TEST_MODE == 0 && OPEN_GRIPPER_AT_START && MISSION_ROLE != ROLE_IOT_A
-  open_hand();
-#endif
-#if BOARD_MODE != BOARD_PRIMARY
-  // Tests 1..3 must still work even if the APDS module is disconnected.
-  if (!colorSensorReady && (TEST_MODE == 0 || TEST_MODE == 4)) {
-    failMission(ERR_COLOR_SENSOR);
-  } else
-#endif
-  {
-#if TEST_MODE != 0
-    runHardwareTest();
-#elif MISSION_ROLE == ROLE_IOT_A
-    IoTColor.write("waiting");
-    missionIotA();
-#elif MISSION_ROLE == ROLE_IOT_B
-    missionIotB();
-#elif BOARD_MODE == BOARD_PRIMARY
-    missionPrimaryFull();
-#else
-    missionSecondaryOrHighSchoolSingle();
-#endif
-  }
-  LbMotion.stopAndWait();
-  if (missionError == ERR_NONE) {
-    LbRGB.fillColor(CRGB::Green);
-    LbRGB.show();
-#if DEBUG_SERIAL
-    Serial.println(F("MISSION COMPLETE"));
-#endif
-  } else {
-    LbRGB.fillColor(CRGB::Red);
-    LbRGB.show();
-
-  }
+  
   LbMission.end();
 }
 
