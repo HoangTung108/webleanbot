@@ -947,7 +947,7 @@ export const apiReference: ApiReference[] = [
     "description": "Cập nhật một bước bám line bằng lõi PID analog của Blockly MyBlock.",
     "parameters": "Không có hoặc int mặt nạ.",
     "returns": "void.",
-    "notes": "PID analog MyBlock, chu kỳ 10 ms. Bắt line ở tối đa 600, cần 5 mẫu giữa line mới tăng tốc. Cua gắt có trần 650 và cho bánh trong lùi nhẹ; hysteresis tránh chuyển chế độ liên tục. Không thấy line từ đầu: quét hai phía tối đa 3,5 giây; mất line đã bám: tìm theo hướng cũ tối đa 2,5 giây. Quá hạn thì dừng/báo lỗi; không bảo đảm tìm được line nằm ngoài vùng quét cảm biến.",
+    "notes": "PID analog MyBlock, chu kỳ 10 ms. Bắt line ở tối đa 600, cần 5 mẫu giữa line mới tăng tốc. Cua gắt có trần 1000 và cho bánh trong lùi nhẹ; hysteresis tránh chuyển chế độ liên tục. Không thấy line từ đầu: quét hai phía tối đa 3,5 giây; mất line đã bám: tìm theo hướng cũ tối đa 2,5 giây. Quá hạn thì dừng/báo lỗi; không bảo đảm tìm được line nằm ngoài vùng quét cảm biến. Tâm analog chỉ dùng các cảm biến được mặt nạ hiệu chuẩn xác nhận đang thấy line. Quyền đánh lái tăng theo tốc độ khi lệch lớn, giữ gain vùng giữa để hạn chế lắc.",
     "code": "// Đặt trong loop, khi robot đang theo line.\nrunFollowLine(); // Cập nhật điều khiển một lần\nrobot_delay(LINE_STEP_MS); // Giữ chu kỳ 10 ms và phục vụ tay async",
     "source": "baseCode.cpp"
   },
@@ -1197,7 +1197,7 @@ export const apiReference: ApiReference[] = [
     "description": "Đọc tâm line analog theo đúng thuật toán MyBlock.",
     "parameters": "Không có.",
     "returns": "float -3..3; NAN nếu không thấy line.",
-    "notes": "Kết quả -3..3, NAN nếu mặt nạ không hợp lệ. Khi độ tương phản IR yếu, dùng bảng digital MyBlock. Cần đo lại ngưỡng dưới ánh sáng thật.",
+    "notes": "Kết quả -3..3, NAN nếu mặt nạ không hợp lệ. Khi độ tương phản IR yếu, dùng bảng digital MyBlock. Cần đo lại ngưỡng dưới ánh sáng thật. Giá trị IR ở cảm biến ngoài vạch bị loại khỏi trọng số, tránh kéo sai dấu lỗi.",
     "code": "float error = measure_line_error(); // Không làm robot di chuyển\nif (isfinite(error)) Serial.println(error);\nelse Serial.println(\"No line\");",
     "source": "baseCode.cpp"
   },
