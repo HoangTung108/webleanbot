@@ -25,12 +25,14 @@ var LeanbotCpp = (() => {
     MissionWorld: () => MissionWorld,
     drawLeanbot: () => drawLeanbot,
     drawMissionBlocks: () => drawMissionBlocks,
-    mountMissionEditor: () => mountMissionEditor
+    mountMissionEditor: () => mountMissionEditor,
+    readVirtualColor: () => readVirtualColor,
+    readVirtualLine: () => readVirtualLine
   });
 
   // src/simulator/motionCalibration.ts
   var MOTION_CALIBRATION = Object.freeze({
-    physicalMmPerEncoderMm: 1.06
+    physicalMmPerEncoderMm: 320 / 322
   });
 
   // src/simulator/robotGeometry.ts
@@ -130,6 +132,37 @@ var LeanbotCpp = (() => {
       }
     }
     return best;
+  }
+
+  // src/simulator/virtualSensors.ts
+  var LINE_SENSOR_LATERAL_MM = [-24, -6, 6, 24];
+  var LINE_SENSOR_FORWARD_MM = 50;
+  function readVirtualLine(board, pose) {
+    const angle = pose.heading * Math.PI / 180, cos = Math.cos(angle), sin = Math.sin(angle);
+    return LINE_SENSOR_LATERAL_MM.map((y) => {
+      const x = pose.x + LINE_SENSOR_FORWARD_MM * cos - y * sin, sy = pose.y + LINE_SENSOR_FORWARD_MM * sin + y * cos;
+      for (const line of board.lines) for (let i = 1; i < line.points.length; i++) {
+        const a = line.points[i - 1], b = line.points[i], dx = b.x - a.x, dy = b.y - a.y;
+        const t = Math.max(0, Math.min(1, ((x - a.x) * dx + (sy - a.y) * dy) / (dx * dx + dy * dy || 1)));
+        if (Math.hypot(x - a.x - t * dx, sy - a.y - t * dy) <= line.width / 2) return 4095;
+      }
+      return 0;
+    });
+  }
+  function readVirtualColor(blocks, pose, hidePollutionColors = false) {
+    const angle = pose.heading * Math.PI / 180;
+    const x = pose.x + LEANBOT_GEOMETRY.graspOffset * Math.cos(angle), y = pose.y + LEANBOT_GEOMETRY.graspOffset * Math.sin(angle);
+    let nearest, distance = 35;
+    for (const block of blocks) {
+      if (block.offBoard || block.state !== "standing") continue;
+      const d = Math.hypot(block.x - x, block.y - y);
+      if (d < distance) {
+        nearest = block;
+        distance = d;
+      }
+    }
+    const samples = { red: [200, 20, 10], yellow: [200, 180, 10], green: [20, 200, 20], blue: [20, 30, 200], purple: [140, 20, 180] };
+    return nearest ? samples[hidePollutionColors && nearest.kind === "pollution" ? "mystery" : nearest.color] ?? [60, 60, 60] : [0, 0, 0];
   }
 
   // src/simulator/missionWorld.ts
@@ -967,7 +1000,7 @@ var LeanbotCpp = (() => {
 
   // src/simulator/robotAppearance.ts
   var LEANBOT_APPEARANCE = LEANBOT_GEOMETRY;
-  function drawLeanbot(ctx, leftGrip = 0, rightGrip = 0) {
+  function drawLeanbot(ctx, leftGrip = 0, rightGrip = 0, rgb) {
     ctx.save();
     ctx.lineJoin = "round";
     ctx.lineCap = "round";
@@ -1161,6 +1194,11 @@ var LeanbotCpp = (() => {
       ctx.arc(LEANBOT_GEOMETRY.gripper.pivotX, side * LEANBOT_GEOMETRY.gripper.pivotY, 1, 0, Math.PI * 2);
       ctx.fill();
     }
+    if (rgb) for (let i = 0; i < 4; i++) {
+      const start = rgb.length === 12 ? i * 3 : 0;
+      ctx.fillStyle = `rgb(${rgb.slice(start, start + 3).join(",")})`;
+      ctx.fillRect(-13, -24 + i * 15, 5, 5);
+    }
     ctx.fillStyle = "#f9e6d6";
     ctx.font = "bold 5px sans-serif";
     ctx.fillText("LEANBOT", -59, 24);
@@ -1168,7 +1206,7 @@ var LeanbotCpp = (() => {
   }
 
   // src/transpiler/cppParser/tokenizer.ts
-  var twoChar = /* @__PURE__ */ new Set(["<=", ">=", "==", "!=", "&&", "||", "+=", "-=", "++", "--", "::", "->"]);
+  var twoChar = /* @__PURE__ */ new Set(["<=", ">=", "==", "!=", "&&", "||", "+=", "-=", "++", "--", "::", "->", "<<", ">>", "*=", "/=", "%=", "&=", "|="]);
   function tokenizeCpp(source) {
     const tokens = [];
     let index = 0;
@@ -1242,16 +1280,34 @@ var LeanbotCpp = (() => {
   }
 
   // src/simulator/cppRuntime.ts
-  var TYPES = /* @__PURE__ */ new Set(["void", "int", "float", "double", "long", "short", "unsigned", "signed", "char", "bool", "String", "const", "static", "auto"]);
-  var precedence = { "=": 1, "+=": 1, "-=": 1, "?": 2, "||": 3, "&&": 4, "==": 5, "!=": 5, "<": 6, ">": 6, "<=": 6, ">=": 6, "+": 7, "-": 7, "*": 8, "/": 8, "%": 8 };
+  var isRef = (v) => v != null && typeof v.read === "function";
+  var copyValue = (v) => Array.isArray(v) ? v.map(copyValue) : v && typeof v === "object" && !isRef(v) ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, copyValue(x)])) : v;
+  var TYPES = /* @__PURE__ */ new Set(["void", "int", "float", "double", "long", "short", "unsigned", "signed", "char", "bool", "String", "const", "static", "inline", "auto", "byte", "uint8_t", "uint16_t", "uint32_t", "int8_t", "int16_t", "int32_t", "CRGB", "__FlashStringHelper"]);
+  var SDK_CALLS = new Set(Object.entries({
+    Leanbot: ["begin", "pingCm", "pingMm", "tone"],
+    LbMission: ["begin", "end"],
+    LbMotion: ["runLR", "runLRrpm", "stopAndWait", "setZeroOrigin", "getDistanceMm", "getRotationDeg", "waitDistanceMm", "waitRotationDeg"],
+    LbIRLine: ["setThreshold", "read", "value", "isBlackDetected", "doManualCalibration", "displayOnRGB"],
+    LbIRArray: ["read"],
+    LbRGB: ["fillColor", "show", "getBrightness", "setBrightness"],
+    LbGripper: ["open", "close", "moveTo", "moveToLR"],
+    APDS: ["begin", "colorAvailable", "readColor"],
+    Serial: ["begin", "print", "println"],
+    "LbIoT.Wifi": ["begin"],
+    "LbIoT.Asset": ["begin", "attribute"]
+  }).flatMap(([object, methods]) => methods.map((method) => `${object}.${method}`)));
+  var INSTANCE_CALLS = /* @__PURE__ */ new Set(["length", "c_str", "trim", "toUpperCase", "read", "write"]);
+  var assignments = /* @__PURE__ */ new Set(["=", "+=", "-=", "*=", "/=", "%=", "&=", "|="]);
+  var precedence = { "=": 1, "+=": 1, "-=": 1, "*=": 1, "/=": 1, "%=": 1, "&=": 1, "|=": 1, "?": 2, "||": 3, "&&": 4, "|": 5, "^": 6, "&": 7, "==": 8, "!=": 8, "<": 9, ">": 9, "<=": 9, ">=": 9, "<<": 10, ">>": 10, "+": 11, "-": 11, "*": 12, "/": 12, "%": 12 };
   var Parser = class {
     tokens;
     i = 0;
     types = new Set(TYPES);
+    structs = /* @__PURE__ */ new Map();
     constructor(source) {
       this.tokens = tokenizeCpp(source).filter((t) => !["comment", "preprocessor"].includes(t.kind));
       this.tokens = this.tokens.filter((t, i, all) => !(t.kind === "identifier" && /^(f|u|l|ul|ull)$/i.test(t.value) && all[i - 1]?.kind === "number" && all[i - 1].end === t.start));
-      for (const t of this.tokens) if (t.kind === "number" && !/^0x/i.test(t.value)) t.value = t.value.replace(/[fF]$/, "");
+      for (const t of this.tokens) if (t.kind === "number" && !/^0[xb]/i.test(t.value)) t.value = t.value.replace(/[fF]$/, "");
     }
     peek(v) {
       return v === void 0 ? this.tokens[this.i]?.value : this.tokens[this.i]?.value === v;
@@ -1273,34 +1329,42 @@ var LeanbotCpp = (() => {
       const t = this.tokens[this.i];
       if (!t) throw new Error("Thi\u1EBFu bi\u1EC3u th\u1EE9c");
       if (this.peek("(") && this.types.has(this.tokens[this.i + 1]?.value)) {
-        this.take("(");
+        this.take();
         let type = "";
         while (!this.peek(")")) type += this.take() + " ";
-        this.take(")");
-        n = { k: "cast", type, value: this.expr(9) };
+        this.take();
+        n = { k: "cast", type, value: this.expr(13) };
       } else if (this.eat("(")) {
         n = this.expr();
         this.take(")");
-      } else if (["!", "-", "+", "++", "--"].includes(this.peek())) n = { k: "unary", op: this.take(), value: this.expr(9) };
+      } else if (this.eat("{")) {
+        const values = [];
+        if (!this.peek("}")) do {
+          values.push(this.expr());
+        } while (this.eat(",") && !this.peek("}"));
+        this.take("}");
+        n = { k: "array", values };
+      } else if (["!", "~", "-", "+", "++", "--", "*", "&"].includes(this.peek())) n = { k: "unary", op: this.take(), value: this.expr(13) };
       else if (t.kind === "number") {
         this.i++;
         n = { k: "literal", value: Number(t.value) };
       } else if (t.kind === "string") {
         this.i++;
         n = { k: "literal", value: t.value.slice(1, -1).replace(/\\n/g, "\n").replace(/\\"/g, '"') };
-      } else if (t.kind === "identifier") {
-        let name = this.take();
-        while (this.eat(".") || this.eat("::")) name += "." + this.take();
-        n = { k: "name", name };
-      } else throw new Error(`D\xF2ng ${t.line}: bi\u1EC3u th\u1EE9c ch\u01B0a h\u1ED7 tr\u1EE3 ${t.value}`);
+      } else if (t.kind === "identifier") n = { k: "name", name: this.take() };
+      else throw new Error(`D\xF2ng ${t.line}: bi\u1EC3u th\u1EE9c ch\u01B0a h\u1ED7 tr\u1EE3 ${t.value}`);
       while (true) {
+        if (this.eat(".") || this.eat("::") || this.eat("->")) {
+          n = { k: "member", value: n, name: this.take() };
+          continue;
+        }
         if (this.eat("(")) {
           const args = [];
           if (!this.peek(")")) do {
             args.push(this.expr());
           } while (this.eat(","));
           this.take(")");
-          n = { k: "call", name: n.name, args };
+          n = { k: "call", callee: n, args };
           continue;
         }
         if (this.eat("[")) {
@@ -1320,64 +1384,78 @@ var LeanbotCpp = (() => {
           const yes = this.expr();
           this.take(":");
           n = { k: "ternary", condition: n, yes, no: this.expr(2) };
-        } else n = { k: "binary", op, left: n, right: this.expr(level + (["=", "+=", "-="].includes(op) ? 0 : 1)) };
+        } else n = { k: "binary", op, left: n, right: this.expr(level + (assignments.has(op) ? 0 : 1)) };
       }
       return n;
     }
-    declaration() {
+    type() {
       let type = "";
       while (this.types.has(this.peek())) type += this.take() + " ";
-      while (this.eat("*") || this.eat("&")) {
-      }
-      const name = this.take();
+      while (["*", "&"].includes(this.peek())) type += this.take();
+      return type;
+    }
+    declaration() {
+      const type = this.type(), name = this.take();
       if (this.eat("(")) {
         const params = [];
         if (!this.peek(")")) do {
-          while (this.types.has(this.peek()) || ["*", "&"].includes(this.peek())) this.take();
-          params.push(this.take());
+          const type2 = this.type();
+          if (type2.trim() === "void" && this.peek(")")) break;
+          const name2 = this.take();
+          const value = this.eat("=") ? this.expr() : null;
+          params.push({ k: "param", type: type2, name: name2, value });
         } while (this.eat(","));
         this.take(")");
+        if (this.eat(";")) return { k: "prototype", name, params };
         return { k: "function", name, params, body: this.statement() };
       }
-      let array = false;
-      if (this.eat("[")) {
-        array = true;
-        if (!this.peek("]")) this.expr();
-        this.take("]");
-      }
-      let value = { k: "literal", value: 0 };
-      if (this.eat("=")) {
-        if (array && this.eat("{")) {
-          const values = [];
-          if (!this.peek("}")) do {
-            values.push(this.expr());
-          } while (this.eat(","));
-          this.take("}");
-          value = { k: "array", values };
-        } else value = this.expr();
-      }
+      const declarations = [];
+      let next = name;
+      do {
+        const dimensions = [];
+        while (this.eat("[")) {
+          dimensions.push(this.peek("]") ? { k: "literal", value: 0 } : this.expr());
+          this.take("]");
+        }
+        const value = this.eat("=") ? this.expr() : null;
+        declarations.push({ k: "declare", name: next, type, value, dimensions });
+        if (!this.eat(",")) break;
+        next = this.take();
+      } while (true);
       this.take(";");
-      return { k: "declare", name, type, value };
+      return { k: "declarations", body: declarations };
     }
     statement() {
-      if (this.eat(";")) return { k: "block", body: [] };
+      if (this.eat(";")) return { k: "empty" };
       if (this.eat("{")) {
         const body = [];
         while (!this.peek("}")) body.push(this.statement());
         this.take("}");
         return { k: "block", body };
       }
+      if (this.eat("struct")) {
+        const name = this.take();
+        this.types.add(name);
+        this.take("{");
+        const fields = [];
+        while (!this.peek("}")) fields.push(...this.declaration().body);
+        this.take("}");
+        this.take(";");
+        this.structs.set(name, fields);
+        return { k: "empty" };
+      }
       if (this.eat("enum")) {
         const type = this.take();
         this.types.add(type);
         this.take("{");
-        const names = [];
+        const entries = [];
         do {
-          names.push(this.take());
-        } while (this.eat(","));
+          const name = this.take();
+          entries.push({ k: "entry", name, value: this.eat("=") ? this.expr() : null });
+        } while (this.eat(",") && !this.peek("}"));
         this.take("}");
         this.take(";");
-        return { k: "enum", names };
+        return { k: "enum", entries };
       }
       if (this.eat("if")) {
         this.take("(");
@@ -1408,9 +1486,9 @@ var LeanbotCpp = (() => {
         this.take("{");
         const cases = [];
         while (!this.peek("}")) {
-          const isDefault = this.eat("default");
-          if (!isDefault) this.take("case");
-          const label = isDefault ? null : this.expr();
+          const def = this.eat("default");
+          if (!def) this.take("case");
+          const label = def ? null : this.expr();
           this.take(":");
           const body = [];
           while (!["case", "default", "}"].includes(this.peek())) body.push(this.statement());
@@ -1435,6 +1513,7 @@ var LeanbotCpp = (() => {
       return nodes;
     }
   };
+  var callName = (n) => n.k === "name" ? n.name : n.k === "member" ? `${callName(n.value)}.${n.name}` : "";
   var Flow = class {
     constructor(kind, value = null) {
       this.kind = kind;
@@ -1446,12 +1525,21 @@ var LeanbotCpp = (() => {
       this.host = host;
       this.distanceScale = distanceScale;
       if (!Number.isFinite(distanceScale) || distanceScale <= 0) throw new Error("H\u1EC7 s\u1ED1 hi\u1EC7u chu\u1EA9n qu\xE3ng \u0111\u01B0\u1EDDng ph\u1EA3i l\xE0 s\u1ED1 d\u01B0\u01A1ng h\u1EEFu h\u1EA1n.");
-      this.nodes = new Parser(source).parse();
-      for (const n of this.nodes) if (n.k === "function") this.functions.set(n.name, n);
-      const builtins = /* @__PURE__ */ new Set(["Leanbot.begin", "LbMission.begin", "LbMission.end", "LbMotion.runLR", "LbMotion.runLRrpm", "LbMotion.stopAndWait", "LbMotion.setZeroOrigin", "LbMotion.getDistanceMm", "LbMotion.getRotationDeg", "LbMotion.waitDistanceMm", "LbMotion.waitRotationDeg", "LbDelay", "delay", "millis", "isfinite", "fabsf", "fabs", "abs", "lroundf", "round", "sqrtf", "sqrt", "min", "max", "constrain", "strcmp", "Serial.begin", "Serial.println", "Serial.print", "LbGripper.open", "LbGripper.close", "LbGripper.moveToLR", "LbGripper.moveTo", "Leanbot.pingCm", "Leanbot.pingMm", "Leanbot.tone", "LbRGB.show"]);
+      const parser = new Parser(source);
+      this.nodes = parser.parse();
+      this.structs = parser.structs;
+      for (const n of this.nodes) if (n.k === "function") this.functions.set(n.name, [...this.functions.get(n.name) ?? [], n]);
+      for (const n of this.nodes) if (n.k === "prototype") {
+        for (const fn of this.functions.get(n.name) ?? []) if (fn.params.length === n.params.length) fn.params.forEach((p, i) => p.value ??= n.params[i].value);
+      }
+      const builtins = /* @__PURE__ */ new Set(["F", "CRGB", "millis", "delay", "LbDelay", "isfinite", "isnan", "fabsf", "fabs", "abs", "lroundf", "round", "sqrtf", "sqrt", "min", "max", "constrain", "strcmp"]);
       const validate = (n) => {
         if (!n || typeof n !== "object") return;
-        if (n.k === "call" && !this.functions.has(n.name) && !builtins.has(n.name) && !["LbIRLine.read", "LbIRLine.value", "LbIRLine.setThreshold"].includes(n.name)) throw new Error(`H\xE0m ch\u01B0a h\u1ED7 tr\u1EE3 trong gi\u1EA3 l\u1EADp: ${n.name}`);
+        if (n.k === "call") {
+          const name = callName(n.callee);
+          const instance = n.callee.k === "member" && !/^(Leanbot|Lb[A-Z]\w*|APDS|Serial|CRGB)(\.|$)/.test(name) && INSTANCE_CALLS.has(n.callee.name);
+          if (!this.functions.has(name) && !builtins.has(name) && !SDK_CALLS.has(name) && !instance) throw new Error(`H\xE0m ch\u01B0a h\u1ED7 tr\u1EE3 trong gi\u1EA3 l\u1EADp: ${name}`);
+        }
         for (const v of Object.values(n)) if (Array.isArray(v)) v.forEach(validate);
         else if (typeof v === "object") validate(v);
       };
@@ -1470,17 +1558,50 @@ var LeanbotCpp = (() => {
     rotation = 0;
     left = 0;
     right = 0;
+    structs = /* @__PURE__ */ new Map();
+    thresholds = [69, 78, 106, 70];
+    brightness = 255;
+    rgb = [0, 0, 0];
+    assetId = "";
+    serial = "";
+    iot = /* @__PURE__ */ new Map();
+    *location(n) {
+      if (n.k === "name") {
+        const scope = [...this.scopes].reverse().find((s) => s.has(n.name));
+        if (!scope) throw new Error(`Bi\u1EBFn ch\u01B0a khai b\xE1o: ${n.name}`);
+        const value = scope.get(n.name);
+        if (isRef(value) && value.alias) return value;
+        return { read: () => scope.get(n.name), write: (v) => scope.set(n.name, copyValue(v)) };
+      }
+      if (n.k === "unary" && n.op === "*") {
+        const ref = yield* this.expr(n.value);
+        if (isRef(ref)) return ref;
+      }
+      if (n.k === "member" || n.k === "index") {
+        let obj = yield* this.expr(n.value);
+        if (isRef(obj)) obj = obj.read();
+        const key = n.k === "member" ? n.name : Number(yield* this.expr(n.index));
+        if (obj && typeof obj === "object") return { read: () => obj[key], write: (v) => {
+          obj[key] = copyValue(v);
+        } };
+      }
+      throw new Error("Bi\u1EC3u th\u1EE9c kh\xF4ng th\u1EC3 g\xE1n");
+    }
     get(name) {
       if (name === "true") return true;
       if (name === "false") return false;
       if (name === "nullptr") return null;
       if (/^TB[12][AB]$/.test(name)) return 1;
-      for (let i = this.scopes.length - 1; i >= 0; i--) if (this.scopes[i].has(name)) return this.scopes[i].get(name);
+      if (name === "NAN") return NaN;
+      if (/^ir[0123][LR]$/.test(name)) return Number(name[2]);
+      for (let i = this.scopes.length - 1; i >= 0; i--) if (this.scopes[i].has(name)) return isRef(this.scopes[i].get(name)) && this.scopes[i].get(name).alias ? this.scopes[i].get(name).read() : this.scopes[i].get(name);
       throw new Error(`Bi\u1EBFn ch\u01B0a khai b\xE1o: ${name}`);
     }
     set(name, value) {
       for (let i = this.scopes.length - 1; i >= 0; i--) if (this.scopes[i].has(name)) {
-        this.scopes[i].set(name, value);
+        const old = this.scopes[i].get(name);
+        if (isRef(old) && old.alias) old.write(value);
+        else this.scopes[i].set(name, copyValue(value));
         return;
       }
       throw new Error(`Bi\u1EBFn ch\u01B0a khai b\xE1o: ${name}`);
@@ -1491,6 +1612,10 @@ var LeanbotCpp = (() => {
           return n.value;
         case "name":
           return this.get(n.name);
+        case "member": {
+          if (callName(n).startsWith("CRGB.")) return { Red: [255, 0, 0], Green: [0, 128, 0], Lime: [0, 255, 0], Blue: [0, 0, 255], Yellow: [255, 255, 0], Purple: [128, 0, 128], Black: [0, 0, 0], White: [255, 255, 255] }[n.name] ?? [0, 0, 0];
+          return (yield* this.location(n)).read();
+        }
         case "array": {
           const a = [];
           for (const x of n.values) a.push(yield* this.expr(x));
@@ -1504,40 +1629,72 @@ var LeanbotCpp = (() => {
         }
         case "cast": {
           const v = yield* this.expr(n.value);
-          return /\b(int|long|short)\b/.test(n.type) ? Math.trunc(Number(v)) : Number(v);
+          return /\b(int|long|short|u?int\d+_t|byte)\b/.test(n.type) ? Math.trunc(Number(v)) : Number(v);
         }
         case "ternary":
           return yield* this.expr((yield* this.expr(n.condition)) ? n.yes : n.no);
         case "unary": {
+          if (n.op === "&") return yield* this.location(n.value);
           const v = yield* this.expr(n.value);
+          if (n.op === "*") {
+            if (!isRef(v)) throw new Error("Con tr\u1ECF kh\xF4ng h\u1EE3p l\u1EC7");
+            return v.read();
+          }
+          if (n.op === "~") return ~Number(v);
           if (n.op === "!") return !v;
           if (n.op === "-") return -Number(v);
           if (n.op === "+") return Number(v);
           const result = Number(v) + (n.op === "++" ? 1 : -1);
-          this.set(n.value.name, result);
+          (yield* this.location(n.value)).write(result);
           return result;
         }
         case "post": {
           const v = yield* this.expr(n.value);
-          this.set(n.value.name, Number(v) + (n.op === "++" ? 1 : -1));
+          (yield* this.location(n.value)).write(Number(v) + (n.op === "++" ? 1 : -1));
           return v;
         }
         case "binary": {
-          const a = yield* this.expr(n.left);
+          const loc = assignments.has(n.op) ? yield* this.location(n.left) : null;
+          const a = n.op === "=" ? 0 : yield* this.expr(n.left);
           if (n.op === "&&" && !a) return false;
           if (n.op === "||" && a) return true;
           const b = yield* this.expr(n.right);
           const x = Number(a), y = Number(b);
           switch (n.op) {
             case "=":
-              this.set(n.left.name, b);
+              loc.write(b);
               return b;
             case "+=":
-              this.set(n.left.name, x + y);
+              loc.write(x + y);
               return x + y;
             case "-=":
-              this.set(n.left.name, x - y);
+              loc.write(x - y);
               return x - y;
+            case "*=":
+              loc.write(x * y);
+              return x * y;
+            case "/=":
+              loc.write(x / y);
+              return x / y;
+            case "&=":
+              loc.write(x & y);
+              return x & y;
+            case "|=":
+              loc.write(x | y);
+              return x | y;
+            case "%=":
+              loc.write(x % y);
+              return x % y;
+            case "&":
+              return x & y;
+            case "|":
+              return x | y;
+            case "^":
+              return x ^ y;
+            case "<<":
+              return x << y;
+            case ">>":
+              return x >> y;
             case "+":
               return x + y;
             case "-":
@@ -1568,9 +1725,32 @@ var LeanbotCpp = (() => {
           break;
         }
         case "call": {
+          const name = callName(n.callee);
+          const fn = this.findFunction(name, n.args.length);
           const args = [];
-          for (const arg of n.args) args.push(yield* this.expr(arg));
-          return yield* this.call(n.name, args);
+          for (let i = 0; i < n.args.length; i++) args.push(fn?.params[i]?.type.includes("&") || name === "APDS.readColor" ? yield* this.location(n.args[i]) : yield* this.expr(n.args[i]));
+          if (n.callee.k === "member" && !/^(Leanbot|Lb|APDS|Serial|CRGB)/.test(name)) {
+            const obj = yield* this.expr(n.callee.value);
+            const method = n.callee.name;
+            if (typeof obj === "string") {
+              if (method === "length") return obj.length;
+              if (method === "c_str") return obj;
+              if (method === "trim" || method === "toUpperCase") {
+                (yield* this.location(n.callee.value)).write(method === "trim" ? obj.trim() : obj.toUpperCase());
+                return null;
+              }
+            }
+            if (obj && typeof obj === "object" && "attribute" in obj) {
+              const attr = String(obj.attribute), key = JSON.stringify([this.assetId, attr]);
+              if (method === "read") return this.host.iotRead?.(attr, this.assetId) ?? this.iot.get(key) ?? "waiting";
+              if (method === "write") {
+                this.iot.set(key, String(args[0]));
+                this.host.iotWrite?.(attr, String(args[0]), this.assetId);
+                return null;
+              }
+            }
+          }
+          return yield* this.call(name, args);
         }
       }
       throw new Error(`Bi\u1EC3u th\u1EE9c ch\u01B0a h\u1ED7 tr\u1EE3: ${n.k}`);
@@ -1580,12 +1760,20 @@ var LeanbotCpp = (() => {
       this.right = Math.max(-65, Math.min(65, right));
       this.host.motors(this.left, this.right);
     }
+    findFunction(name, count) {
+      return this.functions.get(name)?.find((fn) => count <= fn.params.length && fn.params.slice(count).every((p) => p.value !== null));
+    }
     *call(name, args) {
       const nums = args.map(Number), [a = 0, b = 0, c = 0] = nums;
-      const fn = this.functions.get(name);
+      const fn = this.findFunction(name, args.length);
       if (fn) {
         if (this.scopes.length > 64) throw new Error("H\xE0m g\u1ECDi l\u1ED3ng nhau qu\xE1 s\xE2u");
-        this.scopes.push(new Map(fn.params.map((p, i) => [p, args[i] ?? 0])));
+        const scope = /* @__PURE__ */ new Map();
+        for (let i = 0; i < fn.params.length; i++) {
+          const p = fn.params[i];
+          scope.set(p.name, i < args.length ? p.type.includes("&") ? { ...args[i], alias: true } : p.type.includes("*") ? args[i] : copyValue(args[i]) : yield* this.expr(p.value));
+        }
+        this.scopes.push(scope);
         try {
           yield* this.statement(fn.body);
         } catch (e) {
@@ -1598,16 +1786,63 @@ var LeanbotCpp = (() => {
       }
       switch (name) {
         case "LbIRLine.setThreshold":
+          this.thresholds = nums;
           return null;
-        // Board geometry supplies digital black/white readings.
         case "LbIRLine.read":
-          this.cachedLineMask = (this.host.lineMask?.() ?? 0) & 15;
+          const raw = this.host.rawLine?.();
+          this.cachedLineMask = raw ? raw.reduce((mask, v, i) => mask | (v >= this.thresholds[i] ? 1 << 3 - i : 0), 0) : (this.host.lineMask?.() ?? 0) & 15;
           return this.cachedLineMask;
+        case "F":
+          return args[0];
+        case "CRGB":
+          return nums;
+        case "LbIoT.Asset.attribute":
+          return { attribute: String(args[0]) };
+        case "LbIoT.Asset.begin":
+          this.assetId = String(args[0]);
+          return null;
+        case "LbIoT.Wifi.begin":
+          this.host.log?.("IoT gi\u1EA3 l\u1EADp: d\xF9ng thu\u1ED9c t\xEDnh c\u1EE5c b\u1ED9, kh\xF4ng k\u1EBFt n\u1ED1i m\xE1y ch\u1EE7 th\u1EADt.");
+          return null;
+        case "APDS.begin":
+          return !!this.host.color;
+        case "APDS.colorAvailable":
+          return !!this.host.color?.();
+        case "APDS.readColor": {
+          const sample = this.host.color?.();
+          if (!sample) return false;
+          args.forEach((v, i) => {
+            if (isRef(v)) v.write(sample[i]);
+          });
+          return true;
+        }
+        case "LbIRArray.read": {
+          const index = [2, 0, 1, 3].indexOf(a);
+          return this.host.rawLine?.()[index] ?? ((this.host.lineMask?.() ?? 0) & 1 << 3 - index ? 4095 : 0);
+        }
+        case "LbIRLine.isBlackDetected":
+          return this.cachedLineMask !== 0;
+        case "LbIRLine.doManualCalibration":
+          this.host.log?.("Line gi\u1EA3 l\u1EADp d\xF9ng c\u1EA3m bi\u1EBFn l\xFD t\u01B0\u1EDFng theo h\xECnh h\u1ECDc sa b\xE0n; hi\u1EC7u chu\u1EA9n n\xFAt ch\u1EA1m c\u1EA7n robot th\u1EADt.");
+          return null;
+        case "LbIRLine.displayOnRGB":
+          this.rgb = [3, 2, 1, 0].flatMap((bit) => this.cachedLineMask & 1 << bit ? args[0] : [0, 0, 0]);
+          return null;
+        case "LbRGB.getBrightness":
+          return this.brightness;
+        case "LbRGB.setBrightness":
+          this.brightness = a;
+          return null;
+        case "LbRGB.fillColor":
+          this.rgb = [...args[0]];
+          return null;
+        case "LbRGB.show":
+          this.host.led?.(this.rgb, this.brightness);
+          return null;
         case "LbIRLine.value":
           return this.cachedLineMask;
         case "Leanbot.begin":
         case "Serial.begin":
-        case "LbRGB.show":
           return null;
         case "LbMission.begin":
           if (this.missionStarted) {
@@ -1657,6 +1892,8 @@ var LeanbotCpp = (() => {
           yield { ms: speed ? Math.abs(a) / speed * 1e3 : 0 };
           return null;
         }
+        case "isnan":
+          return Number.isNaN(a);
         case "isfinite":
           return Number.isFinite(a);
         case "sqrtf":
@@ -1679,7 +1916,11 @@ var LeanbotCpp = (() => {
           return String(args[0]) === String(args[1]) ? 0 : String(args[0]) < String(args[1]) ? -1 : 1;
         case "Serial.print":
         case "Serial.println":
-          this.host.log?.(String(args[0] ?? ""));
+          this.serial += String(args[0] ?? "");
+          if (name === "Serial.println") {
+            this.host.log?.(this.serial);
+            this.serial = "";
+          }
           return null;
         case "Leanbot.pingMm":
           return this.host.sensors?.().distance ?? 300;
@@ -1717,14 +1958,35 @@ var LeanbotCpp = (() => {
           }
           return;
         case "function":
+        case "prototype":
+        case "empty":
           return;
-        case "enum":
-          n.names.forEach((name, i) => this.scopes[0].set(name, i));
+        case "declarations":
+          for (const item of n.body) yield* this.statement(item);
           return;
+        case "enum": {
+          let value = 0;
+          for (const entry of n.entries) {
+            if (entry.value) value = Number(yield* this.expr(entry.value));
+            this.scopes[0].set(entry.name, value++);
+          }
+          return;
+        }
         case "declare": {
-          let v = yield* this.expr(n.value);
-          if (/\b(int|long|short)\b/.test(n.type) && !Array.isArray(v)) v = Math.trunc(Number(v));
-          this.scopes.at(-1).set(n.name, v);
+          const structType = [...this.structs.keys()].find((t) => n.type.split(/\s+/).includes(t));
+          let v = n.value ? yield* this.expr(n.value) : structType ? Object.fromEntries(this.structs.get(structType).map((f) => [f.name, 0])) : 0;
+          if (structType && Array.isArray(v)) {
+            const initial = v;
+            v = Object.fromEntries(this.structs.get(structType).map((f, i) => [f.name, initial[i] ?? 0]));
+          }
+          const sizes = [];
+          for (const dim of n.dimensions) sizes.push(Number(yield* this.expr(dim)));
+          const slots = sizes.reduce((total, size, i) => total * (size || (i === 0 && Array.isArray(v) ? v.length : 0)), 1);
+          if (sizes.some((size) => !Number.isSafeInteger(size) || size < 0) || slots > 65536) throw new Error("M\u1EA3ng v\u01B0\u1EE3t gi\u1EDBi h\u1EA1n 65536 ph\u1EA7n t\u1EED c\u1EE7a gi\u1EA3 l\u1EADp");
+          const fill = (depth, initial) => depth >= sizes.length ? initial ?? 0 : Array.from({ length: sizes[depth] || (Array.isArray(initial) ? initial.length : 0) }, (_, i) => fill(depth + 1, Array.isArray(initial) ? initial[i] : 0));
+          if (sizes.length) v = fill(0, v);
+          if (/\b(int|long|short|u?int\d+_t|byte)\b/.test(n.type) && !Array.isArray(v)) v = Math.trunc(Number(v));
+          this.scopes.at(-1).set(n.name, copyValue(v));
           return;
         }
         case "expression":
@@ -1787,6 +2049,13 @@ var LeanbotCpp = (() => {
     start() {
       this.missionStarted = false;
       this.cachedLineMask = 0;
+      this.thresholds = [69, 78, 106, 70];
+      this.serial = "";
+      this.iot.clear();
+      this.brightness = 255;
+      this.rgb = [0, 0, 0];
+      this.assetId = "";
+      this.host.led?.(this.rgb, this.brightness);
       this.scopes = [/* @__PURE__ */ new Map()];
       this.iterator = this.program();
       this.running = true;

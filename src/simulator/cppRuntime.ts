@@ -1,117 +1,102 @@
 import {MOTION_CALIBRATION} from './motionCalibration';
 import { LEANBOT_GEOMETRY } from './robotGeometry';
+export {readVirtualLine,readVirtualColor} from './virtualSensors';
 export { MissionWorld, drawMissionBlocks } from './missionWorld';
 export { mountMissionEditor } from './missionEditor';
 export { drawLeanbot, LEANBOT_APPEARANCE } from './robotAppearance';
 import { tokenizeCpp, type Token } from '../transpiler/cppParser/tokenizer';
 
 type Node = { k: string; [key: string]: any };
-type Value = number | string | boolean | null | Value[];
-const TYPES = new Set(['void', 'int', 'float', 'double', 'long', 'short', 'unsigned', 'signed', 'char', 'bool', 'String', 'const', 'static', 'auto']);
-const precedence: Record<string, number> = { '=': 1, '+=': 1, '-=': 1, '?': 2, '||': 3, '&&': 4, '==': 5, '!=': 5, '<': 6, '>': 6, '<=': 6, '>=': 6, '+': 7, '-': 7, '*': 8, '/': 8, '%': 8 };
+type Value = number | string | boolean | null | Value[] | { [key: string]: any };
+type Reference = { alias?: boolean; read(): Value; write(value: Value): void };
+const isRef = (v: any): v is Reference => v != null && typeof v.read === 'function';
+const copyValue = (v: Value): Value => Array.isArray(v) ? v.map(copyValue) : v && typeof v === 'object' && !isRef(v) ? Object.fromEntries(Object.entries(v).map(([k,x]) => [k,copyValue(x)])) : v;
+const TYPES = new Set(['void','int','float','double','long','short','unsigned','signed','char','bool','String','const','static','inline','auto','byte','uint8_t','uint16_t','uint32_t','int8_t','int16_t','int32_t','CRGB','__FlashStringHelper']);
+const SDK_CALLS = new Set(Object.entries({
+  Leanbot:['begin','pingCm','pingMm','tone'],
+  LbMission:['begin','end'],
+  LbMotion:['runLR','runLRrpm','stopAndWait','setZeroOrigin','getDistanceMm','getRotationDeg','waitDistanceMm','waitRotationDeg'],
+  LbIRLine:['setThreshold','read','value','isBlackDetected','doManualCalibration','displayOnRGB'],
+  LbIRArray:['read'],
+  LbRGB:['fillColor','show','getBrightness','setBrightness'],
+  LbGripper:['open','close','moveTo','moveToLR'],
+  APDS:['begin','colorAvailable','readColor'],
+  Serial:['begin','print','println'],
+  'LbIoT.Wifi':['begin'],
+  'LbIoT.Asset':['begin','attribute'],
+}).flatMap(([object,methods])=>methods.map(method=>`${object}.${method}`)));
+const INSTANCE_CALLS = new Set(['length','c_str','trim','toUpperCase','read','write']);
+const assignments = new Set(['=','+=','-=','*=','/=','%=','&=','|=']);
+const precedence: Record<string,number> = {'=':1,'+=':1,'-=':1,'*=':1,'/=':1,'%=':1,'&=':1,'|=':1,'?':2,'||':3,'&&':4,'|':5,'^':6,'&':7,'==':8,'!=':8,'<':9,'>':9,'<=':9,'>=':9,'<<':10,'>>':10,'+':11,'-':11,'*':12,'/':12,'%':12};
 
 class Parser {
-  tokens: Token[]; i = 0; types = new Set(TYPES);
-  constructor(source: string) {
-    // Numeric suffixes are part of C++ literals, not variable names.
-    this.tokens = tokenizeCpp(source).filter(t => !['comment', 'preprocessor'].includes(t.kind));
-    this.tokens = this.tokens.filter((t, i, all) => !(t.kind === 'identifier' && /^(f|u|l|ul|ull)$/i.test(t.value) && all[i - 1]?.kind === 'number' && all[i - 1].end === t.start));
-    for (const t of this.tokens) if (t.kind === 'number' && !/^0x/i.test(t.value)) t.value = t.value.replace(/[fF]$/, '');
+  tokens: Token[]; i=0; types=new Set(TYPES); structs = new Map<string,Node[]>();
+  constructor(source:string) {
+    this.tokens=tokenizeCpp(source).filter(t=>!['comment','preprocessor'].includes(t.kind));
+    this.tokens=this.tokens.filter((t,i,all)=>!(t.kind==='identifier' && /^(f|u|l|ul|ull)$/i.test(t.value) && all[i-1]?.kind==='number' && all[i-1].end===t.start));
+    for(const t of this.tokens) if(t.kind==='number' && !/^0[xb]/i.test(t.value)) t.value=t.value.replace(/[fF]$/,'');
   }
-  peek(v?: string): any { return v === undefined ? this.tokens[this.i]?.value : this.tokens[this.i]?.value === v; }
-  take(v?: string): string {
-    const t = this.tokens[this.i++];
-    if (!t || (v !== undefined && t.value !== v)) throw new Error(`Dòng ${t?.line ?? 'cuối'}: cần ${v ?? 'biểu thức'}, gặp ${t?.value ?? 'hết code'}`);
-    return t.value;
+  peek(v?:string):any { return v===undefined?this.tokens[this.i]?.value:this.tokens[this.i]?.value===v; }
+  take(v?:string):string { const t=this.tokens[this.i++]; if(!t || v!==undefined&&t.value!==v) throw new Error(`Dòng ${t?.line??'cuối'}: cần ${v??'biểu thức'}, gặp ${t?.value??'hết code'}`);return t.value; }
+  eat(v:string) {if(this.peek(v)){this.i++;return true;}return false;}
+  expr(min=0):Node {
+    let n:Node;const t=this.tokens[this.i];if(!t)throw new Error('Thiếu biểu thức');
+    if(this.peek('(')&&this.types.has(this.tokens[this.i+1]?.value)) {this.take();let type='';while(!this.peek(')'))type+=this.take()+' ';this.take();n={k:'cast',type,value:this.expr(13)};}
+    else if(this.eat('(')){n=this.expr();this.take(')');}
+    else if(this.eat('{')){const values:Node[]=[];if(!this.peek('}')) do{values.push(this.expr());}while(this.eat(',')&&!this.peek('}'));this.take('}');n={k:'array',values};}
+    else if(['!','~','-','+','++','--','*','&'].includes(this.peek()))n={k:'unary',op:this.take(),value:this.expr(13)};
+    else if(t.kind==='number'){this.i++;n={k:'literal',value:Number(t.value)};}
+    else if(t.kind==='string'){this.i++;n={k:'literal',value:t.value.slice(1,-1).replace(/\\n/g,'\n').replace(/\\"/g,'"')};}
+    else if(t.kind==='identifier')n={k:'name',name:this.take()};
+    else throw new Error(`Dòng ${t.line}: biểu thức chưa hỗ trợ ${t.value}`);
+    while(true){
+      if(this.eat('.')||this.eat('::')||this.eat('->')){n={k:'member',value:n,name:this.take()};continue;}
+      if(this.eat('(')){const args:Node[]=[];if(!this.peek(')'))do{args.push(this.expr());}while(this.eat(','));this.take(')');n={k:'call',callee:n,args};continue;}
+      if(this.eat('[')){const index=this.expr();this.take(']');n={k:'index',value:n,index};continue;}
+      if(['++','--'].includes(this.peek())){n={k:'post',op:this.take(),value:n};continue;}
+      const op=this.peek(),level=precedence[op];if(level===undefined||level<min)break;this.take();
+      if(op==='?'){const yes=this.expr();this.take(':');n={k:'ternary',condition:n,yes,no:this.expr(2)};}
+      else n={k:'binary',op,left:n,right:this.expr(level+(assignments.has(op)?0:1))};
+    }return n;
   }
-  eat(v: string) { if (this.peek(v)) { this.i++; return true; } return false; }
-  expr(min = 0): Node {
-    let n: Node;
-    const t = this.tokens[this.i];
-    if (!t) throw new Error('Thiếu biểu thức');
-    if (this.peek('(') && this.types.has(this.tokens[this.i + 1]?.value)) {
-      this.take('('); let type = ''; while (!this.peek(')')) type += this.take() + ' '; this.take(')');
-      n = { k: 'cast', type, value: this.expr(9) };
-    } else if (this.eat('(')) { n = this.expr(); this.take(')'); }
-    else if (['!', '-', '+', '++', '--'].includes(this.peek())) n = { k: 'unary', op: this.take(), value: this.expr(9) };
-    else if (t.kind === 'number') { this.i++; n = { k: 'literal', value: Number(t.value) }; }
-    else if (t.kind === 'string') { this.i++; n = { k: 'literal', value: t.value.slice(1, -1).replace(/\\n/g, '\n').replace(/\\"/g, '"') }; }
-    else if (t.kind === 'identifier') {
-      let name = this.take();
-      while (this.eat('.') || this.eat('::')) name += '.' + this.take();
-      n = { k: 'name', name };
-    } else throw new Error(`Dòng ${t.line}: biểu thức chưa hỗ trợ ${t.value}`);
-    while (true) {
-      if (this.eat('(')) {
-        const args: Node[] = []; if (!this.peek(')')) do { args.push(this.expr()); } while (this.eat(','));
-        this.take(')'); n = { k: 'call', name: n.name, args }; continue;
-      }
-      if (this.eat('[')) { const index = this.expr(); this.take(']'); n = { k: 'index', value: n, index }; continue; }
-      if (['++', '--'].includes(this.peek())) { n = { k: 'post', op: this.take(), value: n }; continue; }
-      const op = this.peek(), level = precedence[op];
-      if (level === undefined || level < min) break;
-      this.take();
-      if (op === '?') { const yes = this.expr(); this.take(':'); n = { k: 'ternary', condition: n, yes, no: this.expr(2) }; }
-      else n = { k: 'binary', op, left: n, right: this.expr(level + (['=', '+=', '-='].includes(op) ? 0 : 1)) };
+  type():string {let type='';while(this.types.has(this.peek()))type+=this.take()+' ';while(['*','&'].includes(this.peek()))type+=this.take();return type;}
+  declaration():Node {
+    const type=this.type(),name=this.take();
+    if(this.eat('(')){
+      const params:Node[]=[];
+      if(!this.peek(')'))do{const type=this.type();if(type.trim()==='void'&&this.peek(')'))break;const name=this.take();const value=this.eat('=')?this.expr():null;params.push({k:'param',type,name,value});}while(this.eat(','));
+      this.take(')');if(this.eat(';'))return{k:'prototype',name,params};return{k:'function',name,params,body:this.statement()};
     }
-    return n;
+    const declarations:Node[]=[];let next=name;
+    do{const dimensions:Node[]=[];while(this.eat('[')){dimensions.push(this.peek(']')?{k:'literal',value:0}:this.expr());this.take(']');}
+      const value=this.eat('=')?this.expr():null;declarations.push({k:'declare',name:next,type,value,dimensions});
+      if(!this.eat(','))break;next=this.take();
+    }while(true);
+    this.take(';');return{k:'declarations',body:declarations};
   }
-  declaration(): Node {
-    let type = '';
-    while (this.types.has(this.peek())) type += this.take() + ' ';
-    while (this.eat('*') || this.eat('&')) { /* parameter pointer/reference */ }
-    const name = this.take();
-    if (this.eat('(')) {
-      const params: string[] = [];
-      if (!this.peek(')')) do {
-        while (this.types.has(this.peek()) || ['*', '&'].includes(this.peek())) this.take();
-        params.push(this.take());
-      } while (this.eat(','));
-      this.take(')'); return { k: 'function', name, params, body: this.statement() };
-    }
-    let array = false;
-    if (this.eat('[')) { array = true; if (!this.peek(']')) this.expr(); this.take(']'); }
-    let value: Node = { k: 'literal', value: 0 };
-    if (this.eat('=')) {
-      if (array && this.eat('{')) {
-        const values: Node[] = []; if (!this.peek('}')) do { values.push(this.expr()); } while (this.eat(','));
-        this.take('}'); value = { k: 'array', values };
-      } else value = this.expr();
-    }
-    this.take(';'); return { k: 'declare', name, type, value };
+  statement():Node {
+    if(this.eat(';'))return{k:'empty'};
+    if(this.eat('{')){const body:Node[]=[];while(!this.peek('}'))body.push(this.statement());this.take('}');return{k:'block',body};}
+    if(this.eat('struct')){const name=this.take();this.types.add(name);this.take('{');const fields:Node[]=[];while(!this.peek('}'))fields.push(...this.declaration().body);this.take('}');this.take(';');this.structs.set(name,fields);return{k:'empty'};}
+    if(this.eat('enum')){const type=this.take();this.types.add(type);this.take('{');const entries:Node[]=[];do{const name=this.take();entries.push({k:'entry',name,value:this.eat('=')?this.expr():null});}while(this.eat(',')&&!this.peek('}'));this.take('}');this.take(';');return{k:'enum',entries};}
+    if(this.eat('if')){this.take('(');const condition=this.expr();this.take(')');const yes=this.statement();return{k:'if',condition,yes,no:this.eat('else')?this.statement():null};}
+    if(this.eat('while')){this.take('(');const condition=this.expr();this.take(')');return{k:'while',condition,body:this.statement()};}
+    if(this.eat('for')){this.take('(');const init=this.statement();const condition=this.expr();this.take(';');const next=this.expr();this.take(')');return{k:'for',init,condition,next,body:this.statement()};}
+    if(this.eat('switch')){this.take('(');const value=this.expr();this.take(')');this.take('{');const cases:Node[]=[];while(!this.peek('}')){const def=this.eat('default');if(!def)this.take('case');const label=def?null:this.expr();this.take(':');const body:Node[]=[];while(!['case','default','}'].includes(this.peek()))body.push(this.statement());cases.push({k:'case',label,body});}this.take('}');return{k:'switch',value,cases};}
+    for(const k of ['break','continue','return'])if(this.eat(k)){const value=k==='return'&&!this.peek(';')?this.expr():null;this.take(';');return{k,value};}
+    if(this.types.has(this.peek()))return this.declaration();const value=this.expr();this.take(';');return{k:'expression',value};
   }
-  statement(): Node {
-    if (this.eat(';')) return { k: 'block', body: [] };
-    if (this.eat('{')) { const body: Node[] = []; while (!this.peek('}')) body.push(this.statement()); this.take('}'); return { k: 'block', body }; }
-    if (this.eat('enum')) {
-      const type = this.take(); this.types.add(type); this.take('{'); const names: string[] = [];
-      do { names.push(this.take()); } while (this.eat(',')); this.take('}'); this.take(';'); return { k: 'enum', names };
-    }
-    if (this.eat('if')) { this.take('('); const condition = this.expr(); this.take(')'); const yes = this.statement(); return { k: 'if', condition, yes, no: this.eat('else') ? this.statement() : null }; }
-    if (this.eat('while')) { this.take('('); const condition = this.expr(); this.take(')'); return { k: 'while', condition, body: this.statement() }; }
-    if (this.eat('for')) {
-      this.take('('); const init = this.statement(); const condition = this.expr(); this.take(';'); const next = this.expr(); this.take(')');
-      return { k: 'for', init, condition, next, body: this.statement() };
-    }
-    if (this.eat('switch')) {
-      this.take('('); const value = this.expr(); this.take(')'); this.take('{'); const cases: Node[] = [];
-      while (!this.peek('}')) {
-        const isDefault = this.eat('default'); if (!isDefault) this.take('case');
-        const label = isDefault ? null : this.expr(); this.take(':'); const body: Node[] = [];
-        while (!['case', 'default', '}'].includes(this.peek())) body.push(this.statement());
-        cases.push({ k: 'case', label, body });
-      }
-      this.take('}'); return { k: 'switch', value, cases };
-    }
-    for (const k of ['break', 'continue', 'return']) if (this.eat(k)) { const value = k === 'return' && !this.peek(';') ? this.expr() : null; this.take(';'); return { k, value }; }
-    if (this.types.has(this.peek())) return this.declaration();
-    const value = this.expr(); this.take(';'); return { k: 'expression', value };
-  }
-  parse() { const nodes: Node[] = []; while (this.i < this.tokens.length) nodes.push(this.statement()); return nodes; }
+  parse(){const nodes:Node[]=[];while(this.i<this.tokens.length)nodes.push(this.statement());return nodes;}
 }
+const callName = (n:Node):string => n.k==='name'?n.name:n.k==='member'?`${callName(n.value)}.${n.name}`:'';
 
 export interface RuntimeHost {
   lineMask?(): number;
+  rawLine?(): readonly number[]; // 2L, 0L, 1R, 3R
+  color?(): readonly [number,number,number] | null;
+  led?(rgb:readonly number[],brightness:number):void;
+  iotRead?(attribute:string,assetId:string):string;
+  iotWrite?(attribute:string,value:string,assetId:string):void;
   motors(left: number, right: number): void;
   advance(seconds: number): void;
   log?(message: string): void;
@@ -124,57 +109,105 @@ class Flow { constructor(public kind: string, public value: Value = null) {} }
 
 /** Cooperative interpreter for the supported Leanbot C++ subset; no eval or JS execution. */
 export class CppRuntime {
-  private nodes: Node[]; private functions = new Map<string, Node>(); private scopes: Scope[] = [new Map()];
+  private nodes: Node[]; private functions = new Map<string, Node[]>(); private scopes: Scope[] = [new Map()];
   private iterator?: Generator<Yield, void, unknown>; private pending = 0;
   private missionStarted=false;
   private cachedLineMask=0;
   running = false; time = 0; distance = 0; rotation = 0; left = 0; right = 0;
   constructor(source: string, private host: RuntimeHost, private readonly distanceScale: number = MOTION_CALIBRATION.physicalMmPerEncoderMm) {
     if(!Number.isFinite(distanceScale)||distanceScale<=0)throw new Error('Hệ số hiệu chuẩn quãng đường phải là số dương hữu hạn.');
-    this.nodes = new Parser(source).parse();
-    for (const n of this.nodes) if (n.k === 'function') this.functions.set(n.name, n);
-    const builtins = new Set(['Leanbot.begin', 'LbMission.begin', 'LbMission.end', 'LbMotion.runLR', 'LbMotion.runLRrpm', 'LbMotion.stopAndWait', 'LbMotion.setZeroOrigin', 'LbMotion.getDistanceMm', 'LbMotion.getRotationDeg', 'LbMotion.waitDistanceMm', 'LbMotion.waitRotationDeg', 'LbDelay', 'delay', 'millis', 'isfinite', 'fabsf', 'fabs', 'abs', 'lroundf', 'round', 'sqrtf', 'sqrt', 'min', 'max', 'constrain', 'strcmp', 'Serial.begin', 'Serial.println', 'Serial.print', 'LbGripper.open', 'LbGripper.close', 'LbGripper.moveToLR', 'LbGripper.moveTo', 'Leanbot.pingCm', 'Leanbot.pingMm', 'Leanbot.tone', 'LbRGB.show']);
-    const validate = (n: any) => {
-      if (!n || typeof n !== 'object') return;
-      if (n.k === 'call' && !this.functions.has(n.name) && !builtins.has(n.name) && !['LbIRLine.read', 'LbIRLine.value', 'LbIRLine.setThreshold'].includes(n.name)) throw new Error(`Hàm chưa hỗ trợ trong giả lập: ${n.name}`);
-      for (const v of Object.values(n)) if (Array.isArray(v)) v.forEach(validate); else if (typeof v === 'object') validate(v);
+    const parser = new Parser(source); this.nodes=parser.parse(); this.structs=parser.structs;
+    for(const n of this.nodes) if(n.k==='function')this.functions.set(n.name,[...(this.functions.get(n.name)??[]),n]);
+    for(const n of this.nodes) if(n.k==='prototype') for(const fn of this.functions.get(n.name)??[]) if(fn.params.length===n.params.length) fn.params.forEach((p:Node,i:number)=>p.value??=n.params[i].value);
+    const builtins=new Set(['F','CRGB','millis','delay','LbDelay','isfinite','isnan','fabsf','fabs','abs','lroundf','round','sqrtf','sqrt','min','max','constrain','strcmp']);
+    const validate=(n:any):void=>{
+      if(!n||typeof n!=='object')return;
+      if(n.k==='call'){
+        const name=callName(n.callee);
+        const instance=n.callee.k==='member'&&!/^(Leanbot|Lb[A-Z]\w*|APDS|Serial|CRGB)(\.|$)/.test(name)&&INSTANCE_CALLS.has(n.callee.name);
+        if(!this.functions.has(name)&&!builtins.has(name)&&!SDK_CALLS.has(name)&&!instance)throw new Error(`Hàm chưa hỗ trợ trong giả lập: ${name}`);
+      }
+      for(const v of Object.values(n))if(Array.isArray(v))v.forEach(validate);else if(typeof v==='object')validate(v);
     };
     this.nodes.forEach(validate);
   }
+  private structs = new Map<string,Node[]>();
+  private thresholds=[69,78,106,70];
+  private brightness=255;
+  private rgb:number[]=[0,0,0];
+  private assetId='';
+  private serial='';
+  private iot = new Map<string,string>();
+  private *location(n:Node):Generator<Yield,Reference,unknown> {
+    if(n.k==='name'){
+      const scope=[...this.scopes].reverse().find(s=>s.has(n.name));if(!scope)throw new Error(`Biến chưa khai báo: ${n.name}`);
+      const value=scope.get(n.name);if(isRef(value)&&value.alias)return value;
+      return {read:()=>scope.get(n.name)!,write:v=>scope.set(n.name,copyValue(v))};
+    }
+    if(n.k==='unary'&&n.op==='*'){const ref=yield* this.expr(n.value);if(isRef(ref))return ref;}
+    if(n.k==='member'||n.k==='index'){
+      let obj=yield* this.expr(n.value);if(isRef(obj))obj=obj.read();
+      const key=n.k==='member'?n.name:Number(yield* this.expr(n.index));
+      if(obj&&typeof obj==='object')return {read:()=> (obj as any)[key],write:v=>{(obj as any)[key]=copyValue(v);}};
+    }throw new Error('Biểu thức không thể gán');
+  }
+
   private get(name: string): Value {
     if (name === 'true') return true; if (name === 'false') return false; if (name === 'nullptr') return null;
     if (/^TB[12][AB]$/.test(name)) return 1;
-    for (let i = this.scopes.length - 1; i >= 0; i--) if (this.scopes[i].has(name)) return this.scopes[i].get(name)!;
+    if(name==='NAN')return NaN;
+    if(/^ir[0123][LR]$/.test(name))return Number(name[2]);
+    for (let i = this.scopes.length - 1; i >= 0; i--) if (this.scopes[i].has(name)) return isRef(this.scopes[i].get(name)) && (this.scopes[i].get(name) as Reference).alias ? (this.scopes[i].get(name) as Reference).read() : this.scopes[i].get(name)!;
     throw new Error(`Biến chưa khai báo: ${name}`);
   }
   private set(name: string, value: Value) {
-    for (let i = this.scopes.length - 1; i >= 0; i--) if (this.scopes[i].has(name)) { this.scopes[i].set(name, value); return; }
+    for (let i = this.scopes.length - 1; i >= 0; i--) if (this.scopes[i].has(name)) { const old=this.scopes[i].get(name);if(isRef(old)&&old.alias)old.write(value);else this.scopes[i].set(name,copyValue(value)); return; }
     throw new Error(`Biến chưa khai báo: ${name}`);
   }
   private *expr(n: Node): Generator<Yield, Value, unknown> {
     switch (n.k) {
       case 'literal': return n.value;
       case 'name': return this.get(n.name);
+      case 'member': {
+        if(callName(n).startsWith('CRGB.'))return ({Red:[255,0,0],Green:[0,128,0],Lime:[0,255,0],Blue:[0,0,255],Yellow:[255,255,0],Purple:[128,0,128],Black:[0,0,0],White:[255,255,255]} as Record<string,Value>)[n.name]??[0,0,0];
+        return (yield* this.location(n)).read();
+      }
       case 'array': { const a: Value[] = []; for (const x of n.values) a.push(yield* this.expr(x)); return a; }
       case 'index': { const array = yield* this.expr(n.value); const index = Number(yield* this.expr(n.index)); if (!Array.isArray(array) || !(index in array)) throw new Error('Chỉ số mảng không hợp lệ'); return array[index]; }
-      case 'cast': { const v = yield* this.expr(n.value); return /\b(int|long|short)\b/.test(n.type) ? Math.trunc(Number(v)) : Number(v); }
+      case 'cast': { const v = yield* this.expr(n.value); return /\b(int|long|short|u?int\d+_t|byte)\b/.test(n.type) ? Math.trunc(Number(v)) : Number(v); }
       case 'ternary': return yield* this.expr((yield* this.expr(n.condition)) ? n.yes : n.no);
-      case 'unary': { const v = yield* this.expr(n.value); if (n.op === '!') return !v; if (n.op === '-') return -Number(v); if (n.op === '+') return Number(v); const result = Number(v) + (n.op === '++' ? 1 : -1); this.set(n.value.name, result); return result; }
-      case 'post': { const v = yield* this.expr(n.value); this.set(n.value.name, Number(v) + (n.op === '++' ? 1 : -1)); return v; }
+      case 'unary': { if(n.op==='&')return yield* this.location(n.value); const v = yield* this.expr(n.value); if(n.op==='*'){if(!isRef(v))throw new Error('Con trỏ không hợp lệ');return v.read();} if(n.op==='~')return ~Number(v);if (n.op === '!') return !v; if (n.op === '-') return -Number(v); if (n.op === '+') return Number(v); const result = Number(v) + (n.op === '++' ? 1 : -1); (yield* this.location(n.value)).write(result); return result; }
+      case 'post': { const v = yield* this.expr(n.value); (yield* this.location(n.value)).write(Number(v) + (n.op === '++' ? 1 : -1)); return v; }
       case 'binary': {
-        const a = yield* this.expr(n.left);
+        const loc=assignments.has(n.op)?yield* this.location(n.left):null;
+        const a = n.op==='='?0:yield* this.expr(n.left);
         if (n.op === '&&' && !a) return false; if (n.op === '||' && a) return true;
         const b = yield* this.expr(n.right); const x = Number(a), y = Number(b);
         switch (n.op) {
-          case '=': this.set(n.left.name, b); return b;
-          case '+=': this.set(n.left.name, x + y); return x + y;
-          case '-=': this.set(n.left.name, x - y); return x - y;
+          case '=': loc!.write(b); return b;
+          case '+=': loc!.write(x + y); return x + y;
+          case '-=': loc!.write(x - y); return x - y;
+          case '*=':loc!.write(x*y);return x*y;case '/=':loc!.write(x/y);return x/y;case '&=':loc!.write(x&y);return x&y;case '|=':loc!.write(x|y);return x|y;case '%=':loc!.write(x%y);return x%y;
+          case '&':return x&y;case '|':return x|y;case '^':return x^y;case '<<':return x<<y;case '>>':return x>>y;
           case '+': return x + y; case '-': return x - y; case '*': return x * y; case '/': return x / y; case '%': return x % y;
           case '<': return x < y; case '>': return x > y; case '<=': return x <= y; case '>=': return x >= y;
           case '==': return a === b; case '!=': return a !== b; case '&&': return Boolean(b); case '||': return Boolean(b);
         } break;
       }
-      case 'call': { const args: Value[] = []; for (const arg of n.args) args.push(yield* this.expr(arg)); return yield* this.call(n.name, args); }
+      case 'call': {
+        const name=callName(n.callee);const fn=this.findFunction(name,n.args.length);
+        const args:Value[]=[];
+        for(let i=0;i<n.args.length;i++)args.push(fn?.params[i]?.type.includes('&')||name==='APDS.readColor'?yield* this.location(n.args[i]):yield* this.expr(n.args[i]));
+        if(n.callee.k==='member'&&!/^(Leanbot|Lb|APDS|Serial|CRGB)/.test(name)){
+          const obj=yield* this.expr(n.callee.value);const method=n.callee.name;
+          if(typeof obj==='string'){
+            if(method==='length')return obj.length;if(method==='c_str')return obj;
+            if(method==='trim'||method==='toUpperCase'){(yield* this.location(n.callee.value)).write(method==='trim'?obj.trim():obj.toUpperCase());return null;}
+          }
+          if(obj&&typeof obj==='object'&&'attribute' in obj){const attr=String(obj.attribute),key=JSON.stringify([this.assetId,attr]);if(method==='read')return this.host.iotRead?.(attr,this.assetId)??this.iot.get(key)??'waiting';if(method==='write'){this.iot.set(key,String(args[0]));this.host.iotWrite?.(attr,String(args[0]),this.assetId);return null;}}
+        }
+        return yield* this.call(name,args);
+      }
     }
     throw new Error(`Biểu thức chưa hỗ trợ: ${n.k}`);
   }
@@ -183,20 +216,39 @@ export class CppRuntime {
     this.left = Math.max(-65, Math.min(65, left)); this.right = Math.max(-65, Math.min(65, right));
     this.host.motors(this.left, this.right);
   }
+  private findFunction(name:string,count:number){return this.functions.get(name)?.find(fn=>count<=fn.params.length&&fn.params.slice(count).every((p:Node)=>p.value!==null));}
   private *call(name: string, args: Value[]): Generator<Yield, Value, unknown> {
     const nums = args.map(Number), [a = 0, b = 0, c = 0] = nums;
-    const fn = this.functions.get(name);
+    const fn = this.findFunction(name,args.length);
     if (fn) {
       if (this.scopes.length > 64) throw new Error('Hàm gọi lồng nhau quá sâu');
-      this.scopes.push(new Map(fn.params.map((p: string, i: number) => [p, args[i] ?? 0])));
+      const scope:Scope=new Map();
+      for(let i=0;i<fn.params.length;i++){const p=fn.params[i];scope.set(p.name,i<args.length?(p.type.includes('&')?{...(args[i] as Reference),alias:true}:p.type.includes('*')?args[i]:copyValue(args[i])):yield* this.expr(p.value));}
+      this.scopes.push(scope);
       try { yield* this.statement(fn.body); } catch (e) { if (e instanceof Flow && e.kind === 'return') return e.value; throw e; }
       finally { this.scopes.pop(); } return null;
     }
     switch (name) {
-      case 'LbIRLine.setThreshold': return null; // Board geometry supplies digital black/white readings.
-      case 'LbIRLine.read': this.cachedLineMask=(this.host.lineMask?.() ?? 0) & 0x0f; return this.cachedLineMask;
+      case 'LbIRLine.setThreshold': this.thresholds=nums;return null;
+      case 'LbIRLine.read': const raw=this.host.rawLine?.();this.cachedLineMask=raw?raw.reduce((mask,v,i)=>mask|(v>=this.thresholds[i]?1<<(3-i):0),0):(this.host.lineMask?.()??0)&15; return this.cachedLineMask;
+      case 'F':return args[0];
+      case 'CRGB':return nums;
+      case 'LbIoT.Asset.attribute':return {attribute:String(args[0])};
+      case 'LbIoT.Asset.begin':this.assetId=String(args[0]);return null;
+      case 'LbIoT.Wifi.begin':this.host.log?.('IoT giả lập: dùng thuộc tính cục bộ, không kết nối máy chủ thật.');return null;
+      case 'APDS.begin':return !!this.host.color;
+      case 'APDS.colorAvailable':return !!this.host.color?.();
+      case 'APDS.readColor':{const sample=this.host.color?.();if(!sample)return false;args.forEach((v,i)=>{if(isRef(v))v.write(sample[i]);});return true;}
+      case 'LbIRArray.read':{const index=[2,0,1,3].indexOf(a);return this.host.rawLine?.()[index]??((this.host.lineMask?.()??0)&(1<<(3-index))?4095:0);}
+      case 'LbIRLine.isBlackDetected':return this.cachedLineMask!==0;
+      case 'LbIRLine.doManualCalibration':this.host.log?.('Line giả lập dùng cảm biến lý tưởng theo hình học sa bàn; hiệu chuẩn nút chạm cần robot thật.');return null;
+      case 'LbIRLine.displayOnRGB':this.rgb=[3,2,1,0].flatMap(bit=>this.cachedLineMask&(1<<bit)?args[0] as number[]:[0,0,0]);return null;
+      case 'LbRGB.getBrightness':return this.brightness;
+      case 'LbRGB.setBrightness':this.brightness=a;return null;
+      case 'LbRGB.fillColor':this.rgb=[...(args[0] as number[])];return null;
+      case 'LbRGB.show':this.host.led?.(this.rgb,this.brightness);return null;
       case 'LbIRLine.value': return this.cachedLineMask;
-      case 'Leanbot.begin': case 'Serial.begin': case 'LbRGB.show': return null;
+      case 'Leanbot.begin': case 'Serial.begin': return null;
       case 'LbMission.begin':
         // Run supplies one start signal. The hardware waits for touch buttons
         // again at the next mission; never auto-start another route here.
@@ -219,6 +271,7 @@ export class CppRuntime {
         const speed = Math.abs((this.left - this.right) / LEANBOT_GEOMETRY.wheelBase * 180 / Math.PI); if (!speed && a) throw new Error('Không thể chờ góc quay khi hai bánh chạy cùng tốc độ');
         yield { ms: speed ? Math.abs(a) / speed * 1000 : 0 }; return null;
       }
+      case 'isnan':return Number.isNaN(a);
       case 'isfinite': return Number.isFinite(a);
       case 'sqrtf': case 'sqrt': return Math.sqrt(a);
       case 'fabsf': case 'fabs': case 'abs': return Math.abs(a);
@@ -226,7 +279,7 @@ export class CppRuntime {
       case 'min': return Math.min(...nums); case 'max': return Math.max(...nums);
       case 'constrain': return Math.max(b, Math.min(c, a));
       case 'strcmp': return String(args[0]) === String(args[1]) ? 0 : String(args[0]) < String(args[1]) ? -1 : 1;
-      case 'Serial.print': case 'Serial.println': this.host.log?.(String(args[0] ?? '')); return null;
+      case 'Serial.print':case 'Serial.println':this.serial+=String(args[0]??'');if(name==='Serial.println'){this.host.log?.(this.serial);this.serial='';}return null;
       case 'Leanbot.pingMm': return this.host.sensors?.().distance ?? 300;
       case 'Leanbot.pingCm': return (this.host.sensors?.().distance ?? 300) / 10;
       case 'LbGripper.open': this.host.gripper?.(0, 0); return null;
@@ -248,9 +301,21 @@ export class CppRuntime {
         this.scopes.push(new Map());
         try { for (const s of n.body) yield* this.statement(s); } finally { this.scopes.pop(); }
         return;
-      case 'function': return;
-      case 'enum': n.names.forEach((name: string, i: number) => this.scopes[0].set(name, i)); return;
-      case 'declare': { let v = yield* this.expr(n.value); if (/\b(int|long|short)\b/.test(n.type) && !Array.isArray(v)) v = Math.trunc(Number(v)); this.scopes.at(-1)!.set(n.name, v); return; }
+      case 'function': case 'prototype': case 'empty': return;
+      case 'declarations':for(const item of n.body)yield* this.statement(item);return;
+      case 'enum': {let value=0;for(const entry of n.entries){if(entry.value)value=Number(yield* this.expr(entry.value));this.scopes[0].set(entry.name,value++);}return;}
+      case 'declare': {
+        const structType=[...this.structs.keys()].find(t=>n.type.split(/\s+/).includes(t));
+        let v:Value=n.value?yield* this.expr(n.value):structType?Object.fromEntries(this.structs.get(structType)!.map(f=>[f.name,0])):0;
+        if(structType&&Array.isArray(v)){const initial=v;v=Object.fromEntries(this.structs.get(structType)!.map((f,i)=>[f.name,initial[i]??0]));}
+        const sizes:number[]=[];for(const dim of n.dimensions)sizes.push(Number(yield* this.expr(dim)));
+        const slots=sizes.reduce((total,size,i)=>total*(size||(i===0&&Array.isArray(v)?v.length:0)),1);
+        if(sizes.some(size=>!Number.isSafeInteger(size)||size<0)||slots>65536)throw new Error('Mảng vượt giới hạn 65536 phần tử của giả lập');
+        const fill=(depth:number,initial:Value):Value=>depth>=sizes.length?initial??0:Array.from({length:sizes[depth]|| (Array.isArray(initial)?initial.length:0)},(_,i)=>fill(depth+1,Array.isArray(initial)?initial[i]:0));
+        if(sizes.length)v=fill(0,v);
+        if(/\b(int|long|short|u?int\d+_t|byte)\b/.test(n.type)&&!Array.isArray(v))v=Math.trunc(Number(v));
+        this.scopes.at(-1)!.set(n.name,copyValue(v));return;
+      }
       case 'expression': yield* this.expr(n.value); return;
       case 'if': { const branch = (yield* this.expr(n.condition)) ? n.yes : n.no; if (branch) yield* this.statement(branch); return; }
       case 'for': case 'while': {
@@ -280,7 +345,7 @@ export class CppRuntime {
       yield { ms: 1 };
     }
   }
-  start() { this.missionStarted=false;this.cachedLineMask=0;this.scopes = [new Map()]; this.iterator = this.program(); this.running = true; this.time = this.distance = this.rotation = this.pending = 0; this.motors(0, 0); }
+  start() { this.missionStarted=false;this.cachedLineMask=0;this.thresholds=[69,78,106,70];this.serial='';this.iot.clear();this.brightness=255;this.rgb=[0,0,0];this.assetId='';this.host.led?.(this.rgb,this.brightness);this.scopes = [new Map()]; this.iterator = this.program(); this.running = true; this.time = this.distance = this.rotation = this.pending = 0; this.motors(0, 0); }
   stop() { this.running = false; this.motors(0, 0); }
   tick(milliseconds: number) {
     if (!Number.isFinite(milliseconds) || milliseconds < 0) return;

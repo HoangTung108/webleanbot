@@ -113,7 +113,7 @@ describe('inner LB-blockly/index.html asset contracts', () => {
   });
 
   it('arduino/addon/myblocks.js uses release token', () => {
-    expect(innerHtml).toContain('arduino/addon/myblocks.js?v=20260930-2');
+    expect(innerHtml).toContain('arduino/addon/myblocks.js?v=20260930-7');
   });
 });
 

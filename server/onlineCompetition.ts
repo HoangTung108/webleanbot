@@ -13,6 +13,7 @@ interface Player {id:string;robot:RobotSimulator;view:MissionWorld;runtime?:CppR
 export class OnlineCompetition {
  readonly sessionId=randomUUID();readonly world=new MissionWorld(SYNAPSE_CITY);readonly flow=new CompetitionFlow();
  readonly players=new Map<string,Player>();revision=0;frame=0;elapsedMs=0;rate=1;notice='';
+ private iotAttributes=new Map<string,string>();
  private pending=0;private lastWall?:number;
  constructor(public ownerId:string,ids:string[]){for(const id of ids)this.addPlayer(id);this.resetField();}
  get canJoin(){return ['setup','preparation'].includes(this.flow.phase)&&![...this.players.values()].some(p=>p.locked);}
@@ -31,16 +32,16 @@ export class OnlineCompetition {
  }
  private spawn(index:number):Pose {return {...SYNAPSE_CITY.initialPose!,x:SYNAPSE_CITY.initialPose!.x+(this.players.size===2?(index===0?-62:62):0)};}
  private resetField(){
-  this.world.reset();let index=0;
+  this.iotAttributes.clear();this.world.reset();let index=0;
   for(const p of this.players.values()){
    p.runtime?.stop();p.runtime=undefined;p.robot.reset(p.startPose??this.spawn(index));index++;
-   const view=new MissionWorld(SYNAPSE_CITY,p.id);view.blocks=this.world.blocks;view.integrateFreeBodies=p===this.players.values().next().value;
+   const view=new MissionWorld(SYNAPSE_CITY,p.id);view.blocks=this.world.blocks;view.hidePollutionColors=this.world.hidePollutionColors;view.integrateFreeBodies=p===this.players.values().next().value;
    p.view=view;p.robot.mission=view;p.robot.missionStepEnabled=false;p.robot.peerCollisionEnabled=false;p.robot.start();
   }
   this.pending=0;this.lastWall=undefined;
  }
  private runtime(p:Player,code:string){
-  return new CppRuntime(code,{motors:(l,r)=>p.robot.setMotorSpeeds(l,r),advance:dt=>p.robot.advanceSimulatedTime(dt*1000),gripper:(l,r,d)=>p.robot.setGripper(l,r,d),sensors:()=>p.robot.getSensorReadings()});
+  return new CppRuntime(code,{motors:(l,r)=>p.robot.setMotorSpeeds(l,r),advance:dt=>p.robot.advanceSimulatedTime(dt*1000),gripper:(l,r,d)=>p.robot.setGripper(l,r,d),lineMask:()=>p.robot.getLineMask(),rawLine:()=>p.robot.getRawLineReadings(),color:()=>p.robot.getColorReading(),led:(rgb,b)=>p.robot.setLedColors(rgb,b),iotRead:(attr,asset)=>this.iotAttributes.get(JSON.stringify([asset,attr]))??'waiting',iotWrite:(attr,value,asset)=>{this.iotAttributes.set(JSON.stringify([asset,attr]),value);},sensors:()=>p.robot.getSensorReadings()});
  }
  command(id:string,cmd:OnlineCommand){
   const p=this.players.get(id);if(!p)throw new Error('Robot không thuộc phiên thi.');
@@ -130,7 +131,7 @@ export class OnlineCompetition {
   const layout=JSON.parse(this.flow.layout||this.world.serialize());if(hidden)for(const b of layout.blocks)if(b.kind==='pollution')b.color='mystery';
   return {sessionId:this.sessionId,revision:this.revision,frame:this.frame,ownerId:this.ownerId,round:this.flow.round,category:this.flow.category,phase:this.flow.phase,elapsedMs:this.elapsedMs,rate:this.rate,layout:JSON.stringify(layout),hiddenColors:hidden,notice:this.notice,
    blocks:this.world.blocks.map(b=>({...b,color:hidden&&b.kind==='pollution'?'mystery':b.color})),
-   players:[...this.players.values()].map(p=>{const s=p.robot.getSimulationState();return{simulationTimeMs:s.currentTime,id:p.id,pose:p.robot.getRobotPose(),motorLeft:s.robotState.velocityLeft,motorRight:s.robotState.velocityRight,gripper:p.robot.getGripper(),fall:p.robot.getFallState(),supported:p.robot.getFallState().status==='supported',locked:p.locked,programRunning:p.runtime?.running??false,connected:p.connected};}),records:this.flow.records.map(r=>({...r,score:{...r.score}}))};
+   players:[...this.players.values()].map(p=>{const s=p.robot.getSimulationState();return{simulationTimeMs:s.currentTime,id:p.id,pose:p.robot.getRobotPose(),motorLeft:s.robotState.velocityLeft,motorRight:s.robotState.velocityRight,gripper:p.robot.getGripper(),rgb:p.robot.getLedColors(),fall:p.robot.getFallState(),supported:p.robot.getFallState().status==='supported',locked:p.locked,programRunning:p.runtime?.running??false,connected:p.connected};}),records:this.flow.records.map(r=>({...r,score:{...r.score}}))};
  }
  dispose(){for(const p of this.players.values())p.runtime?.stop();}
 }

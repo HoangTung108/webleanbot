@@ -7,7 +7,7 @@ import base from '../../docs/baseCode.cpp?raw'
 it('reads color with no caller variables, reuses the result and clears stale colors on uncertain/failed reads', () => {
  const dir=mkdtempSync(join(tmpdir(),'leanbot-simple-color-'))
  try {
-  const color=base.slice(base.indexOf('const int COLOR_SAMPLE_COUNT'),base.indexOf('// Tín hiệu màu IoT'))
+  const color=base.slice(base.indexOf('const int COLOR_SAMPLE_COUNT'),base.indexOf('// Hiệu chỉnh thông số'))+base.slice(base.indexOf('void set_color_white'),base.indexOf('// Tín hiệu màu IoT'))
   const source=`#include <algorithm>
 #include <array>
 #include <vector>

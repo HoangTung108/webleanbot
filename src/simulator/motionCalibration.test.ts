@@ -12,11 +12,11 @@ function run(code:string,scale?:number){
 describe('physical distance and encoder feedback calibration',()=>{
  it('keeps the verified timed 325 mm / 5 seconds measurement unchanged',()=>{
   const {physical,r}=run('void loop(){LbMotion.runLR(2000,2000);LbDelay(5000);LbMission.end();}');
-  expect(physical).toBeCloseTo(325,6);expect(r.time).toBe(5000);expect(r.distance).toBeCloseTo(325/1.06,6);
+  expect(physical).toBeCloseTo(325,6);expect(r.time).toBe(5000);expect(r.distance).toBeCloseTo(325/MOTION_CALIBRATION.physicalMmPerEncoderMm,6);
  });
  it.each([2000,-2000])('calibrates feedback distance for command %s without changing wheel speeds',v=>{
   const {physical,r}=run(`void loop(){LbMotion.runLR(${v},${v});LbMotion.waitDistanceMm(100);LbMission.end();}`);
-  expect(physical).toBeCloseTo(Math.sign(v)*106,6);expect(Math.abs(r.distance)).toBeCloseTo(100,6);
+  expect(physical).toBeCloseTo(Math.sign(v)*100*MOTION_CALIBRATION.physicalMmPerEncoderMm,6);expect(Math.abs(r.distance)).toBeCloseTo(100,6);
  });
  it('leaves turn angle feedback unchanged',()=>{
   const {r}=run('void loop(){LbMotion.runLR(2000,-2000);LbMotion.waitRotationDeg(90);LbMission.end();}');
@@ -26,14 +26,14 @@ describe('physical distance and encoder feedback calibration',()=>{
   const {physical}=run('void loop(){LbMotion.runLR(2000,2000);LbMotion.waitDistanceMm(100);LbMission.end();}',1);
   expect(physical).toBeCloseTo(100,6);
  });
- it('matches the user estimate of about 35 cm for the 33.274 cm base helper',()=>{
+ it('matches the latest base scale without applying compensation twice',()=>{
   const robot=new RobotSimulator(),start={x:400,y:600,heading:0};robot.reset(start);
   const b=new CppSimulatorBridge(robot);b.loadCode(generateRouteCode(start,[{kind:'move',x:732.74,y:600,follow:false}]));robot.start();b.startExecution(0);
   for(let t=0;t<20000&&b.isExecuting();t+=20)b.executeStep(t);
-  expect(b.isExecuting()).toBe(false);expect(robot.getRobotPose().x-start.x).toBeCloseTo(350,0);
+  expect(b.isExecuting()).toBe(false);expect(robot.getRobotPose().x-start.x).toBeCloseTo(332.74,0);
  });
  it('rejects invalid calibration values',()=>{
   for(const gain of [0,-1,NaN,Infinity])expect(()=>new CppRuntime('void loop(){}',{motors(){},advance(){}},gain)).toThrow('hiệu chuẩn');
-  expect(MOTION_CALIBRATION.physicalMmPerEncoderMm).toBe(1.06);
+  expect(MOTION_CALIBRATION.physicalMmPerEncoderMm).toBe(320/322);
  });
 });

@@ -5,6 +5,7 @@ import { drawMissionBlocks } from './missionWorld';
  * Renders robot, board, and sensor visualizations
  */
 
+import {LINE_SENSOR_FORWARD_MM,LINE_SENSOR_LATERAL_MM} from './virtualSensors';
 import { drawLeanbot, LEANBOT_APPEARANCE } from './robotAppearance';
 import { RobotSimulator } from './robotSimulator';
 import {
@@ -38,9 +39,9 @@ const DEFAULT_RENDERER_OPTIONS: RendererOptions = {
 };
 
 export class SimulatorRenderer {
-  private remoteRobots: { robotId: string; pose: Pose;gripper?:{left:number;right:number};supported?:boolean }[] = [];
+  private remoteRobots: { rgb?:readonly number[];robotId: string; pose: Pose;gripper?:{left:number;right:number};supported?:boolean }[] = [];
 
-  setRemoteRobots(robots: { robotId: string; pose: Pose;gripper?:{left:number;right:number};supported?:boolean }[]): void {
+  setRemoteRobots(robots: { rgb?:readonly number[];robotId: string; pose: Pose;gripper?:{left:number;right:number};supported?:boolean }[]): void {
     this.remoteRobots = robots;
     this.simulator.setRemoteRobots(robots);
   }
@@ -273,7 +274,7 @@ export class SimulatorRenderer {
       ctx.translate(center.x, center.y);
       ctx.rotate(robot.pose.heading * Math.PI / 180);
       ctx.scale(this.scale, this.scale);
-      drawLeanbot(ctx,robot.gripper?.left??0,robot.gripper?.right??0);
+      drawLeanbot(ctx,robot.gripper?.left??0,robot.gripper?.right??0,robot.rgb);
       ctx.strokeStyle = '#2563eb'; ctx.lineWidth = 3 / this.scale;
       ctx.strokeRect(ROBOT_ENVELOPE.x,ROBOT_ENVELOPE.y,ROBOT_ENVELOPE.length,ROBOT_ENVELOPE.width);
       ctx.restore();
@@ -452,7 +453,7 @@ export class SimulatorRenderer {
     ctx.rotate(pose.heading * Math.PI / 180);
     ctx.scale(this.scale, this.scale);
     const grip = this.simulator.getGripper();
-    drawLeanbot(ctx, grip.left, grip.right);
+    drawLeanbot(ctx, grip.left, grip.right,this.simulator.getLedColors());
     ctx.restore();
     if (fall.status !== 'supported') {
       ctx.save(); ctx.fillStyle = '#b44740'; ctx.font = '600 11px system-ui';
@@ -498,8 +499,12 @@ export class SimulatorRenderer {
     this.context.fillStyle = 'rgba(255, 255, 0, 0.5)';
     this.context.font = '12px monospace';
 
-    // Draw IR sensor rays
-    const sensorDistance = 100;
+    const raw=this.simulator.getRawLineReadings();
+    LINE_SENSOR_LATERAL_MM.forEach((y,i)=>{
+      const point=this.boardToCanvas(pose.x+LINE_SENSOR_FORWARD_MM*Math.cos(headingRad)-y*Math.sin(headingRad),pose.y+LINE_SENSOR_FORWARD_MM*Math.sin(headingRad)+y*Math.cos(headingRad));
+      this.context.fillStyle=raw[i]>0?'#28b66b':'#f7ab40';
+      this.context.beginPath();this.context.arc(point.x,point.y,3,0,Math.PI*2);this.context.fill();
+    });
 
     // Center sensor (distance sensor)
     if (sensors.distance) {
@@ -521,7 +526,7 @@ export class SimulatorRenderer {
     let textY = 20;
 
     this.context.fillText(
-      `IR Center: ${sensors.irLine.center}`,
+      `IR 2L/0L/1R/3R: ${raw.join(' / ')}`,
       10,
       textY
     );
@@ -540,7 +545,6 @@ export class SimulatorRenderer {
   private drawStats(): void {
     const pose = this.simulator.getRobotPose();
     const state = this.simulator.getSimulationState();
-    const sensors = this.simulator.getSensorReadings();
 
     this.context.fillStyle = '#000000';
     this.context.font = 'bold 12px monospace';
@@ -553,7 +557,7 @@ export class SimulatorRenderer {
     y += 15;
     this.context.fillText(`Speed L/R: ${state.robotState.velocityLeft.toFixed(0)}/${state.robotState.velocityRight.toFixed(0)} mm/s`, 10, y);
     y += 15;
-    this.context.fillText(`IR Line: L=${sensors.irLine.left} C=${sensors.irLine.center} R=${sensors.irLine.right}`, 10, y);
+    this.context.fillText(`IR 2L/0L/1R/3R: ${this.simulator.getRawLineReadings().join(' / ')}`, 10, y);
     y += 15;
     this.context.fillText(`Time: ${(state.currentTime / 1000).toFixed(2)}s`, 10, y);
     y += 15;

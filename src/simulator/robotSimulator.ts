@@ -1,3 +1,4 @@
+import {readVirtualLine,readVirtualColor} from './virtualSensors';
 import {isFinitePose,robotContact,robotRayDistance} from './robotCollision';
 import { MissionWorld } from './missionWorld';
 import { LEANBOT_APPEARANCE } from './robotAppearance';
@@ -133,6 +134,7 @@ export class RobotSimulator {
    */
   reset(initialPose?: Pose): void {
     this.stop();
+    this.rgb=[0,0,0];
     this.fall = {status:'supported',drop:0,velocityZ:0,vx:0,vy:0};
     this.state.robotState.pose = {...(initialPose || this.board.initialPose || {
       x: 100,
@@ -184,9 +186,9 @@ export class RobotSimulator {
     this.state.sensorReadings = this.readSensors();
   }
 
-  presentOnline(state:{pose:Pose;gripper:{left:number;right:number};motorLeft:number;motorRight:number;fall:ReturnType<RobotSimulator['getFallState']>},timeMs:number):void {
+  presentOnline(state:{rgb?:readonly number[];pose:Pose;gripper:{left:number;right:number};motorLeft:number;motorRight:number;fall:ReturnType<RobotSimulator['getFallState']>},timeMs:number):void {
     if(!isFinitePose(state.pose))return;
-    this.peerCollisionEnabled=false;this.presentedGripper={...state.gripper};
+    this.rgb=[...(state.rgb??[0,0,0])];this.peerCollisionEnabled=false;this.presentedGripper={...state.gripper};
     this.state.robotState.pose={...state.pose};this.state.robotState.velocityLeft=state.motorLeft;this.state.robotState.velocityRight=state.motorRight;
     this.state.currentTime=timeMs;this.state.isRunning=false;this.state.isPaused=false;this.fall={...state.fall};
     this.state.sensorReadings=this.readSensors();
@@ -538,9 +540,20 @@ export class RobotSimulator {
   /**
    * Simulate IR line sensor reading
    */
+  getRawLineReadings(): number[] {
+    return readVirtualLine(this.board,this.getRobotPose());
+  }
+
+  private rgb:number[]=[0,0,0];
+  setLedColors(colors:readonly number[],brightness=255):void{this.rgb=colors.map(v=>Math.max(0,Math.min(255,v))*Math.max(0,Math.min(255,brightness))/255);}
+  getLedColors():readonly number[]{return this.rgb;}
+
+  getColorReading():readonly [number,number,number]{
+    return readVirtualColor(this.mission.blocks,this.getRobotPose(),this.mission.hidePollutionColors);
+  }
+
   getLineMask(): number {
-    const pose = this.getRobotPose();
-    return [-24, -6, 6, 24].reduce((mask, y, i) => mask | (this.readIRSensor(pose, pose.heading * Math.PI / 180, { x: 50, y }) > 0 ? 1 << (3 - i) : 0), 0);
+    return this.getRawLineReadings().reduce((mask, value, i) => mask | (value > 0 ? 1 << (3 - i) : 0), 0);
   }
 
   private readIRSensor(pose: Pose, headingRad: number, offset: Vector2D): number {

@@ -80,3 +80,17 @@ it('does not truncate long online preparation programs at 120 seconds',()=>{
  expect(player.pose.y).toBeCloseTo(start.y-65,4);expect(player.simulationTimeMs).toBe(126000);expect(s.flow.phase).toBe('preparation');
  expect(s.flow.records).toHaveLength(0);expect(s.elapsedMs).toBe(0);
 },20000);
+
+it('shares virtual IoT by asset within a session and clears it on field reset',()=>{
+ const s=prepare();
+ const source=(asset:string,send=false)=>`auto c=LbIoT.Asset.attribute(F("Color"));void setup(){LbIoT.Asset.begin(F("${asset}"));}void loop(){${send?'c.write("Blue");':'LbDelay(10);if(c.read()=="Blue"){LbRGB.fillColor(CRGB::Blue);LbRGB.show();}'}LbMission.end();}`;
+ command(s,'a',{action:'practice-run',code:source('team',true)});
+ command(s,'b',{action:'practice-run',code:source('team')});
+ s.advanceWall(0,Infinity);s.advanceWall(50,Infinity);
+ expect(s.snapshot().players.find(p=>p.id==='b')?.rgb).toEqual([0,0,255]);
+ command(s,'b',{action:'practice-run',code:source('other')});s.advanceWall(100,Infinity);
+ expect(s.snapshot().players.find(p=>p.id==='b')?.rgb).toEqual([0,0,0]);
+ command(s,'a',{action:'practice-reset'});
+ command(s,'b',{action:'practice-run',code:source('team')});s.advanceWall(0,Infinity);s.advanceWall(50,Infinity);
+ expect(s.snapshot().players.find(p=>p.id==='b')?.rgb).toEqual([0,0,0]);
+});

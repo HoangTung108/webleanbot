@@ -25,8 +25,8 @@ it('executes MyBlock analog steering, marker/time/distance modes, loss and stall
  const dir=mkdtempSync(join(tmpdir(),'leanbot-myblock-line-'))
  try {
   const types=between(base,'struct LbmbState {','enum ObjectColor')
-  const core=between(base,'const uint16_t LBMB_TICK_MS','LbmbFollowCtx defaultLineContext')
-  const adapter=between(base,'LbmbFollowCtx defaultLineContext','const int COLOR_SAMPLE_COUNT')
+  const core=between(base,'const uint16_t LBMB_TICK_MS','enum ErrorCode')+between(base,'inline int32_t lbmbAbs32','LbmbFollowCtx defaultLineContext')
+  const adapter=between(base,'LbmbFollowCtx defaultLineContext','void set_color_white')
   const outer=SYNAPSE_CITY.lines[0];
   const arc=outer.points.slice(0,17), origin=arc[0], end=arc[16];
   const track=[{x:origin.x,y:origin.y+150},...arc,{x:end.x+300,y:end.y}].map(p=>[origin.y+150-p.y,p.x-origin.x]);

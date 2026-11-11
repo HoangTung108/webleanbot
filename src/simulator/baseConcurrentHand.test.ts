@@ -16,11 +16,11 @@ it('finishes blocking closure after one movement plus settling interval',()=>{
  expect(result.angle).toBe(50);expect(result.logs).toContain('870');
 });
 it('services the hand concurrently during straight motion and waits for completion',()=>{
- const result=run('close_hand_async(50);Forward(2000,40);wait_hand();');
+ const result=run('close_hand_async(50);move_tank(2000,2000,4);wait_hand();');
  expect(result.overlap).toBe(true);expect(result.angle).toBe(50);
 });
 it('services the hand while turning and can reverse an unfinished movement',()=>{
- const result=run('close_hand_async(50);Rotate(2000,20);open_hand_async();wait_hand();');
+ const result=run('close_hand_async(50);turn_two_wheels(2000,20);open_hand_async();wait_hand();');
  expect(result.overlap).toBe(true);expect(result.angle).toBe(0);
 });
 it('exposes line measurement and threshold setup to generated programs',()=>{

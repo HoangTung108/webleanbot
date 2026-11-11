@@ -23,7 +23,8 @@ describe('neutralizer dimensions and Storage pickup',()=>{
     const ctx={save:vi.fn(),restore:vi.fn(),translate:vi.fn(),rotate:vi.fn(),fillRect:vi.fn(),strokeRect:vi.fn()} as unknown as CanvasRenderingContext2D;
     drawMissionBlocks(ctx,world);
     const shape=blockFootprint(b);
-    expect(ctx.strokeRect).toHaveBeenCalledWith(-shape.length/2,-shape.width/2,shape.length,shape.width);
+    // The 0.8 mm border is inset so its outer edge matches the collider.
+    expect(ctx.strokeRect).toHaveBeenCalledWith(-shape.length/2+.4,-shape.width/2+.4,shape.length-.8,shape.width-.8);
     // Body, highlight and white band are all contained by the collider. Skip the shadow.
     for(const [x,y,w,h] of vi.mocked(ctx.fillRect).mock.calls.slice(1)) {
       expect(x).toBeGreaterThanOrEqual(-shape.length/2);

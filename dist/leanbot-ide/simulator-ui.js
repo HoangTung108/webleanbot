@@ -293,7 +293,7 @@ class LeanbotSimulator2D {
     ctx.rotate(headingRad);
     ctx.scale(this.pixelsPerMM, this.pixelsPerMM);
     const grip = this.mission.getGripperAngles({x:this.robotX,y:this.robotY,heading:this.robotHeading});
-    LeanbotCpp.drawLeanbot(ctx, grip.left, grip.right);
+    LeanbotCpp.drawLeanbot(ctx, grip.left, grip.right,this.rgb);
     ctx.restore();
   }
 
@@ -339,11 +339,14 @@ class LeanbotSimulator2D {
       this.runtime = new LeanbotCpp.CppRuntime(code, {
         motors: (left, right) => { this.speedL = left; this.speedR = right; },
         advance: seconds => this.advanceRobot(seconds),
+        rawLine: () => LeanbotCpp.readVirtualLine(this.currentBoard,{x:this.robotX,y:this.robotY,heading:this.robotHeading}),
+        led: (rgb,brightness) => {this.rgb=rgb.map(v=>v*brightness/255);},
+        color: () => LeanbotCpp.readVirtualColor(this.mission.blocks,{x:this.robotX,y:this.robotY,heading:this.robotHeading},this.mission.hidePollutionColors),
         sensors: () => ({ distance: this.mission.distance({x:this.robotX,y:this.robotY,heading:this.robotHeading}) }),
         log: message => this.addLog(message),
-        gripper: (left, right) => {
-          this.gripperLeft = left; this.gripperRight = right;
-          this.mission.setGripper(left,right,{ x:this.robotX,y:this.robotY,heading:this.robotHeading },this.speedL,this.speedR);
+        gripper: (left, right, duration=0) => {
+          if(duration>0)this.gripperMotion={from:{left:this.gripperLeft,right:this.gripperRight},to:{left,right},duration,elapsed:0};
+          else {this.gripperMotion=null;this.applyGripper(left,right);}
         },
       });
       this.runtime.start();
@@ -402,6 +405,7 @@ class LeanbotSimulator2D {
   resetRobot() {
     this.mission.reset();
     this.gripperLeft = this.gripperRight = 0;
+    this.gripperMotion=null;this.rgb=[0,0,0];
     this.robotX = this.currentBoard === BOARD_CONFIGS.synapse ? this.currentBoard.initialPose.x : this.currentBoard.width / 2;
     this.robotY = this.currentBoard === BOARD_CONFIGS.synapse ? this.currentBoard.initialPose.y : this.currentBoard.height / 2;
     this.robotHeading = this.currentBoard.initialPose?.heading ?? 0;
@@ -414,7 +418,19 @@ class LeanbotSimulator2D {
     this.updateStats();
   }
 
+  applyGripper(left,right){
+    this.gripperLeft=left;this.gripperRight=right;
+    this.mission.setGripper(left,right,{x:this.robotX,y:this.robotY,heading:this.robotHeading},this.speedL,this.speedR);
+  }
+
   advanceRobot(dt) {
+    const motion=this.gripperMotion;
+    if(motion){
+      motion.elapsed=Math.min(motion.duration,motion.elapsed+dt*1000);
+      const t=motion.elapsed/motion.duration;
+      this.applyGripper(motion.from.left+(motion.to.left-motion.from.left)*t,motion.from.right+(motion.to.right-motion.from.right)*t);
+      if(t>=1)this.gripperMotion=null;
+    }
     const speed = (this.speedL + this.speedR) / 2;
     const omega = (this.speedL - this.speedR) / LeanbotCpp.LEANBOT_APPEARANCE.wheelBase;
     this.robotHeading += omega * dt * 180 / Math.PI;
@@ -453,17 +469,8 @@ class LeanbotSimulator2D {
     document.getElementById('simHeading').textContent = this.robotHeading.toFixed(1);
     document.getElementById('simSpeedL').textContent = Math.round(this.speedL);
     document.getElementById('simSpeedR').textContent = Math.round(this.speedR);
-    const angle = this.robotHeading * Math.PI / 180;
-    const sensorX = this.robotX + 37.5 * Math.cos(angle);
-    const sensorY = this.robotY + 37.5 * Math.sin(angle);
-    const onTrack = (this.currentBoard.tracks || []).some(line => line.points.slice(1).some((b, i) => {
-      const a = line.points[i];
-      const dx = b.x - a.x, dy = b.y - a.y;
-      const lengthSquared = dx * dx + dy * dy;
-      const t = lengthSquared ? Math.max(0, Math.min(1, ((sensorX - a.x) * dx + (sensorY - a.y) * dy) / lengthSquared)) : 0;
-      return Math.hypot(sensorX - a.x - t * dx, sensorY - a.y - t * dy) <= line.width / 2;
-    }));
-    document.getElementById('simIR').textContent = onTrack ? '4095' : '0';
+    const raw=LeanbotCpp.readVirtualLine(this.currentBoard,{x:this.robotX,y:this.robotY,heading:this.robotHeading});
+    document.getElementById('simIR').textContent = raw.join(' / ');
     document.getElementById('simDist').textContent = this.mission.distance({x:this.robotX,y:this.robotY,heading:this.robotHeading}).toFixed(1);
   }
 

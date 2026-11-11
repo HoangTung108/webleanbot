@@ -297,32 +297,25 @@ Lộ trình sinh mới tự lấy hằng số từ `docs/baseCode.cpp`. Code đ�
 Server cập nhật vật lý mỗi 20 ms theo đồng hồ mô phỏng, tiếp tục chia bước tích phân 1 ms; snapshot vẫn gửi mỗi 50 ms. Tua không đổi encoder/góc quay hoặc bỏ thời gian còn chờ.
 
 
-### Giảm tốc khi quay lộ trình
+### Đồng bộ với base code hiện tại
 
-Vòng `turn_angle` dùng `sqrtf(ratio)` để giảm tốc theo căn bậc hai của góc còn lại thay vì tuyến tính. Mô hình này giữ tốc độ cao hơn trong phần phanh, tránh bò chậm ở các góc nhỏ của đường vẽ. Tốc độ tối đa, tăng tốc, góc đích, hệ số hiệu chuẩn và điều kiện stall/timeout giữ nguyên. Runtime hỗ trợ `sqrt`/`sqrtf` cho cùng C++ khi chạy local, online và IDE HTML.
+Lộ trình sinh mới dùng nguyên phần thư viện trước `setup()` trong `docs/baseCode.cpp`; chỉ tạo `setup()` và nhiệm vụ riêng. Không còn cắt theo chú thích cũ hoặc sửa công thức C++ để vượt giới hạn bộ thông dịch. Runtime hỗ trợ struct, con trỏ/tham chiếu, overload theo số tham số, tham số mặc định, enum, toán tử bit và mảng nhiều chiều cần cho base hiện tại. Đây vẫn là tập con C++, không phải trình biên dịch Arduino đầy đủ.
 
-Bài đo bằng code sinh từ lộ trình ở 1×: quay 22° giảm từ khoảng 1.355 ms xuống 943 ms; quay 90° từ 2.550 ms xuống 2.098 ms. Đây là thời gian mô phỏng của thao tác quay, không gồm thời gian mở tay gắp ban đầu, và không phải số đo robot thật. Code lộ trình sinh mới tự lấy cập nhật; chương trình C++ đã lưu vẫn giữ công thức cũ cho đến khi được sửa hoặc sinh lại.
+- Chạy nguyên profile tăng tốc/phanh và giới hạn tốc độ của `move_tank` / `turn_angle`, kể cả giới hạn tốc độ ở các độ cuối. Không áp dụng lại các thời gian quay của profile cũ.
+- Dò line chạy trực tiếp PID MyBlock với bốn kênh 2L, 0L, 1R, 3R ở vị trí trước trục 50 mm, lệch ngang −24/−6/+6/+24 mm. React, IDE HTML và server thi dùng chung hình học cảm biến. `set_line` tác động ngưỡng, `read` cập nhật mask, `value` trả mask đã lưu. Bước điều khiển, tìm lại line, cua, giao lộ, timeout và stall lấy từ C++.
+- `followLineDistance(100)` là 100 mm; `followLineCm(100)` là 100 cm; `followLineSeconds(2.5)` là 2,5 giây thời gian giả lập. Tua 10× chỉ đổi tốc độ trình chiếu.
+- Tay gắp đồng thời được cập nhật bởi chính `robot_delay` / `update_hand`; lệnh SDK có duration nội suy góc trong khoảng chờ ở cả React và IDE HTML.
+- APDS dùng RGB tổng hợp của khối đứng trong vùng tay gắp (bán kính mô hình 35 mm); ngoài vùng trả RGB bằng 0, khối chưa công bố trả mẫu trung tính. Base vẫn tự lấy 5 mẫu, bỏ phiếu, kiểm tra tham chiếu màu và cập nhật cache. LED đổi sau `show()` và hiển thị trên robot. Mô hình quang học này không xác nhận độ chính xác nhận màu trên phần cứng.
+- `Color` và các thuộc tính IoT được lưu trong giả lập. Hai robot trong cùng phiên thi chia sẻ thuộc tính có cùng Asset ID; khác Asset ID hoặc khác phiên được tách riêng. Reset sa bàn xóa các thuộc tính. Không kết nối Wi-Fi/máy chủ IoT thật.
+- Hiệu chuẩn line bằng nút chạm chỉ in thông báo trong giả lập: cảm biến hiện là mô hình lý tưởng đen/trắng 4095/0, chưa có nhiễu và đường cong ADC đo thực tế.
 
+### Hiệu chuẩn quãng đường hiện tại
 
-### Quãng đường dài và giới hạn thời gian
+Phép đo mới: lệnh 325 mm trước đây dừng ở khoảng 322 mm encoder (phanh sớm 3 mm), đi thực tế 320 mm. Base hiện bỏ phanh sớm và dùng `DISTANCE_SCALE = 322/320 = 1.00625`. Vì vậy mô hình phản hồi dùng hệ số **mm thực / mm encoder = 320/322**, thay hệ số cũ 1,06. Nhân hai hệ số này cho kết quả 1, tránh bù quãng đường hai lần. Kiểm thử trực tiếp base: lệnh 32,5 cm đi khoảng 325 mm; các đoạn có phần lẻ không tích lũy mất 3 mm mỗi lần dừng.
 
-Luyện tập local và chuẩn bị online không tự ngắt ở 120 giây; chỉ lượt thi chính thức áp dụng giới hạn này. Thanh thời gian phân biệt thời gian đã chạy trong luyện tập với đồng hồ đếm ngược của lượt thi. Chương trình dài có thể tiếp tục đến `LbMission.end()` hoặc nút Dừng, không bị cắt mất phần cuối.
+Tốc độ vật lý giữ 65 mm/s ở lệnh 2000 theo số đo đã có: `runLR(2000,2000)` trong 5 giây đi 325 mm. Không suy ra tốc độ mới từ thời gian mục tiêu người dùng mong muốn. Trượt bánh, quán tính dừng, điện áp pin và đáp ứng mô-tơ chưa được hiệu chỉnh từ số đo; góc phản hồi hiện dùng wheelbase 100 mm ước lượng. Vì vậy đồng bộ thuật toán không có nghĩa là đã khớp tuyệt đối robot thật.
 
-Giữ mốc quãng đường 325 mm / 5 s và sa bàn 1219,2 mm. `move_tank` vẫn chủ động dừng trước đích `MOVE_BRAKE_LEAD_MM = 3`; 20 lệnh sẽ có tổng khoảng 60 mm phanh sớm nếu không mô phỏng thêm chuyển động khi phanh. Không tự biến sai lệch đó thành hệ số phóng to sa bàn. Mốc `originDist` dùng float để không vứt phần lẻ encoder mỗi lần gọi hàm; phần này không làm thay đổi mốc đọc integer của phần cứng.
-
-Để khớp sai số còn lại của robot thật cần đo quãng đường thực tế sau cùng một chương trình, gồm cả các lần phanh/quay. Chưa tự thêm hệ số trượt, quán tính hoặc tăng tốc độ khi chưa có số đo tương ứng.
-
-
-### Hiệu chuẩn theo phép đo quãng đường mới
-
-Theo ước lượng người dùng: `move_tank(2000,2000,33.274)` đi khoảng 350 mm trên robot thật, trong khi profile cũ đi khoảng 329,74 mm sau phanh sớm. `motionCalibration.ts` đặt hệ số **physical mm / encoder mm = 1,06**, làm tròn từ phép đo gần đúng này. Cùng lệnh hiện đi khoảng 349,5 mm trong giả lập. Chưa thay hình học sa bàn, kích thước robot hoặc tỷ lệ góc quay.
-
-Tốc độ vật lý vẫn 65 mm/s ở lệnh 2000: chạy theo thời gian 5 giây vẫn được 325 mm. Chỉ phản hồi distance encoder được hiệu chuẩn: một lệnh chờ quãng đường sẽ chạy lâu hơn tương ứng; `getDistanceMm` và `waitDistanceMm` dùng cùng hệ số. Phần phanh sớm 3 mm của base helper vẫn là 3 mm encoder. Các lệnh C++ đã có được mô phỏng theo profile này; số cm trong code sinh từ đường vẽ không bị tự sửa.
-
-Nút Chạy cung cấp một tín hiệu bắt đầu nhiệm vụ. Với `LbMission.begin`, giả lập không tự chạy lại lộ trình khi Arduino quay lại `loop()` hoặc khi gặp cổng nhiệm vụ kế tiếp; cần bấm Chạy cho một lần mới. Loop điều khiển không có cổng nhiệm vụ vẫn được lặp bình thường. [Tham khảo API Mission.begin](https://github.com/ecchallenge/ptit/blob/main/Leanbot%20API%20Reference/README.md#lbmissionbegin).
-
-Kiểm thử dùng profile encoder 1,0 để tách kiểm tra scheduler/động học danh định; `motionCalibration.test.ts` kiểm tra riêng profile đo 1,06 mặc định, gồm khoảng 35 cm với lệnh 33,274 cm, chạy lùi, quay, chờ quãng đường và chạy theo thời gian.
-
+Nút Chạy cấp một tín hiệu nhiệm vụ; `LbMission.begin` không tự lặp lại lượt. Luyện tập không tự dừng ở 120 giây; chỉ lượt thi chính thức có thời hạn đó. Kiểm thử bao gồm toàn bộ base, đi 32,5 cm, quay, dò line mm/cm, cua sa bàn Synapse hai chiều, tay đồng thời, đọc màu và FIFO IoT; bài native C++ kiểm tra thêm lõi MyBlock.
 
 ### Kết quả từng thao tác trong base code
 
@@ -346,15 +339,9 @@ set_wifi("TEN_WIFI", "MAT_KHAU");
 
 Đặt các lệnh sau `Leanbot.begin()` trong `setup()`. Với chế độ IoT A/B, `setup()` đã gọi khai báo/kết nối bằng các macro `WIFI_SSID`, `WIFI_PASSWORD`, `IOT_ASSET_ID`; sửa các macro này hoặc thay đoạn đó bằng cấu hình tùy chọn. SSID trống báo lỗi cấu hình; password trống được truyền nguyên vẹn cho mạng mở. Không in mật khẩu ra Serial.
 
-Kiểm thử Wi-Fi biên dịch/chạy C++ với API giả lập để kiểm tra lưu cấu hình, thứ tự/tham số gọi hàm và các trường hợp cấu hình trống; chưa xác minh kết nối Wi-Fi trên mạch thật. Các hàm tuyến đường/nhiệm vụ như `missionPrimaryFull`, `FromCRLtoE2` vẫn là phần sketch riêng cần cung cấp khi nạp toàn bộ base file. Code lộ trình simulator chỉ lấy nhóm hàm chuyển động/dò line, không chạy kết nối mạng phần cứng.
+Kiểm thử Wi-Fi biên dịch/chạy C++ với API giả lập để kiểm tra lưu cấu hình, thứ tự/tham số gọi hàm và các trường hợp cấu hình trống; chưa xác minh kết nối Wi-Fi trên mạch thật. Các hàm tuyến đường/nhiệm vụ như `missionPrimaryFull`, `FromCRLtoE2` vẫn là phần sketch riêng cần cung cấp khi nạp toàn bộ base file. Code lộ trình simulator lấy các helper của base; mạng IoT phần cứng được thay bằng thuộc tính ảo như mô tả phía trên.
 
 
 ### Dò line và kiểm tra màu trong base code
 
-Các tên hàm cũ được giữ: `runFollowLine`, `followLineDistance`, `followLineUntilJunction`, `followLineMultipleJunctions`, `goToJunction`, `Obj_detectColor`, `requireColor`.
-
-Dò theo khoảng cách và tìm giao lộ dùng chung `followLineCore`; kiểm tra mất line dùng chung `lineAvailable`, phần điều khiển bánh xe nằm trong `driveLine`. Giữ nguyên tốc độ, hệ số PID, bước 10 ms, bỏ qua giao lộ xuất phát 18 mm và xác nhận bằng 3 mẫu liên tiếp. Một lần dò mới xóa trạng thái giao lộ cũ; lỗi không khiến `goToJunction` căn tâm một giao lộ chưa tìm thấy. Khoảng cách bắt đầu giữ phần lẻ encoder.
-
-Đọc màu bật lấy mẫu trước khoảng chờ ổn định 35 ms, lặp qua đèn đỏ/xanh lá/xanh dương/tắt đèn, lấy kênh tương ứng rồi trừ mẫu nền. `readObjectColor(bool &valid)` phân biệt lỗi đọc cảm biến với màu UNKNOWN; `classifyColor` giữ ngưỡng tín hiệu >3 và chênh lệch kênh ít nhất 2. Độ sáng được khôi phục cả khi đọc thất bại/timeout. `requireColor` chỉ báo sai màu sau một lần đọc hợp lệ; Primary vẫn bỏ qua kiểm tra màu. Trạng thái trả về của `APDS.readColor` được xử lý theo [mã nguồn thư viện Arduino](https://github.com/arduino-libraries/Arduino_APDS9960/blob/master/src/Arduino_APDS9960.cpp).
-
-Kiểm thử native C++ dùng dữ liệu cảm biến giả lập cho đường thẳng, nhiều giao lộ, mất line/timeout, màu thiếu tín hiệu/gần bằng nhau, trừ nền, lỗi đọc và vai trò Primary; chưa thay cho kiểm tra cảm biến trên bo thật.
+Các hàm tương thích vẫn gồm `runFollowLine`, `followLineDistance`, `followLineUntilJunction`, `followLineMultipleJunctions`, `goToJunction`, `Obj_detectColor`, `requireColor`. Hàm gọi đơn giản để đọc khối là `read_color()`; `get_color()` lấy màu đã đo, `is_color(RED)` kiểm tra cache. Không dùng mẫu RGB của giả lập để thay các mẫu hiệu chuẩn thực tế của từng khối.

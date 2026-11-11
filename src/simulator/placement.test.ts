@@ -1,10 +1,12 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { LEANBOT_GEOMETRY } from './robotGeometry';
 import { RobotSimulator } from './robotSimulator';
 import { SimulatorRenderer } from './renderer';
 
 describe('robot placement', () => {
+  afterEach(()=>vi.unstubAllGlobals());
   it('maps CSS-scaled pointer coordinates, supports dragging and locks placement during a run', () => {
+    vi.stubGlobal('window',{devicePixelRatio:2});
     const handlers = new Map<string, (event: any) => void>();
     const context = new Proxy({}, { get: () => () => {} });
     const canvas = {

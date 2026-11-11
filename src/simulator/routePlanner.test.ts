@@ -16,7 +16,8 @@ describe('route planner', () => {
     expect(code).toContain('followLineDistance(100)');
     const mission = code.slice(code.indexOf('void plannedRoute()'));
     expect(mission.indexOf('close_hand(90)')).toBeLessThan(mission.indexOf('open_hand()'));
-    expect(code).not.toContain('void set_wifi');
+    expect(code).toContain('struct LbmbFollowCtx');
+    expect(code).toContain('void set_wifi');
     expect(normalizeTurn(350)).toBe(-10);
   });
   it('executes generated base helpers in the simulator', () => {

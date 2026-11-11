@@ -11,7 +11,7 @@ function run(fractional=false,multiplier=1){
  expect(bridge.loadCode(code).success).toBe(true);robot.setSpeedMultiplier(multiplier);robot.start();bridge.startExecution(0);
  for(let wall=0;wall<30000&&bridge.isExecuting();wall+=16.666667)bridge.executeStep(wall);
  expect(bridge.isExecuting()).toBe(false);expect(bridge.getLogs().join(' ')).not.toContain('MISSION ERROR');
- expect(Number(bridge.getLogs()[0])).toBeGreaterThanOrEqual(93);expect(Number(bridge.getLogs()[0])).toBeLessThan(93.1);
+ expect(Number(bridge.getLogs()[0])).toBeGreaterThanOrEqual(89.5);expect(Number(bridge.getLogs()[0])).toBeLessThan(89.6);
  return {pose:robot.getRobotPose(),time:robot.getSimulationState().currentTime,physicsCalls:physics.mock.calls.length};
 }
 describe('baseCode feedback controller',()=>{

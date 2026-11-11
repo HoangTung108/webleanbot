@@ -14,6 +14,7 @@ export interface RobotPeerState {
   timestamp: number;
   supported?:boolean;
   gripper?:{left:number;right:number};
+  rgb?:readonly number[];
 }
 
 export interface RoomConfig {
@@ -318,6 +319,7 @@ export class RobotNetworkManager {
     if (peer && isFinitePose(state?.pose)) {
       peer.pose = {...state.pose};
       peer.supported=state.supported!==false;
+      peer.rgb=Array.isArray(state.rgb)&&[3,12].includes(state.rgb.length)&&state.rgb.every(Number.isFinite)?state.rgb.map((v:number)=>Math.max(0,Math.min(255,v))):undefined;
       peer.gripper=state.gripper&&[state.gripper.left,state.gripper.right].every(Number.isFinite)?{left:Math.max(0,Math.min(90,state.gripper.left)),right:Math.max(0,Math.min(90,state.gripper.right))}:undefined;
       peer.motorLeft = state.motorLeft;
       peer.motorRight = state.motorRight;

@@ -104,7 +104,7 @@ export const SimulatorDemo: React.FC<{ cppCode?: string;visible?:boolean;onCodeL
     let peerSignature = "";
     const updatePeers=(render=true)=>{
       const peers=robotNetworkManager.getAllPeers();
-      const signature=peers.map(p=>`${p.id}:${p.pose.x}:${p.pose.y}:${p.pose.heading}:${p.gripper?.left}:${p.gripper?.right}:${p.supported}`).join('|');
+      const signature=peers.map(p=>`${p.id}:${p.pose.x}:${p.pose.y}:${p.pose.heading}:${p.gripper?.left}:${p.gripper?.right}:${p.supported}:${p.rgb?.join(',')}`).join('|');
       if(signature!==peerSignature) {
         peerSignature=signature;renderer.setRemoteRobots(peers);
         const state=simulator.getSimulationState();
@@ -491,7 +491,7 @@ export const SimulatorDemo: React.FC<{ cppCode?: string;visible?:boolean;onCodeL
             <p className="sim-robot-specs">{LEANBOT_GEOMETRY.length} × {LEANBOT_GEOMETRY.width} × {LEANBOT_GEOMETRY.height} mm · {LEANBOT_GEOMETRY.mass*1000} g</p><dl className="sim-metrics"><div><dt>Thời gian</dt><dd>{stats.time.toFixed(1)}<small>s</small></dd></div><div><dt>Hướng</dt><dd>{stats.heading.toFixed(0)}<small>°</small></dd></div><div><dt>Vị trí X / Y</dt><dd>{stats.posX.toFixed(0)} / {stats.posY.toFixed(0)}<small>mm</small></dd></div><div><dt>Tốc độ trái / phải</dt><dd>{stats.speedL.toFixed(0)} / {stats.speedR.toFixed(0)}<small>mm/s</small></dd></div></dl>
           </section></div>
             </RoutePlannerPanel>
-            <div className="sim-field-caption"><MousePointer2 size={13} /><span>Kéo để đặt robot · Đi qua mép sa bàn có thể rơi</span><span>2000 = 32,5 cm / 5 giây · Bù quãng đường ×{MOTION_CALIBRATION.physicalMmPerEncoderMm.toFixed(2)}</span></div>
+            <div className="sim-field-caption"><MousePointer2 size={13} /><span>Kéo để đặt robot · Đi qua mép sa bàn có thể rơi</span><span>2000 = 32,5 cm / 5 giây · mm thực / mm encoder = {MOTION_CALIBRATION.physicalMmPerEncoderMm.toFixed(5)}</span></div>
           </section>
 </SimulatorDock>
     </div>

@@ -58,6 +58,9 @@ export class CppSimulatorBridge {
         gripper: (left, right, duration) => this.simulator.setGripper(left, right, duration),
         sensors: () => this.simulator.getSensorReadings(),
         lineMask: () => this.simulator.getLineMask(),
+        rawLine: () => this.simulator.getRawLineReadings(),
+        color: () => this.simulator.getColorReading(),
+        led: (rgb,brightness) => this.simulator.setLedColors(rgb,brightness),
         log: message => this.logs.push(message),
       },this.distanceScale);
       this.commandQueue = { commands: [], currentIndex: 0, isExecuting: false };

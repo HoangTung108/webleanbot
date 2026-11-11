@@ -9,7 +9,7 @@ export interface Token {
   lineEnd: number
 }
 
-const twoChar = new Set(['<=', '>=', '==', '!=', '&&', '||', '+=', '-=', '++', '--', '::', '->'])
+const twoChar = new Set(['<=', '>=', '==', '!=', '&&', '||', '+=', '-=', '++', '--', '::', '->', '<<', '>>', '*=', '/=', '%=', '&=', '|='])
 
 export function tokenizeCpp(source: string): Token[] {
   const tokens: Token[] = []

@@ -1,4 +1,3 @@
-
 #include <Leanbot.h>
 #include <stdint.h>
 #include <math.h>
@@ -6,8 +5,7 @@
 #include <LeanbotIoT.h>
 #include <Arduino_APDS9960.h>
 
-
-// BEGIN MYBLOCKS LINE TYPES
+// Kiểu dữ liệu và khai báo
 struct LbmbState {
   uint32_t timeMs;
   int32_t distanceMm;
@@ -44,20 +42,25 @@ struct LbmbFollowCtx {
   int16_t outRight;
 
   bool hasValidError;
+  bool lineLocked;
+  bool sharpTurn;
+  uint8_t centeredCount;
   uint8_t markerCount;
   bool initialized;
 };
-// Khai báo trước để Arduino nhận đúng các kiểu struct.
+
 inline void lbmbFollowCoreInit(LbmbFollowCtx* ctx, const LbmbState* state);
 inline LbmbCommand lbmbFollowCoreStep(LbmbFollowCtx* ctx, const LbmbState* state,
   float speedPercent, uint8_t mode, float targetVal);
 inline LbmbState lbmbReadState();
-// END MYBLOCKS LINE TYPES
 
-enum ObjectColor { OBJECT_UNKNOWN, OBJECT_RED, OBJECT_GREEN, OBJECT_BLUE, OBJECT_YELLOW, OBJECT_PURPLE };
+enum ObjectColor { UNKNOWN, RED, GREEN, BLUE, YELLOW, PURPLE };
 static ObjectColor classifyColor(int red, int green, int blue);
 ObjectColor readObjectColor(bool &valid);
 ObjectColor Obj_detectColor();
+void read_color();
+ObjectColor get_color();
+bool is_color(ObjectColor expected);
 void requireColor(ObjectColor expected);
 void send_iot_color(ObjectColor color);
 void set_color_reference(ObjectColor color, int red, int green, int blue);
@@ -66,12 +69,32 @@ ObjectColor peek_iot_color();
 ObjectColor pop_iot_color();
 ObjectColor read_iot_color();
 bool wait_iot_color(ObjectColor expected, unsigned long timeoutMs = 30000UL);
+ObjectColor lastMeasuredColor = UNKNOWN;
 
 auto IoTColor = LbIoT.Asset.attribute(F("Color"));
 
+
+// Đọc và hiệu chuẩn màu
+const int COLOR_SAMPLE_COUNT = 5;
+const int COLOR_REQUIRED_VOTES = 4;
+const int COLOR_MIN_CHANNEL = 4;
+const float COLOR_MIN_SATURATION = 0.20f;
+const float COLOR_RED_YELLOW_HUE = 25.0f;
+const float COLOR_YELLOW_GREEN_HUE = 80.0f;
+const float COLOR_GREEN_BLUE_HUE = 170.0f;
+const float COLOR_BLUE_PURPLE_HUE = 250.0f;
+const float COLOR_PURPLE_RED_HUE = 345.0f;
+float colorRedGain = 1.0f;
+float colorGreenGain = 1.0f;
+float colorBlueGain = 1.0f;
+
+float colorReference[6][3];
+bool colorReferenceReady[6] = {false, false, false, false, false, false};
+const float COLOR_REFERENCE_MAX_DISTANCE = 0.004f;
+const float COLOR_REFERENCE_MARGIN = 0.00005f;
+
+
 // Hiệu chỉnh thông số
-
-
 const float DISTANCE_SCALE = 1.00625f;
 const float LEFT_SCALE = 1.0f;
 const float RIGHT_SCALE = 1.0f;
@@ -85,8 +108,8 @@ const int MOVE_START_SPEED = 165;
 const int MOVE_FINISH_SPEED = 165;
 const float MOVE_SLOW_ZONE_MM = 30.0f;
 const float MOVE_BRAKE_LEAD_MM = 0.0f; // Giảm tốc trước đích, chỉ kết thúc khi đủ quãng đường.
-const int MOVE_ACCEL_INCREMENT = 100;  
-const int HEADING_KP = 9;          
+const int MOVE_ACCEL_INCREMENT = 100;
+const int HEADING_KP = 9;
 
 const int TURN_FINISH_SPEED = 120;
 const float TURN_SLOW_ZONE = 35.0f; // Giảm tốc sớm để hạn chế vượt góc.
@@ -98,13 +121,12 @@ const unsigned long TURN_RAMP_MS = 10UL;
 const unsigned long MOTION_FEEDBACK_MS = 1UL;
 const unsigned long MOTION_RAMP_MS = 8UL; // Tăng tốc theo bước thời gian, không phụ thuộc FPS.
 
-const int ROUTE_SPEED = 2000;       
-const int LINE_SPEED = 2000; // Mặc định 100% tốc độ MyBlock; lõi tự giảm theo độ lệch.         
+const int ROUTE_SPEED = 2000;
+const int LINE_SPEED = 2000; // Mặc định 100% tốc độ MyBlock; lõi tự giảm theo độ lệch.
 
 const int LINE_STEERING_SIGN = 1;
 const unsigned long LINE_STEP_MS = 10UL;
 const float JUNCTION_CENTER_MM = 20.0f;
-
 
 const int IR_TH_2L = 69;
 const int IR_TH_0L = 145;
@@ -114,6 +136,33 @@ const int IR_TH_3R = 60;
 const int GRIP_CLOSE_ANGLE = 50;
 const int GRIP_MOVE_MS = 750;
 const int GRIP_SETTLE_MS = 120;
+
+const uint16_t LBMB_TICK_MS = 10;
+const int16_t LBMB_SPEED_MAX = 2000;
+const int16_t LBMB_START_SPEED = 200;
+const int16_t LBMB_SEARCH_SPEED_MAX = 650;
+const uint32_t LBMB_PROGRESS_TIMEOUT_MS = 900;
+const uint32_t LBMB_LOST_LINE_TIMEOUT_MS = 2500;
+const uint32_t LBMB_ACQUIRE_TIMEOUT_MS = 3500;
+const int16_t LBMB_ACQUIRE_SPEED_MAX = 600;
+const int16_t LBMB_CURVE_SPEED_MAX = 1000;
+const uint32_t LBMB_MARKER_TIMEOUT_MS = 60000UL;
+const uint32_t LBMB_MAX_OPERATION_MS = 600000UL;
+const float LBMB_FLL_ACCEL = 3600.0f;
+const float LBMB_FLL_DECEL = 6500.0f;
+const float LBMB_FLL_JERK = 30000.0f;
+const int32_t LBMB_WHEEL_ACCEL = 9000;
+const int32_t LBMB_WHEEL_DECEL = 15000;
+const float LBMB_FLL_KP = 900.0f;
+const float LBMB_FLL_KI = 110.0f;
+const float LBMB_FLL_KD = 6.0f;
+const float LBMB_FLL_MAX_I = 0.60f;
+const float LBMB_FLL_D_ALPHA = 0.22f;
+const float LBMB_FLL_MAX_STEER_RATIO = 0.92f;
+const float LBMB_FLL_ERROR_SLOWDOWN = 0.48f;
+const float LBMB_FLL_D_SLOWDOWN = 0.010f;
+const float LBMB_FLL_MIN_FACTOR = 0.42f;
+const int32_t LBMB_LINE_SIGNAL_MIN = 24;
 
 enum ErrorCode {
   ERR_NONE = 0, ERR_INVALID_MOVE, ERR_MOVE_TIMEOUT, ERR_MOVE_STALL,
@@ -150,6 +199,7 @@ void resetMotionState() {
   lastLineControlTime = millis();
   lastLineSeenTime = millis();
 }
+// Tay gắp đồng thời
 int handAngle = 0;
 int handFrom = 0;
 int handTarget = 0;
@@ -178,7 +228,6 @@ void robot_delay(unsigned long duration) {
 void close_hand_async(int degree) {
   update_hand();
   const int target = constrain(degree, -30, 120);
-  // Không khởi động lại tác vụ hoặc thời gian ổn định khi lặp cùng lệnh.
   if (handBusy && target == handTarget) return;
   if (!handBusy && target == handAngle) return;
   handFrom = handAngle;
@@ -191,13 +240,13 @@ void wait_hand() { while (handBusy) robot_delay(1); }
 void close_hand(int degree) { close_hand_async(degree); wait_hand(); }
 void open_hand() { open_hand_async(); wait_hand(); }
 
+// Đi và quay có phản hồi
 void turn_angle(int speed, float angle_deg, TurnMode mode) {
   if (!isfinite(angle_deg) || speed < TURN_FINISH_SPEED || speed > MAX_MOTOR_SPEED ||
       mode < TWO_WHEELS || mode > RIGHT_ONLY) {
     failMission(ERR_INVALID_MOVE); return;
   }
   if (fabsf(angle_deg) < 0.8f) return;
-
   LbMotion.stopAndWait();
   resetMotionState();
   speed = min(speed, TURN_MAX_SPEED);
@@ -209,17 +258,14 @@ void turn_angle(int speed, float angle_deg, TurnMode mode) {
   int currentSpeed = TURN_FINISH_SPEED;
   int previousSpeed = -1;
   const unsigned long timeoutMs = 3500UL + (unsigned long)(target * 90.0f);
-
   while (true) {
     const float progress = ((float)LbMotion.getRotationDeg() - origin) * direction;
     const float remaining = target - progress;
     if (remaining <= TURN_BRAKE_LEAD_DEG) break;
-
     const unsigned long now = millis();
     if (progress > bestProgress + 0.5f) { bestProgress = progress; lastAdvance = now; }
     if (now - started > timeoutMs) { failMission(ERR_TURN_TIMEOUT); return; }
     if (now - lastAdvance > 1700UL) { failMission(ERR_TURN_STALL); return; }
-
     const float ratio = constrain((remaining - TURN_BRAKE_LEAD_DEG) / TURN_SLOW_ZONE, 0.0f, 1.0f);
     const int fastLimit = TURN_FINISH_SPEED + (int)lroundf((speed - TURN_FINISH_SPEED) * sqrtf(ratio));
     const int precisionLimit = TURN_FINISH_SPEED + (int)lroundf(
@@ -260,7 +306,6 @@ void move_tank(int motor_L, int motor_R, float distance_cm) {
   if (distance_cm == 0.0f) return;
   const float targetMm = distance_cm * 10.0f * DISTANCE_SCALE;
   if (!isfinite(targetMm) || targetMm > 12000.0f) { failMission(ERR_INVALID_MOVE); return; }
-
   motor_L = clampMotor(motor_L);
   motor_R = clampMotor(motor_R);
   const int direction = signInt(motor_L);
@@ -268,7 +313,6 @@ void move_tank(int motor_L, int motor_R, float distance_cm) {
   const int targetR = (int)lroundf(fabsf((float)motor_R) * RIGHT_SCALE);
   const int maxMagnitude = max(targetL, targetR);
   if (maxMagnitude < MOVE_FINISH_SPEED) { failMission(ERR_INVALID_MOVE); return; }
-
   LbMotion.stopAndWait();
   resetMotionState();
   const float originDist = (float)LbMotion.getDistanceMm();
@@ -278,7 +322,6 @@ void move_tank(int motor_L, int motor_R, float distance_cm) {
   int currentMagnitude = min(MOVE_START_SPEED, maxMagnitude);
   int previousL = 32767, previousR = 32767;
   const unsigned long timeoutMs = 3500UL + (unsigned long)(targetMm * 60.0f);
-
   while (true) {
     const float progressed = ((float)LbMotion.getDistanceMm() - originDist) * direction;
     const float remaining = targetMm - progressed;
@@ -287,7 +330,6 @@ void move_tank(int motor_L, int motor_R, float distance_cm) {
     if (progressed > bestProgress + 1.0f) { bestProgress = progressed; lastAdvance = now; }
     if (now - started > timeoutMs) { failMission(ERR_MOVE_TIMEOUT); return; }
     if (now - lastAdvance > 1800UL) { failMission(ERR_MOVE_STALL); return; }
-
     const float ratio = constrain((remaining - MOVE_BRAKE_LEAD_MM) / MOVE_SLOW_ZONE_MM, 0.0f, 1.0f);
     const int allowed = min(maxMagnitude,
       MOVE_FINISH_SPEED + (int)lroundf((maxMagnitude - MOVE_FINISH_SPEED) * sqrtf(ratio)));
@@ -312,6 +354,7 @@ void move_tank(int motor_L, int motor_R, float distance_cm) {
   LbMotion.stopAndWait();
 }
 
+// Kết nối WiFi
 String wifiSsid;
 String wifiPassword;
 const __FlashStringHelper *wifiAssetId = nullptr;
@@ -341,13 +384,11 @@ void set_line(int leftOuter, int leftInner, int rightInner, int rightOuter) {
 }
 
 int measure_line() {
-  LbIRLine.read(); // Cập nhật cảm biến trước.
-  return (int)LbIRLine.value() & 0x0F; // Lấy mặt nạ digital đã lưu.
+  LbIRLine.read(); 
+  return (int)LbIRLine.value() & 0x0F; 
 }
 void print_line() { Serial.println(measure_line()); }
 
-// Hiệu chuẩn đen/trắng bằng TB1A; SDK điều khiển các bước xác nhận.
-// Chỉ gọi khi muốn hiệu chuẩn, không gọi trong vòng dò line đang chạy.
 void calibrate_line() {
   LbMotion.stopAndWait();
   wait_hand();
@@ -359,16 +400,12 @@ void calibrate_line() {
   Serial.println(F("Line calibration returned. Check sensors on black and white."));
 }
 
-// Hiển thị cảm biến nào thấy line bằng LED xanh; không đo màu RGB của vật.
-// Chế độ chẩn đoán chủ động này sẽ thay màu LED thông báo khối trước đó.
 void display_line() {
   LbIRLine.read();
   LbIRLine.displayOnRGB(CRGB::Green);
   LbRGB.show();
 }
 
-// Gọi khi robot đứng yên; không in liên tục trong vòng điều khiển 10 ms.
-// Đây là giá trị cảm biến thực, không phải mặt nạ digital.
 void measure_line_values() {
   Serial.print(F("IR 2L/0L/1R/3R: "));
   Serial.print(LbIRArray.read(ir2L)); Serial.print(' ');
@@ -380,30 +417,7 @@ void measure_line_values() {
   Serial.print(F(" steering sign: ")); Serial.println(LINE_STEERING_SIGN);
 }
 
-// BEGIN MYBLOCKS LINE CORE
-const uint16_t LBMB_TICK_MS = 10;
-const int16_t LBMB_SPEED_MAX = 2000;
-const int16_t LBMB_START_SPEED = 200;
-const int16_t LBMB_SEARCH_SPEED_MAX = 420;
-const uint32_t LBMB_PROGRESS_TIMEOUT_MS = 900;
-const uint32_t LBMB_LOST_LINE_TIMEOUT_MS = 800;
-const uint32_t LBMB_MARKER_TIMEOUT_MS = 60000UL;
-const uint32_t LBMB_MAX_OPERATION_MS = 600000UL;
-const float LBMB_FLL_ACCEL = 3600.0f;
-const float LBMB_FLL_DECEL = 6500.0f;
-const float LBMB_FLL_JERK = 30000.0f;
-const int32_t LBMB_WHEEL_ACCEL = 9000;
-const int32_t LBMB_WHEEL_DECEL = 15000;
-const float LBMB_FLL_KP = 900.0f;
-const float LBMB_FLL_KI = 110.0f;
-const float LBMB_FLL_KD = 6.0f;
-const float LBMB_FLL_MAX_I = 0.60f;
-const float LBMB_FLL_D_ALPHA = 0.22f;
-const float LBMB_FLL_MAX_STEER_RATIO = 0.92f;
-const float LBMB_FLL_ERROR_SLOWDOWN = 0.48f;
-const float LBMB_FLL_D_SLOWDOWN = 0.010f;
-const float LBMB_FLL_MIN_FACTOR = 0.42f;
-const int32_t LBMB_LINE_SIGNAL_MIN = 24;
+
 
 inline int32_t lbmbAbs32(int32_t x) { return x < 0 ? -x : x; }
 inline float lbmbAbsF(float x) { return x < 0.0f ? -x : x; }
@@ -546,20 +560,12 @@ inline float lbmbBrakeEnvelope(
   float f = (float)remaining / (float)brakeZone;
   f = lbmbClampF(f, 0.0f, 1.0f);
 
-  // sqrt keeps speed higher during the first part of braking, while still
-  // approaching the minimum near the target.
   float shaped = sqrtf(f);
   return (float)minSpeed + ((float)targetSpeed - minSpeed) * shaped;
 }
 
-// -----------------------------------------------------------------------------
-// Leanbot line sensing
-// -----------------------------------------------------------------------------
-
 inline bool lbmbIsLineValid(uint8_t state) {
-  return state == 0b1000 || state == 0b1100 || state == 0b0100 || state == 0b1110 ||
-         state == 0b0110 || state == 0b1111 || state == 0b0010 || state == 0b0111 ||
-         state == 0b0011 || state == 0b0001;
+  return (state & 0x0F) != 0;
 }
 
 inline int16_t lbmbDiscreteLineError1000(uint8_t state, int16_t prevError1000) {
@@ -579,6 +585,10 @@ inline int16_t lbmbDiscreteLineError1000(uint8_t state, int16_t prevError1000) {
 }
 
 inline int16_t lbmbLinePosition1000(const LbmbState* state, int16_t fallbackError1000) {
+  uint8_t mask = state->lineState & 0x0F;
+  if (mask == 0) return fallbackError1000;
+  if (mask == 0x0F) return 0; // Cross a wide black marker straight.
+  if (mask == 0b1001) return fallbackError1000; // Ambiguous outer branches.
   int32_t v2 = state->ir2L;
   int32_t v0 = state->ir0L;
   int32_t v1 = state->ir1R;
@@ -594,15 +604,12 @@ inline int16_t lbmbLinePosition1000(const LbmbState* state, int16_t fallbackErro
   int32_t w1 = v1 - floorValue;
   int32_t w3 = v3 - floorValue;
 
-  if (w2 < 0) w2 = 0;
-  if (w0 < 0) w0 = 0;
-  if (w1 < 0) w1 = 0;
-  if (w3 < 0) w3 = 0;
+  if (w2 < 0 || !(mask & 0b1000)) w2 = 0;
+  if (w0 < 0 || !(mask & 0b0100)) w0 = 0;
+  if (w1 < 0 || !(mask & 0b0010)) w1 = 0;
+  if (w3 < 0 || !(mask & 0b0001)) w3 = 0;
 
   int32_t sum = w2 + w0 + w1 + w3;
-
-  // Fall back to Leanbot's calibrated digital line state when analog contrast is
-  // too weak or all four sensors see a very similar surface.
   if (sum < LBMB_LINE_SIGNAL_MIN) {
     return lbmbDiscreteLineError1000(state->lineState, fallbackError1000);
   }
@@ -645,6 +652,9 @@ inline void lbmbFollowCoreInit(LbmbFollowCtx* ctx, const LbmbState* state) {
   ctx->outRight = 0;
 
   ctx->hasValidError = false;
+  ctx->lineLocked = false;
+  ctx->sharpTurn = false;
+  ctx->centeredCount = 0;
   ctx->markerCount = 0;
   ctx->initialized = true;
 }
@@ -697,6 +707,8 @@ inline LbmbCommand lbmbFollowCoreStep(
     }
 
     if (distanceProgress >= targetMm) return cmd;
+    // A recovery pivot has no forward distance; do not mistake it for a stall.
+    if (!lbmbIsLineValid(state->lineState)) ctx->lastProgressTime = state->timeMs;
     if (state->timeMs - ctx->lastProgressTime >= LBMB_PROGRESS_TIMEOUT_MS) return cmd;
   }
 
@@ -708,7 +720,8 @@ inline LbmbCommand lbmbFollowCoreStep(
     ctx->lastValidTime = state->timeMs;
   }
 
-  if (state->timeMs - ctx->lastValidTime >= LBMB_LOST_LINE_TIMEOUT_MS) {
+  uint32_t lostLimit = ctx->hasValidError ? LBMB_LOST_LINE_TIMEOUT_MS : LBMB_ACQUIRE_TIMEOUT_MS;
+  if (state->timeMs - ctx->lastValidTime >= lostLimit) {
     return cmd;
   }
 
@@ -718,12 +731,19 @@ inline LbmbCommand lbmbFollowCoreStep(
   if (dtMs > 50) dtMs = 50;
   ctx->lastTime = state->timeMs;
 
-  // Before the first valid line sample, crawl forward briefly instead of applying
-  // an arbitrary PID direction.
+  if (!lineValid) {
+    ctx->lineLocked = false;
+    ctx->sharpTurn = false;
+    ctx->centeredCount = 0;
+  }
+  // Before the first valid sample, use a bounded bidirectional acquisition scan.
   if (!lineValid && !ctx->hasValidError) {
-    int16_t crawl = lbmbMin16(targetSpeed, 300);
-    ctx->outLeft = lbmbWheelSlew(ctx->outLeft, crawl, dtMs);
-    ctx->outRight = lbmbWheelSlew(ctx->outRight, crawl, dtMs);
+    // With no known side, scan both directions without translating off the mat.
+    int16_t scan = lbmbMin16(targetSpeed, LBMB_SEARCH_SPEED_MAX);
+    bool scanRight = elapsedOverall >= 700U && elapsedOverall < 2100U;
+    int16_t left = scanRight ? scan : -scan;
+    ctx->outLeft = lbmbWheelSlew(ctx->outLeft, left, dtMs);
+    ctx->outRight = lbmbWheelSlew(ctx->outRight, -left, dtMs);
 
     cmd.leftSpeed = ctx->outLeft;
     cmd.rightSpeed = ctx->outRight;
@@ -771,6 +791,16 @@ inline LbmbCommand lbmbFollowCoreStep(
     ctx->hasValidError = true;
   }
 
+  // Require stable center samples before accelerating out of acquisition.
+  if (lbmbAbsF(error) < 0.30f) {
+    if (ctx->centeredCount < 5) ctx->centeredCount++;
+    if (ctx->centeredCount >= 5) ctx->lineLocked = true;
+  } else {
+    ctx->centeredCount = 0;
+  }
+
+  if (lbmbAbsF(error) >= 0.75f) ctx->sharpTurn = true;
+  else if (lbmbAbsF(error) <= 0.45f) ctx->sharpTurn = false;
   float rawDerivative = (error - ctx->prevError) / dt;
   ctx->filteredDerivative +=
       LBMB_FLL_D_ALPHA * (rawDerivative - ctx->filteredDerivative);
@@ -799,8 +829,8 @@ inline LbmbCommand lbmbFollowCoreStep(
   float desiredBase = targetSpeed * speedFactor;
   int16_t minimumBase = lbmbInitialSpeed(targetSpeed);
   if (desiredBase < minimumBase) desiredBase = minimumBase;
-
-  // Distance/time braking imposes another ceiling.
+  if (!ctx->lineLocked && desiredBase > LBMB_ACQUIRE_SPEED_MAX) desiredBase = LBMB_ACQUIRE_SPEED_MAX;
+  if (ctx->sharpTurn && desiredBase > LBMB_CURVE_SPEED_MAX) desiredBase = LBMB_CURVE_SPEED_MAX;
   if (mode == 4) {
     int32_t remaining = targetMm - distanceProgress;
     float distanceLimit = lbmbBrakeEnvelope(
@@ -835,12 +865,18 @@ inline LbmbCommand lbmbFollowCoreStep(
     dt
   );
 
-  float steering =
+  // Scale curvature authority with speed, but keep the center/noise gain unchanged.
+  float curveBlend = lbmbClampF((lbmbAbsF(error) - 0.35f) / 0.40f, 0.0f, 1.0f);
+  float speedGain = ctx->baseSpeed / 650.0f;
+  if (speedGain < 1.0f) speedGain = 1.0f;
+  float steeringGain = 1.0f + curveBlend * (speedGain - 1.0f);
+  float steering = steeringGain * (
       LBMB_FLL_KP * error +
       LBMB_FLL_KI * candidateI +
-      LBMB_FLL_KD * ctx->filteredDerivative;
+      LBMB_FLL_KD * ctx->filteredDerivative);
 
-  float steerLimit = ctx->baseSpeed * LBMB_FLL_MAX_STEER_RATIO;
+  float steerRatio = ctx->sharpTurn ? 1.40f : LBMB_FLL_MAX_STEER_RATIO;
+  float steerLimit = ctx->baseSpeed * steerRatio;
   bool saturated = lbmbAbsF(steering) > steerLimit;
 
   // Anti-windup: do not integrate farther into saturation.
@@ -848,37 +884,17 @@ inline LbmbCommand lbmbFollowCoreStep(
       ((steering > 0.0f && error > 0.0f) ||
        (steering < 0.0f && error < 0.0f))) {
     candidateI = ctx->integral;
-    steering =
-        LBMB_FLL_KP * error +
-        LBMB_FLL_KI * candidateI +
-        LBMB_FLL_KD * ctx->filteredDerivative;
+    steering = steeringGain * ( LBMB_FLL_KP * error + LBMB_FLL_KI * candidateI + LBMB_FLL_KD * ctx->filteredDerivative);
   }
-
   steering = lbmbClampF(steering, -steerLimit, steerLimit);
-
-  int16_t base = lbmbClamp16(
-    (int32_t)round(ctx->baseSpeed),
-    0,
-    targetSpeed
-  );
-
+  int16_t base = lbmbClamp16( (int32_t)round(ctx->baseSpeed), 0, targetSpeed);
   int16_t targetLeft = base;
   int16_t targetRight = base;
-
-  // Marker debounce samples should cross the marker straight rather than allowing
-  // the wide black region to provoke steering.
   if (ctx->markerCount == 0) {
-    int16_t steerMag = lbmbClamp16(
-      (int32_t)round(lbmbAbsF(steering)),
-      0,
-      base
-    );
-
+    int16_t steerMag = lbmbClamp16( (int32_t)round(lbmbAbsF(steering)), 0, ctx->sharpTurn ? (int16_t)round(base * 1.40f) : base);
     if (steering > 0.0f) {
-      // Line is right -> right turn -> slow right wheel.
       targetRight = base - steerMag;
     } else if (steering < 0.0f) {
-      // Line is left -> left turn -> slow left wheel.
       targetLeft = base - steerMag;
     }
   }
@@ -894,16 +910,13 @@ inline LbmbCommand lbmbFollowCoreStep(
   cmd.isDone = false;
   return cmd;
 }
-// END MYBLOCKS LINE CORE
 
-// BEGIN MYBLOCKS LINE ADAPTER
 LbmbFollowCtx defaultLineContext = {};
 bool lineOperationCompleted = false;
 
 inline LbmbState lbmbReadState() {
   LbmbState state;
   state.timeMs = (uint32_t)millis();
-  // Một lần hiệu chuẩn chung cho đi mù và line, trước khi lõi xử lý mm.
   state.distanceMm = (int32_t)lroundf((float)LbMotion.getDistanceMm() / DISTANCE_SCALE);
   state.rotationDeg = (int32_t)LbMotion.getRotationDeg();
   state.lineState = (uint8_t)measure_line();
@@ -935,22 +948,19 @@ void runFollowLine(int bits) {
   if (bits >= 0) state.lineState = (uint8_t)(bits & 0x0F);
   if (!lineControlReady) lbmbFollowCoreInit(&defaultLineContext, &state);
   lastLineControlTime = now; lineControlReady = true;
-  LbmbCommand command = lbmbFollowCoreStep(&defaultLineContext, &state,
-    LINE_SPEED / 20.0f, 5, 600.0f);
+  LbmbCommand command = lbmbFollowCoreStep(&defaultLineContext, &state,LINE_SPEED / 20.0f, 5, 600.0f);
   lastLineError = defaultLineContext.prevError * 3.0f;
   filteredLineError = lastLineError;
   if (command.isDone) {
     LbMotion.stopAndWait();
     lastLineCmdL = lastLineCmdR = 0;
-    if (now - defaultLineContext.lastValidTime >= LBMB_LOST_LINE_TIMEOUT_MS)
-      failMission(ERR_LINE_LOST);
-    return; // Không tự khởi động lại sau khi mất line; resetMotionState để bắt đầu lượt mới.
+    if (now - defaultLineContext.lastValidTime >= (defaultLineContext.hasValidError ? LBMB_LOST_LINE_TIMEOUT_MS : LBMB_ACQUIRE_TIMEOUT_MS)) failMission(ERR_LINE_LOST);
+    return; 
   }
   applyMyBlockLineCommand(&command);
 }
 void runFollowLine() { runFollowLine(-1); }
 
-// API tương ứng Blockly MyBlock: tốc độ theo %, không phải đơn vị runLR.
 void lbmbFollow(float speedPercent, uint8_t mode, float targetVal) {
   lineOperationCompleted = false;
   if (!isfinite(speedPercent) || speedPercent <= 0 || !isfinite(targetVal) ||
@@ -965,14 +975,15 @@ void lbmbFollow(float speedPercent, uint8_t mode, float targetVal) {
     LbmbState state = lbmbReadState();
     if (!ctx.initialized) lbmbFollowCoreInit(&ctx, &state);
     const uint32_t elapsed = state.timeMs - ctx.startTime;
-    // Không coi mất line / kẹt / quá hạn là hoàn thành nhiệm vụ.
     const bool distanceDone = mode == 4 &&
       lbmbAbs32(state.distanceMm - ctx.startDist) >= (int32_t)lroundf(targetVal * 10.0f);
     const bool timeDone = mode == 5 && elapsed >= (uint32_t)lroundf(targetVal * 1000.0f);
     if (!distanceDone && !timeDone) {
-      if (state.timeMs - ctx.lastValidTime >= LBMB_LOST_LINE_TIMEOUT_MS &&
+      if (state.timeMs - ctx.lastValidTime >= (ctx.hasValidError ?
+          LBMB_LOST_LINE_TIMEOUT_MS : LBMB_ACQUIRE_TIMEOUT_MS) &&
           !lbmbIsLineValid(state.lineState)) { failMission(ERR_LINE_LOST); return; }
-      if (mode == 4 && state.timeMs - ctx.lastProgressTime >= LBMB_PROGRESS_TIMEOUT_MS &&
+      if (mode == 4 && lbmbIsLineValid(state.lineState) &&
+          state.timeMs - ctx.lastProgressTime >= LBMB_PROGRESS_TIMEOUT_MS &&
           lbmbAbs32(state.distanceMm - ctx.startDist) <= ctx.maxProgress) {
         failMission(ERR_MOVE_STALL); return;
       }
@@ -990,14 +1001,12 @@ void lbmbFollow(float speedPercent, uint8_t mode, float targetVal) {
       return;
     }
     applyMyBlockLineCommand(&command);
-    robot_delay(LBMB_TICK_MS); // Thay delay của MyBlock để tay async vẫn được cập nhật.
+    robot_delay(LBMB_TICK_MS); 
   }
 }
 void lbmbFollowMarker(float speedPercent, byte markerMode) { lbmbFollow(speedPercent, markerMode, 0); }
 void lbmbFollowDistance(float speedPercent, float distanceCm) { lbmbFollow(speedPercent, 4, distanceCm); }
 void lbmbFollowTime(float speedPercent, float timeSec) { lbmbFollow(speedPercent, 5, timeSec); }
-
-// Tương thích các lệnh học sinh đang dùng. mm / cm / giây được ghi rõ.
 void followLineDistance(int distanceMm) { lbmbFollowDistance(LINE_SPEED / 20.0f, distanceMm / 10.0f); }
 void followLineCm(float distanceCm) { lbmbFollowDistance(LINE_SPEED / 20.0f, distanceCm); }
 void followLineSeconds(float seconds) { lbmbFollowTime(LINE_SPEED / 20.0f, seconds); }
@@ -1019,20 +1028,6 @@ void goToJunction() {
   if (!junctionPending) followLineUntilJunction();
   centerDetectedJunction();
 }
-// END MYBLOCKS LINE ADAPTER
-
-const int COLOR_SAMPLE_COUNT = 5;
-const int COLOR_REQUIRED_VOTES = 4;
-const int COLOR_MIN_CHANNEL = 4;
-const float COLOR_MIN_SATURATION = 0.20f;
-const float COLOR_RED_YELLOW_HUE = 25.0f;
-const float COLOR_YELLOW_GREEN_HUE = 80.0f;
-const float COLOR_GREEN_BLUE_HUE = 170.0f;
-const float COLOR_BLUE_PURPLE_HUE = 250.0f;
-const float COLOR_PURPLE_RED_HUE = 345.0f;
-float colorRedGain = 1.0f;
-float colorGreenGain = 1.0f;
-float colorBlueGain = 1.0f;
 
 void set_color_white(int red, int green, int blue) {
   if (min(red, min(green, blue)) < COLOR_MIN_CHANNEL) return;
@@ -1053,13 +1048,9 @@ bool readAPDSColor(int &r, int &g, int &b) {
   return APDS.readColor(r, g, b);
 }
 
-float colorReference[6][3];
-bool colorReferenceReady[6] = {false, false, false, false, false, false};
-const float COLOR_REFERENCE_MAX_DISTANCE = 0.004f;
-const float COLOR_REFERENCE_MARGIN = 0.00005f;
 
 void set_color_reference(ObjectColor color, int red, int green, int blue) {
-  if (color < OBJECT_RED || color > OBJECT_PURPLE || red < 0 || green < 0 || blue < 0) return;
+  if (color < RED || color > PURPLE || red < 0 || green < 0 || blue < 0) return;
   const float total = (float)red + green + blue;
   if (max(red, max(green, blue)) < COLOR_MIN_CHANNEL || total <= 0) return;
   colorReference[(int)color][0] = red / total;
@@ -1069,22 +1060,18 @@ void set_color_reference(ObjectColor color, int red, int green, int blue) {
 }
 
 void calibrate_color(ObjectColor color) {
-  if (color < OBJECT_RED || color > OBJECT_PURPLE) return;
+  if (color < RED || color > PURPLE) return;
   if (!colorSensorReady) { failMission(ERR_COLOR_SENSOR); return; }
   long sums[3] = {0, 0, 0};
   for (int i = 0; i < COLOR_SAMPLE_COUNT; ++i) {
     int r = 0, g = 0, b = 0;
-    if (!readAPDSColor(r, g, b) || r < 0 || g < 0 || b < 0) {
-      failMission(ERR_COLOR_SENSOR); return;
-    }
+    if (!readAPDSColor(r, g, b) || r < 0 || g < 0 || b < 0) { failMission(ERR_COLOR_SENSOR); return; }
     sums[0] += r; sums[1] += g; sums[2] += b;
   }
   const int r = sums[0] / COLOR_SAMPLE_COUNT;
   const int g = sums[1] / COLOR_SAMPLE_COUNT;
   const int b = sums[2] / COLOR_SAMPLE_COUNT;
-  if (max(r, max(g, b)) < COLOR_MIN_CHANNEL) {
-    Serial.println(F("Calibration failed: too dark")); return;
-  }
+  if (max(r, max(g, b)) < COLOR_MIN_CHANNEL) { Serial.println(F("Calibration failed: too dark")); return; }
   set_color_reference(color, r, g, b);
   Serial.print(F("set_color_reference((ObjectColor)")); Serial.print((int)color);
   Serial.print(F(", ")); Serial.print(r); Serial.print(F(", ")); Serial.print(g);
@@ -1106,17 +1093,17 @@ static float colorHue(float red, float green, float blue) {
 
 static ObjectColor classifyColor(int red, int green, int blue) {
   int referenceCount = 0;
-  for (int i = OBJECT_RED; i <= OBJECT_PURPLE; ++i) {
+  for (int i = RED; i <= PURPLE; ++i) {
     if (colorReferenceReady[i]) ++referenceCount;
   }
   if (referenceCount > 0) {
-    if (referenceCount != 5) return OBJECT_UNKNOWN;
+    if (referenceCount != 5) return UNKNOWN;
     const float total = (float)max(0, red) + max(0, green) + max(0, blue);
-    if (total <= 0 || max(red, max(green, blue)) < COLOR_MIN_CHANNEL) return OBJECT_UNKNOWN;
+    if (total <= 0 || max(red, max(green, blue)) < COLOR_MIN_CHANNEL) return UNKNOWN;
     const float channels[3] = {red / total, green / total, blue / total};
     float best = 10.0f, second = 10.0f;
-    ObjectColor result = OBJECT_UNKNOWN;
-    for (int i = OBJECT_RED; i <= OBJECT_PURPLE; ++i) {
+    ObjectColor result = UNKNOWN;
+    for (int i = RED; i <= PURPLE; ++i) {
       float distance = 0.0f;
       for (int j = 0; j < 3; ++j) {
         const float delta = channels[j] - colorReference[i][j];
@@ -1126,7 +1113,7 @@ static ObjectColor classifyColor(int red, int green, int blue) {
       else if (distance < second) second = distance;
     }
     if (best > COLOR_REFERENCE_MAX_DISTANCE || second - best <= COLOR_REFERENCE_MARGIN ||
-        second <= best * 1.5f) return OBJECT_UNKNOWN;
+        second <= best * 1.5f) return UNKNOWN;
     return result;
   }
   const float r = max(0, red) * colorRedGain;
@@ -1135,31 +1122,32 @@ static ObjectColor classifyColor(int red, int green, int blue) {
   const float top = max(r, max(g, b));
   const float bottom = min(r, min(g, b));
   if (top < COLOR_MIN_CHANNEL || (top - bottom) / top < COLOR_MIN_SATURATION)
-    return OBJECT_UNKNOWN;
+    return UNKNOWN;
   const float hue = colorHue(r, g, b);
-  if (hue < COLOR_RED_YELLOW_HUE || hue >= COLOR_PURPLE_RED_HUE) return OBJECT_RED;
-  if (hue < COLOR_YELLOW_GREEN_HUE) return OBJECT_YELLOW;
-  if (hue < COLOR_GREEN_BLUE_HUE) return OBJECT_GREEN;
-  if (hue < COLOR_BLUE_PURPLE_HUE) return OBJECT_BLUE;
-  return OBJECT_PURPLE;
+  if (hue < COLOR_RED_YELLOW_HUE || hue >= COLOR_PURPLE_RED_HUE) return RED;
+  if (hue < COLOR_YELLOW_GREEN_HUE) return YELLOW;
+  if (hue < COLOR_GREEN_BLUE_HUE) return GREEN;
+  if (hue < COLOR_BLUE_PURPLE_HUE) return BLUE;
+  return PURPLE;
 }
 
 ObjectColor readObjectColor(bool &valid) {
   valid = false;
-  if (!colorSensorReady) { failMission(ERR_COLOR_SENSOR); return OBJECT_UNKNOWN; }
+  lastMeasuredColor = UNKNOWN; // Không giữ lại màu cũ nếu lần đo này thất bại.
+  if (!colorSensorReady) { failMission(ERR_COLOR_SENSOR); return UNKNOWN; }
   int votes[6] = {0, 0, 0, 0, 0, 0};
   long totalRed = 0, totalGreen = 0, totalBlue = 0;
   for (int sample = 0; sample < COLOR_SAMPLE_COUNT; ++sample) {
     int red = 0, green = 0, blue = 0;
     if (!readAPDSColor(red, green, blue) || red < 0 || green < 0 || blue < 0) {
       failMission(ERR_COLOR_SENSOR);
-      return OBJECT_UNKNOWN;
+      return UNKNOWN;
     }
     ++votes[(int)classifyColor(red, green, blue)];
     totalRed += red; totalGreen += green; totalBlue += blue;
   }
-  ObjectColor color = OBJECT_UNKNOWN;
-  for (int candidate = OBJECT_RED; candidate <= OBJECT_PURPLE; ++candidate) {
+  ObjectColor color = UNKNOWN;
+  for (int candidate = RED; candidate <= PURPLE; ++candidate) {
     if (votes[candidate] >= COLOR_REQUIRED_VOTES) color = (ObjectColor)candidate;
   }
   const int red = totalRed / COLOR_SAMPLE_COUNT;
@@ -1170,15 +1158,16 @@ ObjectColor readObjectColor(bool &valid) {
   Serial.print(F(" Hue: ")); Serial.print(colorHue(red * colorRedGain, green * colorGreenGain, blue * colorBlueGain));
   Serial.print(F(" -> "));
   switch (color) {
-    case OBJECT_RED: Serial.println(F("RED")); break;
-    case OBJECT_GREEN: Serial.println(F("GREEN")); break;
-    case OBJECT_BLUE: Serial.println(F("BLUE")); break;
-    case OBJECT_YELLOW: Serial.println(F("YELLOW")); break;
-    case OBJECT_PURPLE: Serial.println(F("PURPLE")); break;
+    case RED: Serial.println(F("RED")); break;
+    case GREEN: Serial.println(F("GREEN")); break;
+    case BLUE: Serial.println(F("BLUE")); break;
+    case YELLOW: Serial.println(F("YELLOW")); break;
+    case PURPLE: Serial.println(F("PURPLE")); break;
     default: Serial.println(F("UNKNOWN / unstable")); break;
   }
-  valid = true; 
-  if (color != OBJECT_UNKNOWN) {
+  valid = true;
+  lastMeasuredColor = color;
+  if (color != UNKNOWN) {
     const CRGB colors[6] = {CRGB(0, 0, 0), CRGB(255, 0, 0), CRGB(0, 255, 0),
                             CRGB(0, 0, 255), CRGB(255, 255, 0), CRGB(128, 0, 128)};
     LbRGB.fillColor(colors[(int)color]);
@@ -1187,46 +1176,49 @@ ObjectColor readObjectColor(bool &valid) {
   return color;
 }
 
+
+void read_color() {
+  bool valid = false;
+  readObjectColor(valid);
+}
+ObjectColor get_color() { return lastMeasuredColor; } // Không đo lại.
+bool is_color(ObjectColor expected) {
+  return expected != UNKNOWN && lastMeasuredColor == expected;
+}
 ObjectColor Obj_detectColor() { bool valid; return readObjectColor(valid); }
 void requireColor(ObjectColor expected) {
   bool valid;
   const ObjectColor color = readObjectColor(valid);
   if (valid && color != expected) failMission(ERR_COLOR_MISMATCH);
-
 }
-
+// Tín hiệu màu IoT và hàng chờ
 void send_iot_color(ObjectColor color) {
   switch (color) {
-    case OBJECT_RED:   IoTColor.write("Red"); break;
-    case OBJECT_GREEN: IoTColor.write("Green"); break;
-    case OBJECT_BLUE:  IoTColor.write("Blue"); break;
-    case OBJECT_YELLOW: IoTColor.write("Yellow"); break;
-    case OBJECT_PURPLE: IoTColor.write("Purple"); break;
+    case RED:   IoTColor.write("Red"); break;
+    case GREEN: IoTColor.write("Green"); break;
+    case BLUE:  IoTColor.write("Blue"); break;
+    case YELLOW: IoTColor.write("Yellow"); break;
+    case PURPLE: IoTColor.write("Purple"); break;
     default:          IoTColor.write("Unknown"); break;
   }
 }
-
 // FIFO cố định, không cấp phát động trên ATmega328P.
 const int IOT_QUEUE_CAPACITY = 16;
 ObjectColor iotColorQueue[IOT_QUEUE_CAPACITY];
 int iotQueueHead = 0;
 int iotQueueSize = 0;
-ObjectColor lastQueuedIotColor = OBJECT_UNKNOWN;
-bool iotQueueOverflow = false; // Cờ báo đầy, giữ tới khi clear_iot_queue().
-
+ObjectColor lastQueuedIotColor = UNKNOWN;
+bool iotQueueOverflow = false;
 int iot_queue_count() { return iotQueueSize; }
-
 void clear_iot_queue() {
   iotQueueHead = 0;
   iotQueueSize = 0;
   iotQueueOverflow = false;
 }
-
 ObjectColor peek_iot_color() {
-  if (iotQueueSize == 0) return OBJECT_UNKNOWN;
+  if (iotQueueSize == 0) return UNKNOWN;
   return iotColorQueue[iotQueueHead];
 }
-
 ObjectColor pop_iot_color() {
   const ObjectColor color = peek_iot_color();
   if (iotQueueSize > 0) {
@@ -1235,19 +1227,18 @@ ObjectColor pop_iot_color() {
   }
   return color;
 }
-
 ObjectColor read_iot_color() {
   String signal = IoTColor.read();
   signal.trim();
   signal.toUpperCase();
-  if (signal == "WAITING") lastQueuedIotColor = OBJECT_UNKNOWN;
-  ObjectColor color = OBJECT_UNKNOWN;
-  if (signal == "RED") color = OBJECT_RED;
-  else if (signal == "GREEN") color = OBJECT_GREEN;
-  else if (signal == "BLUE") color = OBJECT_BLUE;
-  else if (signal == "YELLOW") color = OBJECT_YELLOW;
-  else if (signal == "PURPLE") color = OBJECT_PURPLE;
-  if (color != OBJECT_UNKNOWN && color != lastQueuedIotColor) {
+  if (signal == "WAITING") lastQueuedIotColor = UNKNOWN;
+  ObjectColor color = UNKNOWN;
+  if (signal == "RED") color = RED;
+  else if (signal == "GREEN") color = GREEN;
+  else if (signal == "BLUE") color = BLUE;
+  else if (signal == "YELLOW") color = YELLOW;
+  else if (signal == "PURPLE") color = PURPLE;
+  if (color != UNKNOWN && color != lastQueuedIotColor) {
     if (iotQueueSize < IOT_QUEUE_CAPACITY) {
       const int tail = (iotQueueHead + iotQueueSize) % IOT_QUEUE_CAPACITY;
       iotColorQueue[tail] = color;
@@ -1259,14 +1250,11 @@ ObjectColor read_iot_color() {
   }
   return color;
 }
-
 void poll_iot_color() { read_iot_color(); }
-
 void reset_iot_color() { IoTColor.write("waiting"); }
-
 bool wait_iot_color(ObjectColor expected, unsigned long timeoutMs) {
-  if (expected != OBJECT_RED && expected != OBJECT_GREEN && expected != OBJECT_BLUE &&
-      expected != OBJECT_YELLOW && expected != OBJECT_PURPLE) {
+  if (expected != RED && expected != GREEN && expected != BLUE &&
+      expected != YELLOW && expected != PURPLE) {
     failMission(ERR_COLOR_MISMATCH);
     return false;
   }
@@ -1283,22 +1271,14 @@ bool wait_iot_color(ObjectColor expected, unsigned long timeoutMs) {
   return false;
 }
 
-
 void setup() {
   Leanbot.begin();
-  set_line(IR_TH_2L, IR_TH_0L, IR_TH_1R, IR_TH_3R); // Ngưỡng dự phòng.
-  Serial.begin(115200);
-  // calibrate_line(); // Bỏ chú thích để hiệu chuẩn bằng TB1A sau khi khởi động.
-  // Không gọi set_line() sau calibrate_line(), tránh ghi đè ngưỡng vừa học.
-  colorSensorReady = APDS.begin();
-  LbDelay(300);
+//   set_line(IR_TH_2L, IR_TH_0L, IR_TH_1R, IR_TH_3R); // Ngưỡng dự phòng.
+  calibrate_line(); 
 }
 
 void loop() {
   LbMission.begin(TB1A + TB1B);
-  followLineCm(32.5);
+ 
   LbMission.end();
 }
-
-
-

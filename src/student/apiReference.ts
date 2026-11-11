@@ -944,10 +944,10 @@ export const apiReference: ApiReference[] = [
   {
     "group": "helpers",
     "api": "runFollowLine();",
-    "description": "Cập nhật một bước bám line bằng lõi PID analog của Blockly MyBlock.",
+    "description": "Cập nhật một bước bám line bằng lõi PID analog.",
     "parameters": "Không có hoặc int mặt nạ.",
     "returns": "void.",
-    "notes": "PID analog MyBlock, chu kỳ 10 ms. Bắt line ở tối đa 600, cần 5 mẫu giữa line mới tăng tốc. Cua gắt có trần 1000 và cho bánh trong lùi nhẹ; hysteresis tránh chuyển chế độ liên tục. Không thấy line từ đầu: quét hai phía tối đa 3,5 giây; mất line đã bám: tìm theo hướng cũ tối đa 2,5 giây. Quá hạn thì dừng/báo lỗi; không bảo đảm tìm được line nằm ngoài vùng quét cảm biến. Tâm analog chỉ dùng các cảm biến được mặt nạ hiệu chuẩn xác nhận đang thấy line. Quyền đánh lái tăng theo tốc độ khi lệch lớn, giữ gain vùng giữa để hạn chế lắc.",
+    "notes": "PID , chu kỳ 10 ms. Bắt line ở tối đa 600, cần 5 mẫu giữa line mới tăng tốc. Cua gắt có trần 1000 và cho bánh trong lùi nhẹ; hysteresis tránh chuyển chế độ liên tục. Không thấy line từ đầu: quét hai phía tối đa 3,5 giây; mất line đã bám: tìm theo hướng cũ tối đa 2,5 giây. Quá hạn thì dừng/báo lỗi; không bảo đảm tìm được line nằm ngoài vùng quét cảm biến. Tâm analog chỉ dùng các cảm biến được mặt nạ hiệu chuẩn xác nhận đang thấy line. Quyền đánh lái tăng theo tốc độ khi lệch lớn, giữ gain vùng giữa để hạn chế lắc.",
     "code": "// Đặt trong loop, khi robot đang theo line.\nrunFollowLine(); // Cập nhật điều khiển một lần\nrobot_delay(LINE_STEP_MS); // Giữ chu kỳ 10 ms và phục vụ tay async",
     "source": "baseCode.cpp"
   },
@@ -957,7 +957,7 @@ export const apiReference: ApiReference[] = [
     "description": "Dò line theo quãng đường rồi dừng.",
     "parameters": "distanceMm: khoảng cách theo mm. 100 = 100 mm = 10 cm; muốn 100 cm dùng followLineCm(100).",
     "returns": "void.",
-    "notes": "Dùng lbmbFollowDistance MyBlock; 100 mm = 10 cm. Quãng đường phản hồi được chia DISTANCE_SCALE một lần; lõi dùng mm nguyên. Có giảm tốc cuối đoạn, phát hiện kẹt/mất line.",
+    "notes": "Dùng lbmbFollowDistance; 100 mm = 10 cm. Quãng đường phản hồi được chia DISTANCE_SCALE một lần; lõi dùng mm nguyên. Có giảm tốc cuối đoạn, phát hiện kẹt/mất line.",
     "code": "// Dò line theo quãng đường rồi dừng.\nfollowLineDistance(100);",
     "source": "baseCode.cpp"
   },
@@ -967,7 +967,7 @@ export const apiReference: ApiReference[] = [
     "description": "Dò tới giao lộ đã xác nhận.",
     "parameters": "Không có.",
     "returns": "void.",
-    "notes": "Gọi chế độ marker 3 (chữ T / 1111) của MyBlock, cần 3 mẫu xác nhận. Nếu bắt đầu ngay trên marker thì có thể kết thúc ngay sau 3 mẫu, đúng hành vi MyBlock.",
+    "notes": "Gọi chế độ marker 3 (chữ T / 1111), cần 3 mẫu xác nhận. Nếu bắt đầu ngay trên marker thì có thể kết thúc ngay sau 3 mẫu.",
     "code": "// Dò tới giao lộ đã xác nhận.\nfollowLineUntilJunction();",
     "source": "baseCode.cpp"
   },
@@ -1167,7 +1167,7 @@ export const apiReference: ApiReference[] = [
     "description": "Dò line trong khoảng thời gian tính bằng giây rồi dừng.",
     "parameters": "seconds: thời gian 0..600 giây; 2.5 là 2 giây rưỡi.",
     "returns": "void.",
-    "notes": "Dùng lbmbFollowTime MyBlock, có giảm tốc trước hết giờ. Tay async vẫn cập nhật; mất line sẽ tìm có giới hạn rồi báo lỗi/dừng. Không bảo đảm quãng đường cố định.",
+    "notes": "Dùng lbmbFollowTime, có giảm tốc trước hết giờ. Tay async vẫn cập nhật; mất line sẽ tìm có giới hạn rồi báo lỗi/dừng. Không bảo đảm quãng đường cố định.",
     "code": "// Cần định nghĩa các hàm từ baseCode.cpp.\nfollowLineSeconds(2.5f); // Dò line tối đa 2,5 giây rồi dừng bánh",
     "source": "baseCode.cpp"
   },
@@ -1177,7 +1177,7 @@ export const apiReference: ApiReference[] = [
     "description": "Dò line theo cm, cùng đơn vị nhập với move_tank.",
     "parameters": "distanceCm: số thực hữu hạn 0..1200 cm; 100 nghĩa là 1 mét.",
     "returns": "void.",
-    "notes": "Gọi lbmbFollowDistance với tốc độ mặc định LINE_SPEED/20 %. Lõi MyBlock dùng PID analog. Dừng sớm và báo lỗi nếu kẹt/mất line; độ phân giải quãng đường trong lõi là mm nguyên. Tự giảm tốc khi bắt line/cua gắt; không tính xoay tìm line không tịnh tiến thành lỗi kẹt ngay sau 900 ms.",
+    "notes": "Gọi lbmbFollowDistance với tốc độ mặc định LINE_SPEED/20 %.Lõi dùng PID analog. Dừng sớm và báo lỗi nếu kẹt/mất line; độ phân giải quãng đường trong lõi là mm nguyên. Tự giảm tốc khi bắt line/cua gắt; không tính xoay tìm line không tịnh tiến thành lỗi kẹt ngay sau 900 ms.",
     "code": "// Dùng các định nghĩa trong baseCode.cpp.\nfollowLineCm(32.5f); // Dò line 32,5 cm\n// followLineDistance(325) tương đương 325 mm.",
     "source": "baseCode.cpp"
   },
@@ -1194,10 +1194,10 @@ export const apiReference: ApiReference[] = [
   {
     "group": "helpers",
     "api": "measure_line_error();",
-    "description": "Đọc tâm line analog theo đúng thuật toán MyBlock.",
+    "description": "Đọc tâm line analog.",
     "parameters": "Không có.",
     "returns": "float -3..3; NAN nếu không thấy line.",
-    "notes": "Kết quả -3..3, NAN nếu mặt nạ không hợp lệ. Khi độ tương phản IR yếu, dùng bảng digital MyBlock. Cần đo lại ngưỡng dưới ánh sáng thật. Giá trị IR ở cảm biến ngoài vạch bị loại khỏi trọng số, tránh kéo sai dấu lỗi.",
+    "notes": "Kết quả -3..3, NAN nếu mặt nạ không hợp lệ. Khi độ tương phản IR yếu. Cần đo lại ngưỡng dưới ánh sáng thật. Giá trị IR ở cảm biến ngoài vạch bị loại khỏi trọng số, tránh kéo sai dấu lỗi.",
     "code": "float error = measure_line_error(); // Không làm robot di chuyển\nif (isfinite(error)) Serial.println(error);\nelse Serial.println(\"No line\");",
     "source": "baseCode.cpp"
   },
@@ -1224,12 +1224,12 @@ export const apiReference: ApiReference[] = [
   {
     "group": "helpers",
     "api": "lbmbFollow(100, 4, 32.5f);",
-    "description": "Hàm dò line tổng quát đúng API Blockly MyBlock.",
+    "description": "Hàm dò line.",
     "parameters": "speedPercent: 0 < tốc độ <=100%; lớn hơn 100 được giới hạn. mode: 1 trái, 2 phải, 3 chữ T, 4 cm, 5 giây; targetVal dùng cho mode 4/5.",
     "returns": "void.",
-    "notes": "Không truyền tốc độ runLR 2000 vào tham số phần trăm. Cần toàn bộ lõi MyBlock đã tích hợp trong baseCode. Kết quả lượt gần nhất ở lineOperationCompleted; lỗi ở missionError.",
-    "code": "// Các định nghĩa MyBlock đã có trong baseCode.cpp.\nlbmbFollow(100, 4, 32.5f); // Tốc độ tính theo %, 100% là trần 2000",
-    "source": "Blockly MyBlock: myblocks.js + lớp tích hợp baseCode.cpp"
+    "notes": "Không truyền tốc độ runLR 2000 vào tham số phần trăm. Cần toàn bộ lõi đã tích hợp trong baseCode. Kết quả lượt gần nhất ở lineOperationCompleted; lỗi ở missionError.",
+    "code": "// Các định nghĩa đã có trong baseCode.cpp.\nlbmbFollow(100, 4, 32.5f); // Tốc độ tính theo %, 100% là trần 2000",
+    "source": "lớp tích hợp baseCode.cpp"
   },
   {
     "group": "helpers",
@@ -1237,29 +1237,29 @@ export const apiReference: ApiReference[] = [
     "description": "Bám line tới marker trái/phải/chữ T.",
     "parameters": "Tốc độ %, markerMode 1=trái, 2=phải, 3=T.",
     "returns": "void.",
-    "notes": "Cần 3 mẫu liên tiếp xác nhận marker. Dùng cùng chế độ bắt line/cua MyBlock; tìm lại line có giới hạn, quá hạn dừng và báo lỗi.",
-    "code": "// Các định nghĩa MyBlock đã có trong baseCode.cpp.\nlbmbFollowMarker(100, 1); // Tốc độ tính theo %, 100% là trần 2000",
-    "source": "Blockly MyBlock: myblocks.js + lớp tích hợp baseCode.cpp"
+    "notes": "Cần 3 mẫu liên tiếp xác nhận marker. Dùng cùng chế độ bắt line/cua; tìm lại line có giới hạn, quá hạn dừng và báo lỗi.",
+    "code": "// Các định nghĩa đã có trong baseCode.cpp.\nlbmbFollowMarker(100, 1); // Tốc độ tính theo %, 100% là trần 2000",
+    "source": "lớp tích hợp baseCode.cpp"
   },
   {
     "group": "helpers",
     "api": "lbmbFollowDistance(100, 32.5f);",
-    "description": "Bám line theo cm bằng PID analog MyBlock.",
+    "description": "Bám line theo cm bằng PID.",
     "parameters": "Tốc độ %; khoảng cách 0..1200 cm.",
     "returns": "void.",
     "notes": "100% đặt trần 2000, lõi tự giảm tốc theo độ lệch và khoảng cách còn lại. Dùng chung DISTANCE_SCALE với move_tank. Tự giảm tốc khi bắt line/cua gắt; không tính xoay tìm line không tịnh tiến thành lỗi kẹt ngay sau 900 ms.",
-    "code": "// Các định nghĩa MyBlock đã có trong baseCode.cpp.\nlbmbFollowDistance(100, 32.5f); // Tốc độ tính theo %, 100% là trần 2000",
-    "source": "Blockly MyBlock: myblocks.js + lớp tích hợp baseCode.cpp"
+    "code": "// đã có trong baseCode.cpp.\nlbmbFollowDistance(100, 32.5f); // Tốc độ tính theo %, 100% là trần 2000",
+    "source": " lớp tích hợp baseCode.cpp"
   },
   {
     "group": "helpers",
     "api": "lbmbFollowTime(100, 2.5f);",
-    "description": "Bám line theo thời gian bằng MyBlock.",
+    "description": "Bám line theo thời gian.",
     "parameters": "Tốc độ %; thời gian 0..600 giây.",
     "returns": "void.",
     "notes": "Giảm tốc trước khi hết giờ; robot có thể dừng sớm khi mất line hoặc lỗi.",
-    "code": "// Các định nghĩa MyBlock đã có trong baseCode.cpp.\nlbmbFollowTime(100, 2.5f); // Tốc độ tính theo %, 100% là trần 2000",
-    "source": "Blockly MyBlock: myblocks.js + lớp tích hợp baseCode.cpp"
+    "code": "// đã có trong baseCode.cpp.\nlbmbFollowTime(100, 2.5f); // Tốc độ tính theo %, 100% là trần 2000",
+    "source": "lớp tích hợp baseCode.cpp"
   },
   {
     "group": "helpers",

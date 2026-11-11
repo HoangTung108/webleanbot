@@ -2,7 +2,7 @@
 import { gripperJaw, LEANBOT_GEOMETRY } from './robotGeometry';
 export const LEANBOT_APPEARANCE = LEANBOT_GEOMETRY;
 
-export function drawLeanbot(ctx: CanvasRenderingContext2D, leftGrip = 0, rightGrip = 0): void {
+export function drawLeanbot(ctx: CanvasRenderingContext2D, leftGrip = 0, rightGrip = 0, rgb?:readonly number[]): void {
   ctx.save(); ctx.lineJoin='round';ctx.lineCap='round';
   // Lower red chassis and dark gap below the raised circuit board.
   ctx.fillStyle='rgba(17,24,30,.18)';ctx.fillRect(-90,-34,134,70);
@@ -89,6 +89,7 @@ export function drawLeanbot(ctx: CanvasRenderingContext2D, leftGrip = 0, rightGr
     ctx.fillStyle='#dce1dc';ctx.beginPath();ctx.arc(LEANBOT_GEOMETRY.gripper.pivotX,side*LEANBOT_GEOMETRY.gripper.pivotY,2.4,0,Math.PI*2);ctx.fill();
     ctx.fillStyle='#657d86';ctx.beginPath();ctx.arc(LEANBOT_GEOMETRY.gripper.pivotX,side*LEANBOT_GEOMETRY.gripper.pivotY,1,0,Math.PI*2);ctx.fill();
   }
+  if(rgb)for(let i=0;i<4;i++){const start=rgb.length===12?i*3:0;ctx.fillStyle=`rgb(${rgb.slice(start,start+3).join(',')})`;ctx.fillRect(-13,-24+i*15,5,5);}
   ctx.fillStyle='#f9e6d6';ctx.font='bold 5px sans-serif';ctx.fillText('LEANBOT',-59,24);
   ctx.restore();
 }

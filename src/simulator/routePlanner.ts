@@ -13,29 +13,14 @@ export function routePoses(start: Pose, steps: RouteStep[]): Pose[] {
   return poses;
 }
 
-// Keep the motion and line-following implementations from the user's base file.
-// Exclude hardware WiFi helpers and unrelated mission/color routines.
+// Use the actual base implementation, including MyBlock structs and calibration.
 export function generateRouteCode(start: Pose, steps: RouteStep[]): string {
   if (![start.x, start.y, start.heading].every(Number.isFinite)) throw new Error('Vị trí xuất phát không hợp lệ');
-  const motionStart = baseCode.indexOf('const float DISTANCE_SCALE');
-  const motionEnd = baseCode.indexOf('// BEGIN WIFI HELPERS', motionStart);
-  const lineStart = baseCode.indexOf('// Sensor order:', motionEnd);
-  const lineEnd = baseCode.indexOf('enum ObjectColor');
-  if (motionStart < 0 || motionEnd < motionStart || lineStart < 0 || lineEnd < lineStart) throw new Error('Cấu trúc baseCode.cpp đã thay đổi');
-  const helpers = (baseCode.slice(motionStart, motionEnd) + baseCode.slice(lineStart, lineEnd))
-    .replace(/ERR_NONE = 0/, 'ERR_NONE')
-    .replaceAll('unsigned long started = millis(), lastAdvance = started, lastRamp = started;', 'unsigned long started = millis(); unsigned long lastAdvance = started; unsigned long lastRamp = started;')
-    .replace('int previousL = 32767, previousR = 32767;', 'int previousL = 32767; int previousR = 32767;')
-    .replace('int clearFrames = 0, crossingFrames = 0;', 'int clearFrames = 0; int crossingFrames = 0;')
-    .replaceAll('runFollowLine()', 'runFollowLineCurrent()')
-    .replace('  LbRGB.fillColor(CRGB::Red);', '')
-    .replace('F("MISSION ERROR: ")', '"MISSION ERROR: "')
-    .replace(/#if BOARD_MODE != BOARD_PRIMARY[\s\S]*?#endif/, '');
+  const setup = /\bvoid\s+setup\s*\(\s*\)\s*\{/.exec(baseCode);
+  if (!setup) throw new Error('Không tìm thấy setup trong baseCode.cpp');
+  const helpers = baseCode.slice(0, setup.index);
   const commands = generateRouteCommands(start, steps);
   return `// Sinh từ lộ trình. Đặt robot tại x=${start.x.toFixed(1)}, y=${start.y.toFixed(1)} mm, góc ${start.heading.toFixed(1)} độ.
-#include <Leanbot.h>
-#include <math.h>
-#include <string.h>
 ${helpers}
 void plannedRoute() {
 ${commands.split('\n').filter(Boolean).map(line => `  ${line}`).join('\n')}
