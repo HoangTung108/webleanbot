@@ -130,3 +130,17 @@ it('keeps Serial Bridge traffic off the unconfigured IoT transport',()=>{
   motors(){},advance(){},log:m=>logs.push(m),iotRead(){calls++;return 'Red';},iotWrite(){calls++;},
  });runtime.start();runtime.tick(1);expect(calls).toBe(0);expect(logs).toEqual(['COLOR:BLUE','0']);
 });
+
+
+it('reports SDK ADC and mask after SDK calibration', () => {
+  const logs = run(t => t >= 100 && t < 400 ? 1 : 0)
+  expect(logs.some(log => log.startsWith('IR ADC 2L/0L/1R/3R: '))).toBe(true)
+})
+
+it('TB2B cancels blocking helpers and requires a fresh start', () => {
+  const logs = run(t => t >= 100 && t < 200 ? 2 : t >= 350 && t < 700 ? 8 : t >= 1100 && t < 1200 ? 2 : 0,
+    2500, 'robot_delay(600); send_iot_color(RED);')
+  expect(logs.filter(log => log === 'RUN')).toHaveLength(2)
+  expect(logs.filter(log => log.startsWith('MISSION RESET:'))).toHaveLength(1)
+  expect(logs.slice(-5)).toEqual(['0', 'false', 'false', 'false', 'false'])
+})

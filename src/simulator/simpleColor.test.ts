@@ -20,6 +20,7 @@ ${base.match(/enum ErrorCode \{[\s\S]*?\};/)![0]}
 ObjectColor lastMeasuredColor=UNKNOWN;
 bool colorSensorReady=true;
 unsigned long clockMs=0;unsigned long millis(){return clockMs;}
+bool check_mission_reset(){return false;}
 void robot_delay(unsigned long ms){clockMs+=ms;}
 int error=0;void failMission(ErrorCode e){error=e;}
 struct {template<class T>void print(T){}template<class T>void println(T){}} Serial;

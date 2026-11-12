@@ -452,7 +452,7 @@ export const SimulatorDemo: React.FC<{ cppCode?: string;visible?:boolean;onCodeL
         </div>
         <div role="group" aria-label="Nút chạm Leanbot" className="sim-speed">
           <span>Nút robot</span>
-          {([{button:1,label:'TB1A · Line'},{button:2,label:'TB1B · Bài'},{button:4,label:'TB2A · WiFi'}]).map(({button,label})=><button key={button} className="sim-button" disabled={!isRunning||isPaused} onClick={()=>{
+          {([{button:1,label:'TB1A · Line'},{button:2,label:'TB1B · Bài'},{button:4,label:'TB2A · WiFi'},{button:8,label:'TB2B · Reset'}]).map(({button,label})=><button key={button} className="sim-button" disabled={!isRunning||isPaused} onClick={()=>{
             if(onlineRef.current)sendOnline({action:'touch',button});
             else bridgeRef.current?.pressTouch(button);
           }}>{label}</button>)}

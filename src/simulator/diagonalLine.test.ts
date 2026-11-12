@@ -53,6 +53,7 @@ int bits=6;int raw[4]={10,100,100,10};
 const int ir2L=0,ir0L=1,ir1R=2,ir3R=3;
 struct {int read(int sensor){return raw[sensor];}} LbIRArray;
 int measure_line(){return bits;}
+bool check_mission_reset(){return false;}
 void robot_delay(unsigned long ms){clockMs+=ms;++services;if(!stalled)physicalDistance+=(LbMotion.left+LbMotion.right)*0.5f*65/2000*ms/1000;}
 void resetMotionState(){lastLineError=0;lastLineControlTime=clockMs;lineControlReady=false;}
 void failMission(ErrorCode e){error=e;LbMotion.stopAndWait();}

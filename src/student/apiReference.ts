@@ -1,6 +1,36 @@
 export type ApiReference = { group: string; api: string; description: string; parameters: string; returns: string; notes: string; code: string; source: string }
 
 export const apiReference: ApiReference[] = [
+{
+  "group": "helpers",
+  "api": "moveUntilLine(speed = 600, maxDistanceCm = 100);",
+  "description": "Đi thẳng không dò line cho tới khi thấy line đen rồi dừng.",
+  "parameters": "speed: 165..2000; maxDistanceCm: giới hạn tìm theo cm, mặc định 100.",
+  "returns": "void. Hết quãng tìm hoặc lỗi sẽ cập nhật missionError.",
+  "notes": "Dùng PID giữ hướng của move_tank và API LbIRLine.read/value theo ngưỡng SDK. Nếu đã đứng trên đen thì dừng ngay. Có giới hạn thời gian và phát hiện kẹt. Tốc độ cao có thể vượt qua vạch hẹp giữa hai lần đọc; nên bắt đầu ở 600. Hết quãng tìm báo ERR_LINE_LOST.",
+  "code": "moveUntilLine(600, 100); // Tìm trong tối đa 100 cm\nif (missionError != ERR_NONE) return;\nfollowLineCm(32.5f); // Bắt đầu dò line sau khi tìm thấy",
+  "source": "baseCode.cpp"
+},
+{
+  "group": "helpers",
+  "api": "measure_line_values();",
+  "description": "In thông số cảm biến line bằng API Leanbot.",
+  "parameters": "Không có.",
+  "returns": "void.",
+  "notes": "Đọc ADC qua LbIRArray.read và mask qua LbIRLine.read. Đây là số đo tức thời, không phải ngưỡng do SDK hiệu chuẩn và không tự lưu qua lần khởi động.",
+  "code": "measure_line_values(); // Xem ADC 2L/0L/1R/3R và mask trên Serial",
+  "source": "baseCode.cpp"
+},
+{
+  "group": "helpers",
+  "api": "reset_mission();",
+  "description": "Dừng và đặt lại trạng thái bài chạy; TB2B gọi hàm này.",
+  "parameters": "Không có.",
+  "returns": "void.",
+  "notes": "Giữ cấu hình WiFi/Asset và hiệu chuẩn line. Hủy tác vụ tay, giữ góc tay hiện tại; xóa hàng chờ màu cục bộ. Nhả nút rồi bấm TB1B để chạy lại. Lệnh SDK chặn chỉ kiểm tra reset sau khi trả về.",
+  "code": "reset_mission(); // Hoặc chạm TB2B trong bài chạy dùng các hàm baseCode",
+  "source": "baseCode.cpp"
+},
   {
     "group": "leanbot",
     "api": "Leanbot.begin();",

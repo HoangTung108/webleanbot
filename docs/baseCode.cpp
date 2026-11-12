@@ -72,6 +72,9 @@ void connect_robot_room(const __FlashStringHelper *roomId);
 void send_real_robot_color(ObjectColor color);
 ObjectColor read_real_robot_color();
 bool wait_real_robot_color(ObjectColor expected, unsigned long timeoutMs = 30000UL);
+void measure_line_values();
+void reset_mission();
+static bool check_mission_reset();
 ObjectColor lastMeasuredColor = UNKNOWN;
 
 auto IoTColor = LbIoT.Asset.attribute(F("Color"));
@@ -142,9 +145,10 @@ const int16_t LBMB_START_SPEED = 200;
 const int16_t LBMB_SEARCH_SPEED_MAX = 650;
 const int16_t LBMB_ACQUIRE_SPEED_MAX = 600;
 const int16_t LBMB_CURVE_SPEED_MAX = 1000;
-const float LBMB_FLL_ACCEL = 4800.0f;
+// Đạt tốc độ đoạn thẳng sớm hơn; giữ giới hạn cua và phanh cuối đoạn.
+const float LBMB_FLL_ACCEL = 6500.0f;
 const float LBMB_FLL_DECEL = 6500.0f;
-const float LBMB_FLL_JERK = 42000.0f;
+const float LBMB_FLL_JERK = 60000.0f;
 const int32_t LBMB_WHEEL_ACCEL = 12000;
 const int32_t LBMB_WHEEL_DECEL = 15000;
 const float LBMB_FLL_KP = 900.0f;
@@ -169,11 +173,18 @@ float lastLineError = 0.0f;
 unsigned long lastLineControlTime = 0;
 bool lineControlReady = false;
 bool colorSensorReady = false;
+bool missionResetRequested = false;
+bool resetTouchActive = false;
+unsigned long resetTouchStarted = 0;
+bool missionArmed = false;
+byte missionButtons = 0;
+unsigned long missionButtonChangedAt = 0;
 
 static int clampMotor(int v) { return constrain(v, -MAX_MOTOR_SPEED, MAX_MOTOR_SPEED); }
 static int signInt(int n) { return (n > 0) - (n < 0); }
 
 void failMission(ErrorCode code) {
+  if (missionResetRequested) return;
   if (missionError == ERR_NONE) missionError = code;
   LbMotion.stopAndWait();
   Serial.print(F("MISSION ERROR: "));
@@ -208,11 +219,13 @@ void robot_delay(unsigned long duration) {
   const unsigned long started = millis();
   update_hand();
   while (millis() - started < duration) {
+    if (check_mission_reset()) { LbDelay(1); return; }
     LbDelay(1);
     update_hand();
   }
 }
 void close_hand_async(int degree) {
+  if (check_mission_reset()) return;
   update_hand();
   const int target = constrain(degree, -30, 120);
   if (target == (handBusy ? handTarget : handAngle)) return;
@@ -231,6 +244,7 @@ void open_hand() { open_hand_async(); wait_hand(); }
 
 // Đi và quay có phản hồi
 void turn_angle(int speed, float angle_deg, TurnMode mode) {
+  if (check_mission_reset()) return;
   if (!isfinite(angle_deg) || speed < TURN_FINISH_SPEED || speed > MAX_MOTOR_SPEED ||
       mode < TWO_WHEELS || mode > RIGHT_ONLY) {
     failMission(ERR_INVALID_MOVE); return;
@@ -248,6 +262,7 @@ void turn_angle(int speed, float angle_deg, TurnMode mode) {
   int previousSpeed = -1;
   const unsigned long timeoutMs = 3500UL + (unsigned long)(target * 90.0f);
   while (true) {
+    if (check_mission_reset()) return;
     const float progress = ((float)LbMotion.getRotationDeg() - origin) * direction;
     const float remaining = target - progress;
     if (remaining <= TURN_BRAKE_LEAD_DEG) break;
@@ -287,21 +302,22 @@ void turn_two_wheels(int speed, float angle) {
   turn_angle(speed, angle, TWO_WHEELS);
 }
 
-void move_tank(int motor_L, int motor_R, float distance_cm) {
+static bool moveTankCore(int motor_L, int motor_R, float distance_cm, bool untilLine) {
+  if (check_mission_reset()) return false;
   if (!isfinite(distance_cm) || distance_cm < 0.0f ||
       motor_L == 0 || motor_R == 0 || signInt(motor_L) != signInt(motor_R)) {
-    failMission(ERR_INVALID_MOVE); return;
+    failMission(ERR_INVALID_MOVE); return false;
   }
-  if (distance_cm == 0.0f) return;
+  if (distance_cm == 0.0f) return false;
   const float targetMm = distance_cm * 10.0f * DISTANCE_SCALE;
-  if (!isfinite(targetMm) || targetMm > 12000.0f) { failMission(ERR_INVALID_MOVE); return; }
+  if (!isfinite(targetMm) || targetMm > 12000.0f) { failMission(ERR_INVALID_MOVE); return false; }
   motor_L = clampMotor(motor_L);
   motor_R = clampMotor(motor_R);
   const int direction = signInt(motor_L);
   const int targetL = (int)lroundf(fabsf((float)motor_L) * LEFT_SCALE);
   const int targetR = (int)lroundf(fabsf((float)motor_R) * RIGHT_SCALE);
   const int maxMagnitude = max(targetL, targetR);
-  if (maxMagnitude < MOVE_FINISH_SPEED) { failMission(ERR_INVALID_MOVE); return; }
+  if (maxMagnitude < MOVE_FINISH_SPEED) { failMission(ERR_INVALID_MOVE); return false; }
   LbMotion.stopAndWait();
   resetMotionState();
   const float originDist = (float)LbMotion.getDistanceMm();
@@ -313,13 +329,22 @@ void move_tank(int motor_L, int motor_R, float distance_cm) {
   int previousL = 32767, previousR = 32767;
   const unsigned long timeoutMs = 3500UL + (unsigned long)(targetMm * 60.0f);
   while (true) {
+    if (check_mission_reset()) return false;
     const float progressed = ((float)LbMotion.getDistanceMm() - originDist) * direction;
     const float remaining = targetMm - progressed;
+    if (untilLine) {
+      LbIRLine.read();
+      if (((int)LbIRLine.value() & 0x0F) != 0) {
+        LbMotion.stopAndWait();
+        resetMotionState();
+        return true;
+      }
+    }
     if (remaining <= 0.0f) break;
     const unsigned long now = millis();
     if (progressed > bestProgress + 1.0f) { bestProgress = progressed; lastAdvance = now; }
-    if (now - started > timeoutMs) { failMission(ERR_MOVE_TIMEOUT); return; }
-    if (now - lastAdvance > 1800UL) { failMission(ERR_MOVE_STALL); return; }
+    if (now - started > timeoutMs) { failMission(ERR_MOVE_TIMEOUT); return false; }
+    if (now - lastAdvance > 1800UL) { failMission(ERR_MOVE_STALL); return false; }
     const float dt = min((now - lastControl) * 0.001f, 0.05f);
     lastControl = now;
 
@@ -371,6 +396,23 @@ void move_tank(int motor_L, int motor_R, float distance_cm) {
     robot_delay(MOTION_FEEDBACK_MS);
   }
   LbMotion.stopAndWait();
+  if (untilLine) { failMission(ERR_LINE_LOST); return false; }
+  return true;
+}
+
+// Đi đủ quãng đường (cm), giữ API cũ.
+void move_tank(int motor_L, int motor_R, float distance_cm) {
+  moveTankCore(motor_L, motor_R, distance_cm, false);
+}
+
+// Đi mù tới khi bất kỳ cảm biến nào thấy đen, rồi dừng bánh.
+// speed: 165..2000; maxDistanceCm: quãng đường tìm tối đa, không phải độ rộng line.
+void moveUntilLine(int speed = 600, float maxDistanceCm = 100.0f) {
+  if (speed < MOVE_FINISH_SPEED || speed > MAX_MOTOR_SPEED ||
+      !isfinite(maxDistanceCm) || maxDistanceCm <= 0.0f) {
+    failMission(ERR_INVALID_MOVE); return;
+  }
+  moveTankCore(speed, speed, maxDistanceCm, true);
 }
 
 // Kết nối WiFi
@@ -433,13 +475,26 @@ int measure_line() {
 }
 void print_line() { Serial.println(measure_line()); }
 
+// ADC tức thời và mask của SDK; đây không phải giá trị ngưỡng sau hiệu chuẩn.
+void measure_line_values() {
+  Serial.print(F("IR ADC 2L/0L/1R/3R: "));
+  Serial.print(LbIRArray.read(ir2L)); Serial.print(' ');
+  Serial.print(LbIRArray.read(ir0L)); Serial.print(' ');
+  Serial.print(LbIRArray.read(ir1R)); Serial.print(' ');
+  Serial.print(LbIRArray.read(ir3R));
+  Serial.print(F(" | mask: ")); Serial.println(measure_line());
+}
+
 void calibrate_line() {
+  if (check_mission_reset()) return;
   LbMotion.stopAndWait();
   wait_hand();
   resetMotionState();
   junctionPending = false;
   Serial.println(F("Line calibration: use TB1A and follow SDK black/white steps."));
   LbIRLine.doManualCalibration(TB1A);
+  if (check_mission_reset()) return;
+  measure_line_values();
   resetMotionState();
   Serial.println(F("Line calibration returned. Check sensors on black and white."));
 }
@@ -910,6 +965,7 @@ static void applyMyBlockLineCommand(const LbmbFollowCtx* ctx, const LbmbCommand*
 
 // Cập nhật một bước theo đúng lõi MyBlock, dùng khi tự viết loop.
 void runFollowLine(int bits = -1) {
+  if (check_mission_reset()) return;
   const uint32_t now = (uint32_t)millis();
   if (lineControlReady && now - lastLineControlTime < LBMB_TICK_MS) return;
   LbmbState state = lbmbReadState();
@@ -925,6 +981,7 @@ void runFollowLine(int bits = -1) {
 }
 
 static void lbmbFollow(float speedPercent, uint8_t mode, float targetVal) {
+  if (check_mission_reset()) return;
   lineOperationCompleted = false;
   if (!isfinite(speedPercent) || speedPercent <= 0 || !isfinite(targetVal) ||
       mode < 1 || mode > 5 || ((mode == 4 || mode == 5) && targetVal < 0) ||
@@ -935,6 +992,7 @@ static void lbmbFollow(float speedPercent, uint8_t mode, float targetVal) {
   if ((mode == 4 || mode == 5) && targetVal == 0) { lineOperationCompleted = true; return; }
   LbmbFollowCtx ctx = {};
   while (true) {
+    if (check_mission_reset()) return;
     LbmbState state = lbmbReadState();
     if (!ctx.initialized) lbmbFollowCoreInit(&ctx, &state);
     const uint32_t elapsed = state.timeMs - ctx.startTime;
@@ -1004,10 +1062,13 @@ void set_color_white(int red, int green, int blue) {
 }
 
 bool readAPDSColor(int &r, int &g, int &b) {
+  if (check_mission_reset()) return false;
   APDS.colorAvailable();
   robot_delay(35);
+  if (check_mission_reset()) return false;
   const unsigned long started = millis();
   while (!APDS.colorAvailable()) {
+    if (check_mission_reset()) return false;
     if (millis() - started > 850UL) return false;
     robot_delay(5);
   }
@@ -1151,6 +1212,7 @@ void requireColor(ObjectColor expected) {
 }
 // Tín hiệu màu IoT và hàng chờ
 void send_iot_color(ObjectColor color) {
+  if (check_mission_reset()) return;
   switch (color) {
     case RED:   IoTColor.write("Red"); break;
     case GREEN: IoTColor.write("Green"); break;
@@ -1212,6 +1274,7 @@ bool wait_iot_color(ObjectColor expected, unsigned long timeoutMs) {
   }
   const unsigned long started = millis();
   while (millis() - started < timeoutMs) {
+    if (check_mission_reset()) return false;
     const ObjectColor received = read_iot_color();
     const unsigned long elapsed = millis() - started;
     if (elapsed >= timeoutMs) break;
@@ -1232,6 +1295,7 @@ bool wait_iot_color(ObjectColor expected, unsigned long timeoutMs) {
 // 3. send_robot_color(BLUE);                // Gửi màu trực tiếp qua WiFi
 // 4. wait_robot_color(GREEN, 30000UL);      // Đợi nhận màu từ robot đối tác qua WiFi
 void send_robot_color(ObjectColor color) {
+  if (check_mission_reset()) return;
   if (wifiColorMode) { send_iot_color(color); return; }
   Serial.print(F("COLOR:"));
   switch (color) {
@@ -1278,6 +1342,7 @@ bool wait_robot_color(ObjectColor expected, unsigned long timeoutMs) {
   }
   const unsigned long started = millis();
   while (millis() - started < timeoutMs) {
+    if (check_mission_reset()) return false;
     const ObjectColor received = read_robot_color();
     if (received == expected) return true;
     if (iot_queue_count() > 0 && peek_iot_color() == expected) {
@@ -1304,13 +1369,30 @@ bool wait_real_robot_color(ObjectColor expected, unsigned long timeoutMs) {
   return wait_robot_color(expected, timeoutMs);
 }
 
-// Chỉ nhận lượt mới sau khi nhả cả ba nút ổn định.
-bool missionArmed = false;
-byte missionButtons = 0;
-unsigned long missionButtonChangedAt = 0;
+// Reset bài, giữ cấu hình WiFi/Asset và ngưỡng line của SDK.
+void reset_mission() {
+  missionResetRequested = true;
+  LbMotion.stopAndWait();
+  handBusy = false; handFrom = handTarget = handAngle;
+  missionError = ERR_NONE; junctionPending = false; lineOperationCompleted = false;
+  lastMeasuredColor = UNKNOWN; clear_iot_queue(); resetMotionState();
+  missionArmed = false; missionButtons = 8; missionButtonChangedAt = millis();
+  LbRGB.fillColor(CRGB::Black); LbRGB.fillColor(CRGB::Green, BITMAP(ledA,ledB)); LbRGB.show();
+  Serial.println(F("MISSION RESET: release buttons, then press TB1B to run again."));
+}
+
+static bool check_mission_reset() {
+  if (LbTouch.read(TB2B) == HIGH) {
+    if (!resetTouchActive) { resetTouchActive = true; resetTouchStarted = millis(); }
+    if (!missionResetRequested && millis() - resetTouchStarted >= 30UL) reset_mission();
+  } else resetTouchActive = false;
+  return missionResetRequested;
+}
+
+// Chỉ nhận lượt mới sau khi nhả các nút ổn định.
 
 void FullMission() {
-  const byte buttons = (LbTouch.read(TB1A) == HIGH ? 1 : 0) | (LbTouch.read(TB1B) == HIGH ? 2 : 0) | (LbTouch.read(TB2A) == HIGH ? 4 : 0);
+  const byte buttons = (LbTouch.read(TB1A) == HIGH ? 1 : 0) | (LbTouch.read(TB1B) == HIGH ? 2 : 0) | (LbTouch.read(TB2A) == HIGH ? 4 : 0) | (LbTouch.read(TB2B) == HIGH ? 8 : 0);
   const unsigned long now = millis();
   if (buttons != missionButtons) {
     missionButtons = buttons;
@@ -1324,8 +1406,10 @@ void FullMission() {
   }
   if (buttons == 0) { robot_delay(5); return; }
   missionArmed = false;
+  if (buttons == 8) { reset_mission(); return; }
   if (buttons != 1 && buttons != 2 && buttons != 4) { robot_delay(5); return; }
 
+  missionResetRequested = false;
   missionError = ERR_NONE;
   junctionPending = false;
   lineOperationCompleted = false;
