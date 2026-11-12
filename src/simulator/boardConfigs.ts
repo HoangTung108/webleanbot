@@ -1,3 +1,4 @@
+import {RANDOMIZER_GEOMETRY, SYNAPSE_RANDOMIZER_SOURCE} from './synapseRandomizer';
 import {SYNAPSE_MAT_SIDE_MM} from './boardUnits';
 import { BoardConfig } from './types';
 
@@ -662,6 +663,14 @@ export const SYNAPSE_CITY: BoardConfig = {
     }
   ],
   "metadata": {
+    randomizerReference: {
+      source: SYNAPSE_RANDOMIZER_SOURCE,
+      drawing: RANDOMIZER_GEOMETRY,
+      units: 'Drawing units; physical mm not specified by the source',
+      physicalMatSideMm: SYNAPSE_MAT_SIDE_MM,
+      measuredCityPitchMm: 325,
+      note: 'Keep measured 325 mm pitch. Scaling the source drawing to 4 ft would imply 338.6667 mm pitch, not 325 mm.',
+    },
     "description": "District layout reconstructed from the supplied reference; full mat dimensions in mm.",
     "citySideMm": 325,
     "fieldModel": {

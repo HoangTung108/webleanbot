@@ -1,12 +1,13 @@
+import {drawRandomizerSites, RANDOMIZER_COLORS} from './synapseRandomizer';
 import type { BoardConfig, Pose } from './types';
 import { blockFootprint, type BlockColor, type MissionBlock, type MissionWorld, seededRandom } from './missionWorld';
 import { LEANBOT_GEOMETRY } from './robotGeometry';
 
 export const SCORE_CATEGORIES = {
-  explorer: {name:'Explorer', pollution:['green','blue','red','yellow'], neutralizers:['green','blue'], robots:1},
-  creator: {name:'Creator', pollution:['green','blue','red','yellow','purple'], neutralizers:['green','blue','purple'], robots:1},
-  innovator: {name:'Innovator', pollution:['green','blue','red','yellow','purple','yellow'], neutralizers:['green','blue','purple'], robots:2},
-  master: {name:'Master', pollution:['green','blue','red','yellow','purple','yellow','mystery'], neutralizers:['green','blue','purple'], robots:2},
+  explorer: {name:'Explorer', pollution:RANDOMIZER_COLORS.slice(0,4), neutralizers:['green','blue'], robots:1},
+  creator: {name:'Creator', pollution:RANDOMIZER_COLORS.slice(0,5), neutralizers:['green','blue','purple'], robots:1},
+  innovator: {name:'Innovator', pollution:RANDOMIZER_COLORS.slice(0,6), neutralizers:['green','blue','purple'], robots:2},
+  master: {name:'Master', pollution:RANDOMIZER_COLORS.slice(0,7), neutralizers:['green','blue','purple'], robots:2},
 } as const;
 export type ScoreCategory = keyof typeof SCORE_CATEGORIES;
 export const RULEBOOK_URL = 'https://drive.google.com/file/d/1fJczHjPiiQfXwryGKQHC2LIvRvlHgr5E/view';
@@ -87,9 +88,9 @@ export function createScoringMission(world:MissionWorld,category:ScoreCategory,s
   const zones=world.board.cityZones??[];
   const fixed=fixedSiteId?zones.find(z=>z.sites.some(s=>s.id===fixedSiteId)):undefined;
   if(fixedSiteId&&!fixed)throw new Error('Vị trí pollution cố định không hợp lệ.');
-  const selected=[...(fixed?[fixed]:[]),...shuffle(zones.filter(z=>z!==fixed))].slice(0,preset.pollution.length);
-  if(selected.length!==preset.pollution.length)throw new Error('Không đủ thành phố cho hạng mục này.');
+  const sites=drawRandomizerSites(preset.pollution.length,random,fixedSiteId);
+  if(sites.some(id=>!zones.some(zone=>zone.sites.some(site=>site.id===id))))throw new Error('Sa bàn thiếu ô của Synapse City randomizer.');
   const storage=shuffle(world.board.storageSites??[]);
-  const blocks=[...selected.map((zone,i)=>({kind:'pollution',color:preset.pollution[i],slotId:fixed&&i===0?fixedSiteId:shuffle(zone.sites)[0].id})),...preset.neutralizers.map((color,i)=>({kind:'neutralizer',color,slotId:storage[i].id}))];
+  const blocks=[...sites.map((slotId,i)=>({kind:'pollution',color:preset.pollution[i],slotId})),...preset.neutralizers.map((color,i)=>({kind:'neutralizer',color,slotId:storage[i].id}))];
   world.load(JSON.stringify({version:1,friction:world.friction,blocks}));
 }

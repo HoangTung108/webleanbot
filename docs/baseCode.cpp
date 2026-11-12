@@ -358,8 +358,6 @@ static bool moveTankCore(int motor_L, int motor_R, float distance_cm, bool until
     if (now - lastAdvance > 1800UL) { failMission(ERR_MOVE_STALL); return false; }
     const float dt = min((now - lastControl) * 0.001f, 0.05f);
     lastControl = now;
-
-    // ACC: v² = v_đích² + 2*a*s. Tự bắt đầu phanh theo tốc độ/quãng đường.
     const float brakeSpeed = sqrtf((float)MOVE_FINISH_SPEED * MOVE_FINISH_SPEED +
       2.0f * MOVE_DECEL * (remaining - 0.0f) / MOVE_MM_PER_STEP);
     const float allowed = min((float)maxMagnitude, brakeSpeed);
