@@ -877,8 +877,8 @@ export const apiReference: ApiReference[] = [
     "description": "Kết nối theo cấu hình đã khai báo.",
     "parameters": "Không có nếu đã gọi declare_wifi; hoặc truyền SSID, mật khẩu và Asset ID tùy chọn.",
     "returns": "void.",
-    "notes": "Có thể chặn; SSID rỗng ghi ERR_WIFI_CONFIG.",
-    "code": "// Khai báo và kết nối trong một lệnh:\nset_wifi(\"TenWifi\", \"MatKhau\", F(\"AssetID\"));\n// Hoặc sau khi đã gọi declare_wifi: dùng set_wifi();",
+    "notes": "Thứ tự Wifi.begin → Asset.begin (nếu có Asset ID) → bật giao tiếp màu IoT. SSID trống ghi ERR_WIFI_CONFIG. Khai báo lại WiFi xóa chế độ IoT cũ. Trong base hiện tại, setup lưu cấu hình và TB2A gọi set_wifi(). Chưa xác nhận mạng online chỉ từ cờ cấu hình.",
+    "code": "// Điền cấu hình trong setup sau Leanbot.begin():\ndeclare_wifi(\"TenWifi\", \"MatKhau\", F(\"AssetID_CHUNG\"));\n// TB2A trong FullMission gọi set_wifi();\n// Hoặc kết nối ngay: set_wifi(\"TenWifi\", \"MatKhau\", F(\"AssetID_CHUNG\"));",
     "source": "baseCode.cpp"
   },
   {
@@ -981,7 +981,6 @@ export const apiReference: ApiReference[] = [
     "code": "// Học mẫu khi đang đặt đúng khối.\ncalibrate_color(RED);",
     "source": "baseCode.cpp"
   },
-
   {
     "group": "helpers",
     "api": "send_iot_color(BLUE);",
@@ -1012,7 +1011,6 @@ export const apiReference: ApiReference[] = [
     "code": "// Xóa FIFO và cờ đầy.\nclear_iot_queue();",
     "source": "baseCode.cpp"
   },
-
   {
     "group": "helpers",
     "api": "pop_iot_color();",
@@ -1059,18 +1057,18 @@ export const apiReference: ApiReference[] = [
     "description": "Chuyển giao tiếp màu giữa 2 robot sang dùng trực tiếp module WiFi (LbIoT) thay vì cáp USB.",
     "parameters": "Không có.",
     "returns": "void.",
-    "notes": "Sau khi bật, các lệnh send_real_robot_color, read_real_robot_color và wait_real_robot_color sẽ truyền nhận trực tiếp qua module WiFi của robot mà không cần cắm USB.",
-    "code": "// Bật chế độ truyền tín hiệu màu qua module WiFi của robot.\nuse_wifi_color_mode();",
+    "notes": "Chỉ bật sau khi helper đã gọi Wifi.begin và có Asset ID; thiếu cấu hình báo ERR_WIFI_CONFIG. Không tự kết nối WiFi hoặc tự chọn máy chủ WebSocket của web.",
+    "code": "// Hai robot dùng cùng Asset ID và thuộc tính Color.\nset_wifi(\"TenWifi\", \"MatKhau\", F(\"AssetID_CHUNG\"));\n// set_wifi đã tự bật mode IoT khi chọn Asset; không cần gọi lại use_wifi_color_mode().",
     "source": "baseCode.cpp"
   },
   {
     "group": "helpers",
     "api": "connect_robot_room(F(\"ROOM_ID\"));",
-    "description": "Kết nối robot vào phòng trao đổi tín hiệu màu qua module WiFi.",
-    "parameters": "roomId: Chuỗi flash tên phòng (F(\"ROOM_ID\")) trùng với mã phòng WebSocket.",
+    "description": "Chọn Asset ID trao đổi màu; giữ tên hàm cũ để tương thích.",
+    "parameters": "Asset ID dạng flash F(\"AssetID_CHUNG\"). nullptr báo ERR_WIFI_CONFIG.",
     "returns": "void.",
-    "notes": "Tự động đặt LbIoT.Asset.begin(roomId) và kích hoạt wifiColorMode để hai robot giao tiếp trực tiếp qua WiFi không cần USB.",
-    "code": "// Kết nối WiFi và vào phòng trao đổi tín hiệu màu ABC123.\nset_wifi(\"TenWifi\", \"MatKhau\");\nconnect_robot_room(F(\"ABC123\"));",
+    "notes": "Nếu helper chưa gọi Wifi.begin, lưu Asset ID chờ set_wifi(). Nếu đã gọi, thực hiện Asset.begin và bật mode IoT. Asset ID của LeanbotIoT không tự cấu hình kết nối tới WebSocket server web. Để ghép với web cần Bridge Serial hoặc gateway dùng /api/iot/attribute theo cấu hình module.",
+    "code": "// Khai báo trước, chọn Asset rồi bấm TB2A để kết nối.\ndeclare_wifi(\"TenWifi\", \"MatKhau\");\nconnect_robot_room(F(\"AssetID_CHUNG\"));\n// Hoặc gọi set_wifi() ngay tại đây.",
     "source": "baseCode.cpp"
   },
   {
@@ -1079,7 +1077,7 @@ export const apiReference: ApiReference[] = [
     "description": "Gửi tín hiệu màu sang robot thứ hai qua module WiFi của robot hoặc Serial/WebSocket Bridge.",
     "parameters": "ObjectColor: RED, GREEN, BLUE, YELLOW, PURPLE.",
     "returns": "void.",
-    "notes": "Khi đã kết nối WiFi (set_wifi kèm AssetID hoặc connect_robot_room), robot gửi màu trực tiếp qua module WiFi không cần USB; nếu chưa bật WiFi mode thì gửi qua Serial Bridge.",
+    "notes": "Mode WiFi gửi qua thuộc tính Color của Asset đã chọn. Mode Serial chỉ in COLOR:BLUE để Bridge chuyển qua WebSocket; không gọi IoT chưa cấu hình. Hai robot phải dùng cùng Asset ID hoặc cùng phòng Bridge. LeanbotIoT không tự trỏ tới máy chủ WebSocket của web.",
     "code": "// Gửi tín hiệu màu sang robot đối tác qua WiFi hoặc Serial bridge.\nsend_real_robot_color(BLUE);",
     "source": "baseCode.cpp"
   },
@@ -1089,7 +1087,7 @@ export const apiReference: ApiReference[] = [
     "description": "Đọc tín hiệu màu nhận từ robot khác qua module WiFi hoặc Serial/WebSocket Bridge.",
     "parameters": "Không có.",
     "returns": "ObjectColor; UNKNOWN nếu chưa có dữ liệu mới.",
-    "notes": "Tự động đọc từ kênh WiFi (LbIoT) khi ở chế độ WiFi hoặc từ Serial Bridge, và thêm màu hợp lệ vào hàng chờ iotColorQueue.",
+    "notes": "Mode WiFi đọc thuộc tính Color của Asset. Mode Serial đọc COLOR:... từ Bridge; chưa có dữ liệu trả UNKNOWN, không đọc IoT khi chưa chọn mode WiFi.",
     "code": "// Đọc tín hiệu màu từ robot đối tác.\nObjectColor received = read_real_robot_color();",
     "source": "baseCode.cpp"
   },
@@ -1123,7 +1121,6 @@ export const apiReference: ApiReference[] = [
     "code": "// Dò 32,5 cm ở tốc độ mặc định.\nfollowLineCm(32.5f);\n// Giới hạn tốc độ 50%:\nfollowLineCm(32.5f, 50);",
     "source": "baseCode.cpp"
   },
-
   {
     "group": "helpers",
     "api": "measure_line_error();",
@@ -1144,7 +1141,6 @@ export const apiReference: ApiReference[] = [
     "code": "// Trong setup, sau Leanbot.begin và Serial.begin(115200):\ncalibrate_line(); // Đặt cảm biến theo quy trình SDK, chạm TB1A xác nhận\n// Sau đó mới bắt đầu nhiệm vụ.",
     "source": "baseCode.cpp"
   },
-
   {
     "group": "helpers",
     "api": "read_color();",

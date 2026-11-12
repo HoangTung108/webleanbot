@@ -22,7 +22,7 @@ export class OnlineCompetition {
  getIotAttribute(attribute:string,assetId=''):string{
   return this.iotAttributes.get(JSON.stringify([assetId,attribute]))
    ??this.iotAttributes.get(JSON.stringify([assetId.toUpperCase(),attribute]))
-   ??this.iotAttributes.get(JSON.stringify(['',attribute]))
+   ??(!assetId?this.iotAttributes.get(JSON.stringify(['',attribute])):undefined)
    ??'waiting';
  }
  private pending=0;private lastWall?:number;
@@ -52,12 +52,12 @@ export class OnlineCompetition {
   this.pending=0;this.lastWall=undefined;
  }
  private runtime(p:Player,code:string){
-  return new CppRuntime(code,{motors:(l,r)=>p.robot.setMotorSpeeds(l,r),advance:dt=>p.robot.advanceSimulatedTime(dt*1000),gripper:(l,r,d)=>p.robot.setGripper(l,r,d),lineMask:()=>p.robot.getLineMask(),rawLine:()=>p.robot.getRawLineReadings(),color:()=>p.robot.getColorReading(),led:(rgb,b)=>p.robot.setLedColors(rgb,b),iotRead:(attr,asset)=>this.getIotAttribute(attr,asset),iotWrite:(attr,value,asset)=>{this.setIotAttribute(attr,value,asset);},sensors:()=>p.robot.getSensorReadings()});
+  return new CppRuntime(code,{motors:(l,r)=>p.robot.setMotorSpeeds(l,r),advance:dt=>p.robot.advanceSimulatedTime(dt*1000),gripper:(l,r,d)=>p.robot.setGripper(l,r,d),lineMask:()=>p.robot.getLineMask(),rawLine:()=>p.robot.getRawLineReadings(),color:()=>p.robot.getColorReading(),led:(rgb,b)=>p.robot.setLedColors(rgb,b),log:message=>{if(message.startsWith('MISSION ERROR:'))this.notice=`Robot ${p.id}: ${message}`;},iotRead:(attr,asset)=>this.getIotAttribute(attr,asset),iotWrite:(attr,value,asset)=>{this.setIotAttribute(attr,value,asset);},sensors:()=>p.robot.getSensorReadings()});
  }
  command(id:string,cmd:OnlineCommand){
   const p=this.players.get(id);if(!p)throw new Error('Robot không thuộc phiên thi.');
   if(cmd.sessionId!==this.sessionId||cmd.round!==this.flow.round)throw new Error('Phiên/vòng đã thay đổi. Hãy chờ đồng bộ.');
-  if(!['lock-code','practice-run','place-robot','stop'].includes(cmd.action)&&id!==this.ownerId)throw new Error('Chỉ chủ phòng điều khiển giai đoạn và tốc độ chung.');
+  if(!['lock-code','practice-run','place-robot','stop','touch'].includes(cmd.action)&&id!==this.ownerId)throw new Error('Chỉ chủ phòng điều khiển giai đoạn và tốc độ chung.');
   const category=cmd.category;
   if(cmd.action==='category'){
    if(this.flow.phase!=='setup'||this.flow.round!==1)throw new Error('Hạng mục đã khóa.');
@@ -89,6 +89,10 @@ export class OnlineCompetition {
   else if(cmd.action==='start'){
    if(this.flow.phase!=='ready'||![...this.players.values()].every(p=>p.locked&&p.code))throw new Error('Chưa đủ robot khóa code và công bố màu.');
    this.resetField();this.elapsedMs=0;this.flow.phase='running';for(const actor of this.players.values()){actor.runtime=this.runtime(actor,actor.code!);actor.runtime.start();}
+  }else if(cmd.action==='touch'){
+   if(!['preparation','running'].includes(this.flow.phase)||!p.runtime?.running)throw new Error('Chưa có chương trình robot đang chạy.');
+   if(![1,2,4,8].includes(cmd.button??0))throw new Error('Nút chạm không hợp lệ.');
+   p.runtime.pressTouch(cmd.button!);
   }else if(cmd.action==='stop'){
    if(this.flow.phase==='running')this.finish('STOP · kết thúc lượt cả đội');
    else if(this.flow.phase==='preparation'){for(const actor of this.players.values()){actor.runtime?.stop();actor.robot.setMotorSpeeds(0,0);}}

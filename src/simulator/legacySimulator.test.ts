@@ -10,7 +10,7 @@ function harness() {
       style: {}, classList: { contains: () => false, remove() {}, add() {} },
       value: 0, checked: false, textContent: '', children: [],
       appendChild(child: any) { this.children.push(child); }, removeChild() { this.children.shift(); },
-      addEventListener() {}, getContext: () => ctx,
+      listeners:new Map(),addEventListener(name:string,fn:()=>void){this.listeners.set(name,fn);},click(){if(!this.disabled)this.listeners.get('click')?.();}, getContext: () => ctx,
       getBoundingClientRect: () => ({ width: 800, height: 650, left: 0, top: 0 }),
       parentElement: { getBoundingClientRect: () => ({ width: 800, height: 650 }) },
     });
@@ -58,4 +58,15 @@ describe('static IDE simulator', () => {
     expect(h.context.leanbotSimulator.isRunning).toBe(false);
     expect(h.element('simLogs').children.some((n: any) => n.textContent.includes('Chưa có code'))).toBe(true);
   });
+});
+
+it('runs the entire base and forwards HTML touch buttons to FullMission',()=>{
+ const h=harness();h.context.getLeanbotSimulatorCode=()=>readFileSync('docs/baseCode.cpp','utf8');
+ const sim=h.context.leanbotSimulator;sim.start();for(let i=0;i<10;i++)h.frame();
+ expect(sim.isRunning).toBe(true);h.element('simTouch1A').click();for(let i=0;i<20;i++)h.frame();
+ expect(h.element('simLogs').children.some((e:any)=>e.textContent.includes('Line calibration:'))).toBe(true);
+ sim.togglePause();expect(h.element('simTouch1B').disabled).toBe(true);sim.togglePause();
+ h.element('simTouch2A').click();for(let i=0;i<20;i++)h.frame();
+ expect(h.element('simLogs').children.some((e:any)=>e.textContent.includes('MISSION ERROR: 11'))).toBe(true);
+ sim.stop();expect(h.element('simTouch1A').disabled).toBe(true);
 });

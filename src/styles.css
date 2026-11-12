@@ -217,7 +217,7 @@ details summary { color: #365e9a; font-size: 12px; font-weight: 650; cursor: poi
 .sim-status { display: inline-flex; align-items: center; gap: 7px; padding: 5px 9px; border: 1px solid #dfe6e2; border-radius: 5px; color: #647368; background: #f8faf8; font-size: 11px; }
 .sim-status > span { width: 6px; height: 6px; background: #8d9a92; border-radius: 50%; }
 .sim-status.running { color: #137052; background: #edf8f2; border-color: #cce8d8; }.sim-status.running > span { background: #169768; }
-.sim-toolbar { display: flex; align-items: center; gap: 18px; padding: 8px 20px; border-bottom: 1px solid #e1e6ec; background: #fff; }
+.sim-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 18px; padding: 8px 20px; border-bottom: 1px solid #e1e6ec; background: #fff; }
 .sim-playback { display: flex; align-items: center; gap: 5px; }
 .sim-studio .sim-button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 30px; padding: 4px 10px; border: 1px solid #d7dfe7; border-radius: 5px; background: #fff; color: #405166; font-size: 11px; font-weight: 550; white-space: nowrap; }
 .sim-studio .sim-button:hover:not(:disabled) { background: #f0f4f7; border-color: #b9c6d0; }
@@ -269,6 +269,7 @@ details summary { color: #365e9a; font-size: 12px; font-weight: 650; cursor: poi
 .route-steps { position: relative; margin-left: auto; }
 .route-steps summary { cursor: pointer; white-space: nowrap; }
 .route-steps ol { position: absolute; right: 0; bottom: 20px; width: 180px; max-height: 180px; overflow: auto; z-index: 2; margin: 0; padding: 10px 10px 10px 30px; border: 1px solid #dce3e9; border-radius: 6px; background: white; box-shadow: 0 4px 16px #24374620; }
+.route-step-distance { white-space: nowrap; color: #075985; font-variant-numeric: tabular-nums; }
 .route-steps li { padding: 3px; }.route-steps li button { float: right; }
 .route-point-editor { color: #425466; font-size: 11px; background: #fff7ed; }
 .route-point-editor label { display: flex; align-items: center; gap: 4px; }

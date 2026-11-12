@@ -1,3 +1,4 @@
+import {formatRouteLength} from './routeMeasurements';
 import {MOTION_CALIBRATION} from './motionCalibration';
 import { HeadingDial } from './HeadingDial';
 import { SimulatorDock } from './SimulatorDock';
@@ -170,7 +171,7 @@ export const SimulatorDemo: React.FC<{ cppCode?: string;visible?:boolean;onCodeL
     };
     robotNetworkManager.on('competition-state',onOnline);robotNetworkManager.on('error',onNetworkError);robotNetworkManager.on('disconnected',onDisconnected);
 
-    const bridge = new CppSimulatorBridge(simulator);
+    const bridge = new CppSimulatorBridge(simulator,undefined,message=>addLog(message));
 
     simulatorRef.current = simulator;
     rendererRef.current = renderer;
@@ -279,7 +280,7 @@ export const SimulatorDemo: React.FC<{ cppCode?: string;visible?:boolean;onCodeL
   }, [isRunning, isPaused]);
 
   const addLog = (message: string) => {
-    const level = message.includes('[ERROR]') || message.includes('Chưa có code') ? 'error' : message.includes('Đã tải sa bàn') || message.includes('Chạy code') ? 'success' : 'info';
+    const level = message.includes('[ERROR]') || message.includes('MISSION ERROR:') || message.includes('Chưa có code') ? 'error' : message.includes('Đã tải sa bàn') || message.includes('Chạy code') ? 'success' : 'info';
     const text = message.replace(/^\[(?:ERROR|>|x|R|\|\|)\]\s*/, '');
     setLogs(prev => message.startsWith('Đã tải sa bàn:') && prev.some(log => log.message === text) ? prev : [...prev.slice(-199), { time: new Date().toLocaleTimeString('vi-VN', { hour12: false }), message: text, level }]);
   };
@@ -449,6 +450,13 @@ export const SimulatorDemo: React.FC<{ cppCode?: string;visible?:boolean;onCodeL
           {/* Speed multiplier controls */}
           <div className="sim-speed" role="group" aria-label="Tốc độ mô phỏng"><span>Tua</span>{[1,2,5,10].map(speed => <button key={speed} className="sim-button" aria-pressed={speedMultiplier === speed} disabled={!!onlineRef.current&&!robotNetworkManager.isHost()} onClick={() => handleSpeedChange(speed)} title={`Tốc độ ${speed} lần`}>{speed}×</button>)}</div>
         </div>
+        <div role="group" aria-label="Nút chạm Leanbot" className="sim-speed">
+          <span>Nút robot</span>
+          {([{button:1,label:'TB1A · Line'},{button:2,label:'TB1B · Bài'},{button:4,label:'TB2A · WiFi'}]).map(({button,label})=><button key={button} className="sim-button" disabled={!isRunning||isPaused} onClick={()=>{
+            if(onlineRef.current)sendOnline({action:'touch',button});
+            else bridgeRef.current?.pressTouch(button);
+          }}>{label}</button>)}
+        </div>
         <HeadingDial value={robotHeading} disabled={isRunning||flowRef.current.localCodeLocked||(competitionMode&&!['setup','preparation'].includes(flowRef.current.phase))} onChange={value => {
           if(onlineRef.current){const pose=simulatorRef.current?.getRobotPose();if(pose)sendOnline({action:'place-robot',pose:{...pose,heading:value}});return;}
           setScoreResult(null);
@@ -491,7 +499,7 @@ export const SimulatorDemo: React.FC<{ cppCode?: string;visible?:boolean;onCodeL
             <p className="sim-robot-specs">{LEANBOT_GEOMETRY.length} × {LEANBOT_GEOMETRY.width} × {LEANBOT_GEOMETRY.height} mm · {LEANBOT_GEOMETRY.mass*1000} g</p><dl className="sim-metrics"><div><dt>Thời gian</dt><dd>{stats.time.toFixed(1)}<small>s</small></dd></div><div><dt>Hướng</dt><dd>{stats.heading.toFixed(0)}<small>°</small></dd></div><div><dt>Vị trí X / Y</dt><dd>{stats.posX.toFixed(0)} / {stats.posY.toFixed(0)}<small>mm</small></dd></div><div><dt>Tốc độ trái / phải</dt><dd>{stats.speedL.toFixed(0)} / {stats.speedR.toFixed(0)}<small>mm/s</small></dd></div></dl>
           </section></div>
             </RoutePlannerPanel>
-            <div className="sim-field-caption"><MousePointer2 size={13} /><span>Kéo để đặt robot · Đi qua mép sa bàn có thể rơi</span><span>2000 = 32,5 cm / 5 giây · mm thực / mm encoder = {MOTION_CALIBRATION.physicalMmPerEncoderMm.toFixed(5)}</span></div>
+            <div className="sim-field-caption"><MousePointer2 size={13} /><span>Sa bàn {formatRouteLength(SYNAPSE_CITY.width)} × {formatRouteLength(SYNAPSE_CITY.height)} · Kéo để đặt robot</span><span>2000 = 32,5 cm / 5 giây · mm thực / mm encoder = {MOTION_CALIBRATION.physicalMmPerEncoderMm.toFixed(5)}</span></div>
           </section>
 </SimulatorDock>
     </div>

@@ -110,3 +110,23 @@ it('exchanges color signals in WiFi mode (no USB) via connect_robot_room and sen
   expect(iotWrites).toEqual([{ attribute: 'Color', value: 'Blue', assetId: 'ROOM99' }])
   expect(logs).toContain('true')
 })
+
+it('uses the configured Asset ID when TB2A starts WiFi',()=>{
+ const writes:Array<{attribute:string;value:string;assetId:string}>=[];
+ const source=base.slice(0,base.indexOf('void loop()')).replace('declare_wifi("", "", F("AssetID"));','declare_wifi("TestWiFi", "test-password", F("TEAM42"));');
+ const runtime:CppRuntime=new CppRuntime(`${source}
+ void loop(){FullMission();if(millis()>=250){send_real_robot_color(BLUE);LbMission.end();}}`,{
+  motors(){},advance(){},touch:mask=>runtime.time>=100&&runtime.time<200&&!!(mask&4),
+  iotWrite:(attribute,value,assetId)=>writes.push({attribute,value,assetId}),
+ });
+ runtime.start();for(let i=0;i<100&&runtime.running;i++)runtime.tick(10);
+ expect(runtime.running).toBe(false);expect(writes).toEqual([{attribute:'Color',value:'Blue',assetId:'TEAM42'}]);
+});
+
+it('keeps Serial Bridge traffic off the unconfigured IoT transport',()=>{
+ let calls=0;const logs:string[]=[];
+ const helpers=base.slice(0,base.indexOf('// Chỉ nhận lượt mới'));
+ const runtime=new CppRuntime(`${helpers}void loop(){send_real_robot_color(BLUE);Serial.println(read_real_robot_color());LbMission.end();}`,{
+  motors(){},advance(){},log:m=>logs.push(m),iotRead(){calls++;return 'Red';},iotWrite(){calls++;},
+ });runtime.start();runtime.tick(1);expect(calls).toBe(0);expect(logs).toEqual(['COLOR:BLUE','0']);
+});

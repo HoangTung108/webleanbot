@@ -61,3 +61,27 @@ it('draws points without moving the robot and executes ordered events from the c
   expect(onRun.mock.calls[0][0]).toContain('sqrtf(ratio)');
   expect(renderer.plannedRoute).toHaveLength(5);
 });
+
+it('measures the draft and updates segment lengths after drawing, undo and point edits',()=>{
+ const sim=new RobotSimulator();sim.setPose({x:400,y:400,heading:0});
+ const canvas=document.createElement('canvas');
+ const renderer={render:vi.fn(),plannedRoute:[],routeDraft:null,clientToBoard:(x:number,y:number)=>({x,y})} as unknown as SimulatorRenderer;
+ render(<RoutePlannerPanel simulator={sim} renderer={renderer} canvas={canvas} locked={false} onRun={vi.fn()}/>);
+ fireEvent.click(screen.getByRole('button',{name:/0 b/}));fireEvent.click(screen.getByRole('button',{name:'Preview C++'}));
+ fireEvent.click(screen.getByText('Vẽ đường'));
+ const pointer=(type:string,x:number,y:number)=>fireEvent(canvas,new MouseEvent(type,{clientX:x,clientY:y,button:0,bubbles:true}));
+ pointer('pointermove',700,800);
+ expect(screen.getByLabelText('Độ dài đoạn đang vẽ')).toHaveTextContent('50 cm');
+ expect((screen.getByLabelText('Code C++ lộ trình') as HTMLTextAreaElement).value).toBe('');
+ expect(renderer.routeDraft).toEqual({from:{x:400,y:400,heading:0},to:{x:700,y:800}});
+ pointer('pointerdown',700,800);expect(screen.getByText('· 50 cm')).toBeTruthy();
+ fireEvent.click(screen.getByRole('button',{name:'Gắp'}));pointer('pointermove',1000,800);
+ expect(screen.getByLabelText('Độ dài đoạn đang vẽ')).toHaveTextContent('30 cm');
+ pointer('pointerdown',1000,800);
+ expect(screen.getByText(/2 đoạn · Tổng 80 cm/)).toBeTruthy();
+ fireEvent.click(screen.getByRole('button',{name:'Hoàn tác'}));expect(screen.getByText(/1 đoạn · Tổng 50 cm/)).toBeTruthy();
+ fireEvent.click(screen.getByText('Sửa điểm'));pointer('pointerdown',700,800);
+ fireEvent.change(screen.getByLabelText('Tọa độ Y'),{target:{value:'400'}});
+ expect(screen.getByText('· 30 cm')).toBeTruthy();expect(screen.getByText(/1 đoạn · Tổng 30 cm/)).toBeTruthy();
+ expect(renderer.routeDraft).toBeNull();
+});

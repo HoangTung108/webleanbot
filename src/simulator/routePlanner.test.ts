@@ -13,7 +13,7 @@ describe('route planner', () => {
     ]);
     expect(code).toContain('turn_two_wheels(2000, 90.00)');
     expect(code).toContain('move_tank(2000, 2000, 10.000)');
-    expect(code).toContain('followLineDistance(100)');
+    expect(code).toContain('followLineCm(10.000)');
     const mission = code.slice(code.indexOf('void plannedRoute()'));
     expect(mission.indexOf('close_hand(90)')).toBeLessThan(mission.indexOf('open_hand()'));
     expect(code).toContain('struct LbmbFollowCtx');

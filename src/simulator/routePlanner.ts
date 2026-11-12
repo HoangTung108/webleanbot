@@ -53,7 +53,7 @@ export function generateRouteCommands(start: Pose, steps: RouteStep[]): string {
       const travelHeading = distance < 0.001 ? a.heading : Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI;
       const turn = normalizeTurn(travelHeading - a.heading);
       if (Math.abs(turn) >= 0.8) lines.push(`  turn_two_wheels(2000, ${turn.toFixed(2)});`);
-      lines.push(step.follow ? `  followLineDistance(${Math.round(distance)});` : `  move_tank(2000, 2000, ${(distance / 10).toFixed(3)});`);
+      lines.push(step.follow ? `  followLineCm(${(distance / 10).toFixed(3)});` : `  move_tank(2000, 2000, ${(distance / 10).toFixed(3)});`);
       if (step.heading !== undefined) {
         if (!Number.isFinite(step.heading)) throw new Error('Góc tại điểm không hợp lệ');
         const arrivalTurn = normalizeTurn(step.heading - travelHeading);

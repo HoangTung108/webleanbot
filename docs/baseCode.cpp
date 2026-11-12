@@ -378,33 +378,44 @@ String wifiSsid;
 String wifiPassword;
 const __FlashStringHelper *wifiAssetId = nullptr;
 bool wifiColorMode = false;
+// Chỉ ghi nhận đã gọi Wifi.begin(), không phải trạng thái online của phần cứng.
+bool wifiBeginCalled = false;
 
 void use_wifi_color_mode() {
+  if (!wifiBeginCalled || wifiAssetId == nullptr) {
+    failMission(ERR_WIFI_CONFIG); return;
+  }
   wifiColorMode = true;
 }
 
-void connect_robot_room(const __FlashStringHelper *roomId) {
-  wifiAssetId = roomId;
-  if (roomId != nullptr) LbIoT.Asset.begin(roomId);
-  wifiColorMode = true;
+// Tên hàm giữ tương thích; tham số là Asset ID của LeanbotIoT.
+// Nếu chưa gọi set_wifi(), lưu Asset ID và chọn sau khi Wifi.begin().
+void connect_robot_room(const __FlashStringHelper *assetId) {
+  if (assetId == nullptr) { failMission(ERR_WIFI_CONFIG); return; }
+  wifiAssetId = assetId;
+  if (wifiBeginCalled) {
+    LbIoT.Asset.begin(wifiAssetId);
+    wifiColorMode = true;
+  }
 }
 
 void declare_wifi(const String &ssid, const String &password, const __FlashStringHelper *assetId = nullptr) {
   wifiSsid = ssid;
   wifiPassword = password;
   wifiAssetId = assetId;
+  wifiBeginCalled = false;
+  wifiColorMode = false;
 }
 
 void set_wifi() {
+  wifiBeginCalled = false;
+  wifiColorMode = false;
   if (wifiSsid.length() == 0) {
-    failMission(ERR_WIFI_CONFIG);
-    return;
+    failMission(ERR_WIFI_CONFIG); return;
   }
   LbIoT.Wifi.begin(wifiSsid.c_str(), wifiPassword.c_str());
-  if (wifiAssetId != nullptr) {
-    LbIoT.Asset.begin(wifiAssetId);
-    wifiColorMode = true;
-  }
+  wifiBeginCalled = true;
+  if (wifiAssetId != nullptr) connect_robot_room(wifiAssetId);
 }
 
 void set_wifi(const String &ssid, const String &password, const __FlashStringHelper *assetId = nullptr) {
@@ -1212,17 +1223,16 @@ bool wait_iot_color(ObjectColor expected, unsigned long timeoutMs) {
   return false;
 }
 
-// Giao tiếp tín hiệu màu giữa 2 robot thực tế qua module WiFi (LbIoT) hoặc Serial / WebSocket Bridge
+// Hai robot dùng cùng Asset ID/Color qua LeanbotIoT; hoặc dùng Serial / WebSocket Bridge.
+// Asset.begin() không tự mở kết nối tới WebSocket server của web.
+// Ghép với server web cần gateway gọi /api/iot/attribute hoặc Bridge Serial đã có.
 // WiFi Robot Setup (không cần cáp USB):
-// 1. set_wifi("SSID", "Password", F("ROOM_ID")); // Kết nối WiFi và phòng WebSocket
-// 2. connect_robot_room(F("ROOM_ID"));           // Hoặc chuyển phòng và bật chế độ WiFi
+// 1. set_wifi("SSID", "Password", F("AssetID")); // WiFi -> Asset.begin -> thuộc tính Color
+// 2. connect_robot_room(F("AssetID")); // Chọn Asset khác sau khi đã kết nối WiFi
 // 3. send_robot_color(BLUE);                // Gửi màu trực tiếp qua WiFi
 // 4. wait_robot_color(GREEN, 30000UL);      // Đợi nhận màu từ robot đối tác qua WiFi
 void send_robot_color(ObjectColor color) {
-  send_iot_color(color);
-  if (wifiColorMode) {
-    return;
-  }
+  if (wifiColorMode) { send_iot_color(color); return; }
   Serial.print(F("COLOR:"));
   switch (color) {
     case RED:    Serial.println(F("RED")); break;
@@ -1235,14 +1245,13 @@ void send_robot_color(ObjectColor color) {
 }
 
 ObjectColor read_robot_color() {
-  if (wifiColorMode || Serial.available() <= 0) {
-    return read_iot_color();
-  }
+  if (wifiColorMode) return read_iot_color();
+  if (Serial.available() <= 0) return UNKNOWN;
   String line = Serial.readStringUntil('\n');
   line.trim();
   line.toUpperCase();
   int idx = line.indexOf("COLOR:");
-  if (idx < 0) return read_iot_color();
+  if (idx < 0) return UNKNOWN;
   String colorStr = line.substring(idx + 6);
   colorStr.trim();
   ObjectColor color = UNKNOWN;
@@ -1338,6 +1347,7 @@ void FullMission() {
     LbRGB.fillColor(CRGB::Red, BITMAP(ledC,ledD));
     LbRGB.show();
     // Kết nối Internet: gọi set_wifi() sau khi đã declare_wifi().
+    set_wifi();
   }
 
   LbMotion.stopAndWait();
@@ -1353,6 +1363,10 @@ void FullMission() {
 
 void setup() {
   Leanbot.begin();
+  Serial.begin(115200); // Serial/WebSocket Bridge và log cấu hình.
+  // Điền WiFi và cùng Asset ID trên cả hai robot; TB2A thực hiện kết nối.
+  // SSID trống: báo ERR_WIFI_CONFIG, không thử kết nối nhầm mạng.
+  declare_wifi("", "", F("AssetID"));
   LbRGB.fillColor(CRGB::Black);
   LbRGB.fillColor(CRGB::Green, BITMAP(ledA,ledB));
   LbRGB.show();

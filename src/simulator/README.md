@@ -329,17 +329,21 @@ Các hàm thao tác trong base code dùng `void`. Hàm tính toán (`clampMotor`
 Cấu hình được sao chép vào các `String` riêng, sau đó gọi API `LbIoT.Wifi.begin` và, khi có Asset ID, `LbIoT.Asset.begin`:
 
 ```cpp
-declare_wifi("TEN_WIFI", "MAT_KHAU", "ASSET_ID");
+declare_wifi("TEN_WIFI", "MAT_KHAU", F("ASSET_ID"));
 set_wifi();
 // Hoặc gộp cả hai bước:
-set_wifi("TEN_WIFI", "MAT_KHAU", "ASSET_ID");
+set_wifi("TEN_WIFI", "MAT_KHAU", F("ASSET_ID"));
 // Chỉ kết nối Wi-Fi, chưa khởi tạo asset:
 set_wifi("TEN_WIFI", "MAT_KHAU");
 ```
 
-Đặt các lệnh sau `Leanbot.begin()` trong `setup()`. Với chế độ IoT A/B, `setup()` đã gọi khai báo/kết nối bằng các macro `WIFI_SSID`, `WIFI_PASSWORD`, `IOT_ASSET_ID`; sửa các macro này hoặc thay đoạn đó bằng cấu hình tùy chọn. SSID trống báo lỗi cấu hình; password trống được truyền nguyên vẹn cho mạng mở. Không in mật khẩu ra Serial.
+Base hiện tại gọi `declare_wifi("", "", F("AssetID"))` trong `setup()`. Điền SSID, mật khẩu và Asset ID thật tại dòng này trên cả hai robot. Nhấn TB2A để gọi `set_wifi()` theo thứ tự `LbIoT.Wifi.begin` → `LbIoT.Asset.begin` → bật mode IoT. Muốn kết nối ngay lúc khởi động, gọi `set_wifi()` sau phần khai báo. SSID trống báo lỗi, không thử kết nối; mật khẩu trống vẫn dùng được cho mạng mở.
 
-Kiểm thử Wi-Fi biên dịch/chạy C++ với API giả lập để kiểm tra lưu cấu hình, thứ tự/tham số gọi hàm và các trường hợp cấu hình trống; chưa xác minh kết nối Wi-Fi trên mạch thật. Các hàm tuyến đường/nhiệm vụ như `missionPrimaryFull`, `FromCRLtoE2` vẫn là phần sketch riêng cần cung cấp khi nạp toàn bộ base file. Code lộ trình simulator lấy các helper của base; mạng IoT phần cứng được thay bằng thuộc tính ảo như mô tả phía trên.
+`connect_robot_room(F("AssetID"))` giữ tên cũ nhưng chọn Asset của LeanbotIoT. Chọn trước khi gọi helper `set_wifi()` sẽ lưu ID và hoãn `Asset.begin` đến sau `Wifi.begin`; chọn sau đó sẽ đổi Asset ngay. Khai báo WiFi mới xóa mode cũ. `wifiBeginCalled` chỉ ghi nhận lời gọi API, không chứng minh robot đã online.
+
+Hai robot dùng cùng Asset ID và thuộc tính `Color` để trao đổi qua dịch vụ LeanbotIoT. WebSocket của web là luồng riêng: Bridge USB/Serial chuyển các dòng `COLOR:BLUE` giữa robot và phòng WebSocket. Trong mode Serial, base không gọi mạng IoT. Backend còn có `/api/iot/attribute` và chế độ WebSocket `?mode=wifi`, nhưng module/gateway cần được cấu hình trỏ tới những endpoint đó; chỉ gọi `Asset.begin` không chứng minh SDK đang sử dụng máy chủ web này.
+
+Kiểm thử native C++ kiểm tra lưu cấu hình, thứ tự WiFi/Asset, đổi Asset và cấu hình thiếu. Kiểm thử server dùng hai WebSocket client trên localhost; chưa kiểm chứng kết nối Internet với hai bo Leanbot thật.
 
 
 ### Dò line và kiểm tra màu trong base code
@@ -360,3 +364,9 @@ runFollowLine(0b0110);            // Một bước với mask đã đọc
 ```
 
 `followLineDistance` chỉ đổi đơn vị sang cm; không chứa thuật toán riêng. Nhóm căn tâm/đi qua nhiều giao lộ vẫn dùng trạng thái `junctionPending`. Sai số chẩn đoán chỉ lưu ở `lastLineError`; đã bỏ bản sao `filteredLineError` và các biến thời gian/lệnh bánh không được đọc.
+
+### Chạy nguyên base với FullMission
+
+Nút **Chạy / Start** nạp và khởi động sketch; `loop()` của base chờ nút chạm trong `FullMission()`. Sau đó chọn **TB1A · Line** để hiệu chuẩn, **TB1B · Bài** để chạy nhánh nhiệm vụ, hoặc **TB2A · WiFi** để gọi cấu hình WiFi/Asset. Nhánh TB1B trong mẫu đang là chỗ trống: thêm các lệnh nhiệm vụ ở chú thích tương ứng trong base. Không tự sửa sketch hoặc bỏ qua bước nhả nút/chống dội.
+
+Các nút giả lập tạo xung 100 ms theo đồng hồ mô phỏng, có khoảng nhả ban đầu để base nhận nút ngay sau Start. Pause dừng cả đồng hồ và nút; Stop/Restart xóa nút đang chờ. Chạy online gửi nút tới đúng chương trình của người bấm. Logs hiển thị Serial và `MISSION ERROR`; runtime vẫn là bộ thông dịch C++ giới hạn, không thay cho biên dịch Arduino để nạp mạch.

@@ -139,6 +139,17 @@ export class CppRuntime {
   private rgb:number[]=[0,0,0];
   private assetId='';
   private serial='';
+  private touchMask=0;
+  private touchFrom=0;
+  private touchUntil=0;
+  /** A physical-button pulse in simulation time, including startup/release debounce. */
+  pressTouch(button:number):boolean {
+    if(!this.running||![1,2,4,8].includes(button)||this.time<this.touchUntil)return false;
+    this.touchMask=button;
+    this.touchFrom=Math.max(this.time,this.touchUntil+40,50);
+    this.touchUntil=this.touchFrom+100;
+    return true;
+  }
   private iot = new Map<string,string>();
   private *location(n:Node):Generator<Yield,Reference,unknown> {
     if(n.k==='name'){
@@ -240,7 +251,7 @@ export class CppRuntime {
       case 'F':return args[0];
       case 'CRGB':return nums;
       case 'BITMAP':return nums.reduce((mask, index) => mask | (1 << index), 0);
-      case 'LbTouch.read':return this.host.touch?.(a) ? 1 : 0;
+      case 'LbTouch.read':return this.host.touch?.(a)||(this.time>=this.touchFrom&&this.time<this.touchUntil&&!!(this.touchMask&a)) ? 1 : 0;
       case 'LbIoT.Asset.attribute':return {attribute:String(args[0])};
       case 'LbIoT.Asset.begin':this.assetId=String(args[0]);return null;
       case 'LbIoT.Wifi.begin':this.host.log?.('IoT giả lập: dùng thuộc tính cục bộ, không kết nối máy chủ thật.');return null;
@@ -356,8 +367,8 @@ export class CppRuntime {
       yield { ms: 1 };
     }
   }
-  start() { this.missionStarted=false;this.cachedLineMask=0;this.thresholds=[69,78,106,70];this.serial='';this.iot.clear();this.brightness=255;this.rgb=[0,0,0];this.assetId='';this.host.led?.(this.rgb,this.brightness);this.scopes = [new Map()]; this.iterator = this.program(); this.running = true; this.time = this.distance = this.rotation = this.pending = 0; this.motors(0, 0); }
-  stop() { this.running = false; this.motors(0, 0); }
+  start() { this.touchMask=this.touchFrom=this.touchUntil=0;this.missionStarted=false;this.cachedLineMask=0;this.thresholds=[69,78,106,70];this.serial='';this.iot.clear();this.brightness=255;this.rgb=[0,0,0];this.assetId='';this.host.led?.(this.rgb,this.brightness);this.scopes = [new Map()]; this.iterator = this.program(); this.running = true; this.time = this.distance = this.rotation = this.pending = 0; this.motors(0, 0); }
+  stop() { this.touchMask=this.touchFrom=this.touchUntil=0;this.running = false; this.motors(0, 0); }
   tick(milliseconds: number) {
     if (!Number.isFinite(milliseconds) || milliseconds < 0) return;
     if (milliseconds === 0) { this.tickSlice(0); return; }

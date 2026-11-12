@@ -1,3 +1,4 @@
+import {SYNAPSE_MAT_SIDE_MM} from './boardUnits';
 import { BoardConfig } from './types';
 
 export const SYNAPSE_CITY: BoardConfig = {
@@ -9,8 +10,8 @@ export const SYNAPSE_CITY: BoardConfig = {
     "rotation": 0
   },
   "name": "Synapse City — 4 ft × 4 ft",
-  "width": 1219.2,
-  "height": 1219.2,
+  "width": SYNAPSE_MAT_SIDE_MM,
+  "height": SYNAPSE_MAT_SIDE_MM,
   "backgroundImage": "/simulator/synapse-city.svg",
   "initialPose": {
     "x": 934.6,

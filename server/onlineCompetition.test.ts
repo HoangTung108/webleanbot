@@ -94,3 +94,15 @@ it('shares virtual IoT by asset within a session and clears it on field reset',(
  command(s,'b',{action:'practice-run',code:source('team')});s.advanceWall(0,Infinity);s.advanceWall(50,Infinity);
  expect(s.snapshot().players.find(p=>p.id==='b')?.rgb).toEqual([0,0,0]);
 });
+
+it('dispatches a member touch only to that member robot and rejects invalid touches',()=>{
+ const s=prepare();
+ const source='void loop(){if(LbTouch.read(TB1B)==HIGH){LbRGB.fillColor(CRGB::Blue);LbRGB.show();LbMission.end();}LbDelay(5);}';
+ for(const id of ['a','b'])command(s,id,{action:'practice-run',code:source});
+ command(s,'b',{action:'touch',button:2});
+ expect(()=>command(s,'a',{action:'touch',button:3})).toThrow('Nút chạm');
+ s.advanceWall(0,Infinity);s.advanceWall(200,Infinity);
+ const snapshot=s.snapshot();expect(snapshot.players.find(p=>p.id==='b')?.rgb).toEqual([0,0,255]);
+ expect(snapshot.players.find(p=>p.id==='a')?.rgb).toEqual([0,0,0]);
+ expect(()=>command(s,'b',{action:'touch',button:2})).toThrow('Chưa có chương trình');
+});

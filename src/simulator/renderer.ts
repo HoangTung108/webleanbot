@@ -1,3 +1,4 @@
+import {measureRouteSegments,formatRouteLength,type RoutePoint} from './routeMeasurements';
 import {ROBOT_ENVELOPE} from './robotCollision';
 import { drawMissionBlocks } from './missionWorld';
 /**
@@ -115,13 +116,15 @@ export class SimulatorRenderer {
     };
   }
 
-  /** Convert CSS pointer coordinates through the actual backing-store viewport. */
+  private canvasToBoard(x:number,y:number):{x:number;y:number} {
+    return {x:(x-this.offsetX)/this.scale,y:(y-this.offsetY)/this.scale};
+  }
+
+  /** CSS/client pixels -> viewport pixels -> physical board mm. */
   clientToBoard(clientX: number, clientY: number): { x: number; y: number } {
     const rect = this.canvas.getBoundingClientRect();
-    return {
-      x: ((clientX - rect.left) * this.viewportWidth / rect.width - this.offsetX) / this.scale,
-      y: ((clientY - rect.top) * this.viewportHeight / rect.height - this.offsetY) / this.scale,
-    };
+    return this.canvasToBoard((clientX-rect.left)*this.viewportWidth/rect.width,
+      (clientY-rect.top)*this.viewportHeight/rect.height);
   }
 
   /**
@@ -139,7 +142,7 @@ export class SimulatorRenderer {
     if (centerY === undefined) centerY = this.viewportHeight / 2;
 
     // Get board coordinates of zoom center before scaling
-    const boardPoint = this.clientToBoard(centerX, centerY);
+    const boardPoint = this.canvasToBoard(centerX, centerY);
 
     // Apply zoom
     const newScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, this.scale * factor));
@@ -238,6 +241,21 @@ export class SimulatorRenderer {
    */
   plannedRoute: { x: number; y: number; heading: number }[] = [];
   selectedRoutePoint: number | null = null;
+  routeDraft:{from:RoutePoint;to:RoutePoint}|null=null;
+
+  private drawRouteLength(from:RoutePoint,to:RoutePoint,lengthMm:number,draft=false):void {
+    const a=this.boardToCanvas(from.x,from.y),b=this.boardToCanvas(to.x,to.y);
+    const dx=b.x-a.x,dy=b.y-a.y,size=Math.hypot(dx,dy);
+    if(size<0.001)return;
+    const ctx=this.context,label=formatRouteLength(lengthMm);
+    ctx.save();ctx.font='600 12px monospace';
+    const width=(ctx.measureText?.(label)?.width??label.length*7.2)+12,height=22;
+    const x=Math.max(width/2+3,Math.min(this.viewportWidth-width/2-3,(a.x+b.x)/2-dy/size*16));
+    const y=Math.max(height/2+3,Math.min(this.viewportHeight-height/2-3,(a.y+b.y)/2+dx/size*16));
+    ctx.fillStyle='rgba(255,255,255,0.96)';ctx.fillRect(x-width/2,y-height/2,width,height);
+    ctx.strokeStyle=draft?'#c2410c':'#0284c7';ctx.lineWidth=1;ctx.strokeRect(x-width/2,y-height/2,width,height);
+    ctx.fillStyle=draft?'#9a3412':'#075985';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(label,x,y);ctx.restore();
+  }
 
   render(): void {
     this.clearCanvas();
@@ -252,7 +270,8 @@ export class SimulatorRenderer {
       ctx.save(); ctx.strokeStyle = '#0284c7'; ctx.fillStyle = '#0284c7'; ctx.lineWidth = 3;
       ctx.beginPath();
       this.plannedRoute.forEach((p, i) => { const c = this.boardToCanvas(p.x, p.y); if (i) ctx.lineTo(c.x, c.y); else ctx.moveTo(c.x, c.y); });
-      ctx.stroke(); ctx.font = 'bold 12px sans-serif';
+      ctx.stroke();
+      ctx.font = 'bold 12px sans-serif';
       this.plannedRoute.forEach((p, i) => {
         const c = this.boardToCanvas(p.x, p.y);
         ctx.fillStyle = i === this.selectedRoutePoint ? '#ea580c' : '#0284c7';
@@ -265,6 +284,11 @@ export class SimulatorRenderer {
         ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(28, 0); ctx.lineTo(20, -5); ctx.moveTo(28, 0); ctx.lineTo(20, 5); ctx.stroke(); ctx.restore();
       }
       ctx.restore();
+    }
+    if(this.routeDraft){
+      const {from,to}=this.routeDraft,a=this.boardToCanvas(from.x,from.y),b=this.boardToCanvas(to.x,to.y),ctx=this.context;
+      ctx.save();ctx.strokeStyle='#ea580c';ctx.lineWidth=2;ctx.setLineDash([5,4]);
+      ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();ctx.restore();
     }
     this.drawRobot();
     for (const robot of this.remoteRobots) {
@@ -293,6 +317,9 @@ export class SimulatorRenderer {
       this.drawSensorDebug();
     }
 
+    // Keep short-segment labels visible above the robot and its trajectory.
+    for(const segment of measureRouteSegments(this.plannedRoute))this.drawRouteLength(segment.from,segment.to,segment.lengthMm);
+    if(this.routeDraft){const {from,to}=this.routeDraft;this.drawRouteLength(from,to,Math.hypot(to.x-from.x,to.y-from.y),true);}
     if (!this.board.backgroundImage) this.drawStats();
   }
 

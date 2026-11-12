@@ -99,6 +99,9 @@ class LeanbotSimulator2D {
     document.getElementById('simPause').addEventListener('click', () => this.togglePause());
     document.getElementById('simStop').addEventListener('click', () => this.stop());
     document.getElementById('simReset').addEventListener('click', () => this.reset());
+    for(const [id,button] of [['simTouch1A',1],['simTouch1B',2],['simTouch2A',4]]){
+      document.getElementById(id).addEventListener('click',()=>{if(this.isRunning&&!this.isPaused)this.runtime?.pressTouch(button);});
+    }
 
     document.getElementById('simRobotHeading').addEventListener('input', (e) => {
       if (e.target.value !== '') this.setHeading(Number(e.target.value));
@@ -475,6 +478,7 @@ class LeanbotSimulator2D {
   }
 
   updateButtons() {
+    for(const id of ['simTouch1A','simTouch1B','simTouch2A'])document.getElementById(id).disabled=!this.isRunning||this.isPaused;
     for (const id of ['simRobotHeading', 'simRotateLeft', 'simRotateRight']) {
       document.getElementById(id).disabled = this.isRunning;
     }

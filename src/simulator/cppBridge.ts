@@ -35,8 +35,12 @@ export class CppSimulatorBridge {
   private elapsed = 0;
   private completionReason: 'program' | 'time-limit' | undefined;
   getCompletionReason() { return this.completionReason; }
+  pressTouch(button:number):boolean {
+    if(this.simulator.getSimulationState().isPaused)return false;
+    return this.runtime?.pressTouch(button)??false;
+  }
 
-  constructor(simulator: RobotSimulator, private readonly distanceScale?:number) {
+  constructor(simulator: RobotSimulator, private readonly distanceScale?:number,private readonly onLog?:(message:string)=>void) {
     this.simulator = simulator;
     this.commandQueue = {
       commands: [],
@@ -65,7 +69,7 @@ export class CppSimulatorBridge {
         led: (rgb,brightness) => this.simulator.setLedColors(rgb,brightness),
         iotRead: (attribute, assetId) => {
           if (attribute === 'Color') {
-            if (robotNetworkManager.isConnected()) {
+            if (robotNetworkManager.isConnected() && (!assetId || robotNetworkManager.getRoomId()?.toUpperCase() === assetId.toUpperCase())) {
               return robotNetworkManager.getLastColorSignal()?.color ?? 'waiting';
             }
             if (assetId) {
@@ -77,7 +81,7 @@ export class CppSimulatorBridge {
         },
         iotWrite: (attribute, value, assetId) => {
           if (attribute === 'Color') {
-            if (robotNetworkManager.isConnected()) {
+            if (robotNetworkManager.isConnected() && (!assetId || robotNetworkManager.getRoomId()?.toUpperCase() === assetId.toUpperCase())) {
               robotNetworkManager.sendColorSignal(value);
             } else if (assetId) {
               void robotNetworkManager.postColorSignalHttp(assetId, value);
@@ -86,6 +90,7 @@ export class CppSimulatorBridge {
         },
         log: message => {
           this.logs.push(message);
+          this.onLog?.(message);
           const serialColor = parseSerialColorSignal(message);
           if (serialColor && robotNetworkManager.isConnected()) {
             robotNetworkManager.sendColorSignal(serialColor);

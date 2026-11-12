@@ -1565,6 +1565,17 @@ var LeanbotCpp = (() => {
     rgb = [0, 0, 0];
     assetId = "";
     serial = "";
+    touchMask = 0;
+    touchFrom = 0;
+    touchUntil = 0;
+    /** A physical-button pulse in simulation time, including startup/release debounce. */
+    pressTouch(button) {
+      if (!this.running || ![1, 2, 4, 8].includes(button) || this.time < this.touchUntil) return false;
+      this.touchMask = button;
+      this.touchFrom = Math.max(this.time, this.touchUntil + 40, 50);
+      this.touchUntil = this.touchFrom + 100;
+      return true;
+    }
     iot = /* @__PURE__ */ new Map();
     *location(n) {
       if (n.k === "name") {
@@ -1805,7 +1816,7 @@ var LeanbotCpp = (() => {
         case "BITMAP":
           return nums.reduce((mask, index) => mask | 1 << index, 0);
         case "LbTouch.read":
-          return this.host.touch?.(a) ? 1 : 0;
+          return this.host.touch?.(a) || this.time >= this.touchFrom && this.time < this.touchUntil && !!(this.touchMask & a) ? 1 : 0;
         case "LbIoT.Asset.attribute":
           return { attribute: String(args[0]) };
         case "LbIoT.Asset.begin":
@@ -2063,6 +2074,7 @@ var LeanbotCpp = (() => {
       }
     }
     start() {
+      this.touchMask = this.touchFrom = this.touchUntil = 0;
       this.missionStarted = false;
       this.cachedLineMask = 0;
       this.thresholds = [69, 78, 106, 70];
@@ -2079,6 +2091,7 @@ var LeanbotCpp = (() => {
       this.motors(0, 0);
     }
     stop() {
+      this.touchMask = this.touchFrom = this.touchUntil = 0;
       this.running = false;
       this.motors(0, 0);
     }

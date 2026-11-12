@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import {measureRouteSegments,formatRouteLength} from './routeMeasurements';
+import {SYNAPSE_MAT_SIDE_MM} from './boardUnits';
 import { HeadingDial } from './HeadingDial';
 import { generateRouteCode, generateRouteCommands, routePoses, type RouteStep } from './routePlanner';
 import type { Pose } from './types';
@@ -11,9 +13,12 @@ export function RoutePlannerPanel({ simulator, renderer, canvas, locked, onRun, 
   children?: ReactNode; locked: boolean; onRun(code: string, start: Pose): void;
   toolsHost?: HTMLElement | null; previewHost?: HTMLElement | null; toolsVisible?: boolean;
 }) {
+  const boardWidth=simulator?.getBoard().width??SYNAPSE_MAT_SIDE_MM;
+  const boardHeight=simulator?.getBoard().height??SYNAPSE_MAT_SIDE_MM;
   const [start, setStart] = useState<Pose>({ x: 934.6, y: 934.6, heading: 270 });
   const [steps, setSteps] = useState<RouteStep[]>([]);
   const [drawing, setDrawing] = useState(false);
+  const [previewPoint,setPreviewPoint] = useState<{x:number;y:number}|null>(null);
   const [follow, setFollow] = useState(false);
   const [angle, setAngle] = useState(90);
   const [toolsOpen, setToolsOpen] = useState(false);
@@ -42,13 +47,20 @@ export function RoutePlannerPanel({ simulator, renderer, canvas, locked, onRun, 
     setSteps(s => [...s, step]);
   };
   const generated = useMemo(() => { try { return { code: generateRouteCommands(start, steps), error: '' }; } catch (e) { return { code: '', error: String(e) }; } }, [start, steps]);
+  const poses=useMemo(()=>routePoses(start,steps),[start,steps]);
+  const segments=useMemo(()=>measureRouteSegments(poses),[poses]);
+  const distances=new Map(segments.map(s=>[s.stepIndex,s.lengthMm]));
+  const totalLength=segments.reduce((sum,s)=>sum+s.lengthMm,0);
   useEffect(() => {
     if (!renderer) return;
-    renderer.plannedRoute = steps.length ? routePoses(start, steps) : [];
+    renderer.plannedRoute = steps.length || drawing ? poses : [];
+    renderer.routeDraft = drawing && !locked && previewPoint ? {from:poses.at(-1)!,to:previewPoint} : null;
     renderer.selectedRoutePoint = selected === null ? null : selected + 1;
     renderer.render();
-    return () => { renderer.plannedRoute = []; renderer.selectedRoutePoint = null; renderer.render(); };
-  }, [renderer, start, steps, selected]);
+  }, [renderer, poses, steps.length, selected, drawing, locked, previewPoint]);
+  useEffect(()=>()=>{
+    if(renderer){renderer.plannedRoute=[];renderer.routeDraft=null;renderer.selectedRoutePoint=null;renderer.render();}
+  },[renderer]);
   useEffect(() => {
     if (!canvas || !renderer || !editing || locked) { drag.current = null; return; }
     const down = (e: PointerEvent) => {
@@ -66,7 +78,7 @@ export function RoutePlannerPanel({ simulator, renderer, canvas, locked, onRun, 
       if (!drag.current || drag.current.pointer !== e.pointerId) return;
       e.preventDefault(); e.stopImmediatePropagation();
       const p = renderer.clientToBoard(e.clientX, e.clientY);
-      const position = { x: Math.max(0, Math.min(1219.2, p.x)), y: Math.max(0, Math.min(1219.2, p.y)) };
+      const position = { x: Math.max(0, Math.min(boardWidth, p.x)), y: Math.max(0, Math.min(boardHeight, p.y)) };
       const index = drag.current.index;
       if (index === -1) setStart(s => ({ ...s, ...position }));
       else setSteps(s => s.map((step, i) => i === index && step.kind === 'move' ? { ...step, ...position } : step));
@@ -82,22 +94,36 @@ export function RoutePlannerPanel({ simulator, renderer, canvas, locked, onRun, 
       canvas.removeEventListener('pointerdown', down, true); canvas.removeEventListener('pointermove', move, true);
       canvas.removeEventListener('pointerup', up, true); canvas.removeEventListener('pointercancel', up, true);
     };
-  }, [canvas, renderer, editing, locked, steps, start]);
+  }, [canvas, renderer, editing, locked, steps, start, boardWidth, boardHeight]);
   useEffect(() => {
-    if (!canvas || !renderer || !drawing || locked) return;
+    if (!canvas || !renderer || !drawing || locked) {setPreviewPoint(null);return;}
     const down = (e: PointerEvent) => {
       if (e.button !== 0) return;
       e.preventDefault(); e.stopImmediatePropagation();
       const p = renderer.clientToBoard(e.clientX, e.clientY);
-      if (p.x < 0 || p.y < 0 || p.x > 1219.2 || p.y > 1219.2) return;
+      if (p.x < 0 || p.y < 0 || p.x > boardWidth || p.y > boardHeight) return;
+      setPreviewPoint(null);
       setSteps(old => {
         const last = routePoses(start, old).at(-1)!;
         return Math.hypot(p.x - last.x, p.y - last.y) < 1 ? old : [...old, { kind: 'move', ...p, follow }];
       });
     };
+    const move=(e:PointerEvent)=>{
+      const p=renderer.clientToBoard(e.clientX,e.clientY);
+      setPreviewPoint(p.x>=0&&p.y>=0&&p.x<=boardWidth&&p.y<=boardHeight?p:null);
+    };
+    const leave=()=>setPreviewPoint(null);
     canvas.addEventListener('pointerdown', down, true);
-    return () => canvas.removeEventListener('pointerdown', down, true);
-  }, [canvas, renderer, drawing, locked, start, follow]);
+    canvas.addEventListener('pointermove',move);
+    canvas.addEventListener('pointerleave',leave);
+    canvas.addEventListener('pointercancel',leave);
+    return () => {
+      canvas.removeEventListener('pointerdown',down,true);
+      canvas.removeEventListener('pointermove',move);
+      canvas.removeEventListener('pointerleave',leave);
+      canvas.removeEventListener('pointercancel',leave);
+    };
+  }, [canvas, renderer, drawing, locked, start, follow, boardWidth, boardHeight]);
   const controls = <>
     <fieldset hidden={!showTools} className="route-toolbar route-organized" disabled={locked} aria-label="Công cụ vẽ lộ trình">
       <div className="route-control-group"><span className="route-group-title">Đường đi</span><div className="route-button-row">
@@ -126,18 +152,20 @@ export function RoutePlannerPanel({ simulator, renderer, canvas, locked, onRun, 
         {steps.map((s, i) => s.kind === 'move' ? <option key={i} value={i}>{i + 1}</option> : null)}
       </select></label>
       {point ? <>
-        {(['x', 'y'] as const).map(axis => <label key={axis}>{axis.toUpperCase()} <input aria-label={`Tọa độ ${axis.toUpperCase()}`} type="number" min="0" max="1219.2" step="0.1" value={Number(point[axis].toFixed(1))} onChange={e => { if (e.target.value !== '' && Number.isFinite(e.target.valueAsNumber)) updatePoint({ [axis]: Math.max(0, Math.min(1219.2, e.target.valueAsNumber)) }); }} /> mm</label>)}
+        {(['x', 'y'] as const).map(axis => <label key={axis}>{axis.toUpperCase()} <input aria-label={`Tọa độ ${axis.toUpperCase()}`} type="number" min="0" max={axis==='x'?boardWidth:boardHeight} step="0.1" value={Number(point[axis].toFixed(1))} onChange={e => { if (e.target.value !== '' && Number.isFinite(e.target.valueAsNumber)) updatePoint({ [axis]: Math.max(0, Math.min(axis==='x'?boardWidth:boardHeight, e.target.valueAsNumber)) }); }} /> mm</label>)}
         <label><input type="checkbox" checked={point.heading !== undefined} disabled={selected === -1} onChange={e => updatePoint({ heading: e.target.checked ? routePoses(start, steps)[selected! + 1].heading : undefined })} /> Quay khi đến điểm</label>
         {point.heading !== undefined && <HeadingDial key={selected} label="Hướng tại điểm" inline value={point.heading} disabled={locked} onChange={heading => updatePoint({ heading })} />}
         <button className="sim-button" disabled={selected === -1} onClick={() => removeStep(selected!)}>Xóa điểm</button>
         <span>0° phải · 90° xuống · 180° trái · 270° lên</span>
       </> : <span>Bấm chọn hoặc kéo điểm trên sa bàn để hiệu chỉnh.</span>}
     </fieldset>}
-    <div hidden={!showTools} className="route-hint">{drawing && !locked ? 'Bấm trên sa bàn để nối điểm' : 'Đặt robot rồi chọn Vẽ đường'} · {steps.length} bước · Dò line dùng trên vạch đen</div>
+    <div hidden={!showTools} className="route-hint">{drawing && !locked ? 'Bấm trên sa bàn để nối điểm' : 'Đặt robot rồi chọn Vẽ đường'} · {steps.length} bước · {segments.length} đoạn · Tổng {formatRouteLength(totalLength)}
+      {drawing&&previewPoint&&<output aria-label="Độ dài đoạn đang vẽ"> · Đang vẽ: {formatRouteLength(Math.hypot(previewPoint.x-poses.at(-1)!.x,previewPoint.y-poses.at(-1)!.y))}</output>}
+      {' · Sa bàn '}{formatRouteLength(boardWidth)} × {formatRouteLength(boardHeight)}{' · Dò line dùng trên vạch đen'}</div>
   </>;
   const preview = <section hidden={!docked && !previewOpen} className="route-preview" aria-label="Preview C++ lộ trình">
       <div className="route-preview-heading"><strong>Preview C++</strong><span>Chọn code để copy · Ctrl+A / Ctrl+C</span>
-        <details className="route-steps"><summary>{steps.length} bước</summary><ol>{steps.map((s, i) => <li key={i}>{s.kind === 'move' ? (s.follow ? 'Dò line' : 'Đi thẳng') : s.kind === 'turn' ? 'Xoay ' + s.angle + '°' : s.kind === 'grab' ? 'Gắp' : 'Thả'} <button disabled={locked} aria-label={'Xóa bước ' + (i + 1)} onClick={() => removeStep(i)}>×</button></li>)}</ol></details>
+        <details className="route-steps"><summary>{steps.length} bước</summary><ol>{steps.map((s, i) => <li key={i}>{s.kind === 'move' ? (s.follow ? 'Dò line' : 'Đi thẳng') : s.kind === 'turn' ? 'Xoay ' + s.angle + '°' : s.kind === 'grab' ? 'Gắp' : 'Thả'}{s.kind==='move'&&<span className="route-step-distance"> · {formatRouteLength(distances.get(i)??0)}</span>} <button disabled={locked} aria-label={'Xóa bước ' + (i + 1)} onClick={() => removeStep(i)}>×</button></li>)}</ol></details>
       </div>
       <textarea aria-label="Code C++ lộ trình" readOnly spellCheck={false} value={generated.code} placeholder="Các lệnh move_tank, turn_two_wheels, open_hand, close_hand… sẽ hiện ở đây." />
       {generated.error && <output role="alert">{generated.error}</output>}
