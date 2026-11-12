@@ -244,6 +244,7 @@ void open_hand() { open_hand_async(); wait_hand(); }
 
 // Đi và quay có phản hồi
 void turn_angle(int speed, float angle_deg, TurnMode mode) {
+  if (missionError != ERR_NONE) { LbMotion.stopAndWait(); return; }
   if (check_mission_reset()) return;
   if (!isfinite(angle_deg) || speed < TURN_FINISH_SPEED || speed > MAX_MOTOR_SPEED ||
       mode < TWO_WHEELS || mode > RIGHT_ONLY) {
@@ -303,6 +304,7 @@ void turn_two_wheels(int speed, float angle) {
 }
 
 static bool moveTankCore(int motor_L, int motor_R, float distance_cm, bool untilLine) {
+  if (missionError != ERR_NONE) { LbMotion.stopAndWait(); return false; }
   if (check_mission_reset()) return false;
   if (!isfinite(distance_cm) || distance_cm < 0.0f ||
       motor_L == 0 || motor_R == 0 || signInt(motor_L) != signInt(motor_R)) {
@@ -311,14 +313,21 @@ static bool moveTankCore(int motor_L, int motor_R, float distance_cm, bool until
   if (distance_cm == 0.0f) return false;
   const float targetMm = distance_cm * 10.0f * DISTANCE_SCALE;
   if (!isfinite(targetMm) || targetMm > 12000.0f) { failMission(ERR_INVALID_MOVE); return false; }
-  motor_L = clampMotor(motor_L);
-  motor_R = clampMotor(motor_R);
+  // Tìm vạch cần dừng ngay: tránh lao qua vạch khi nối lệnh ở tốc độ cao.
+  const int speedLimit = untilLine ? 350 : MAX_MOTOR_SPEED;
+  motor_L = constrain(motor_L, -speedLimit, speedLimit);
+  motor_R = constrain(motor_R, -speedLimit, speedLimit);
   const int direction = signInt(motor_L);
   const int targetL = (int)lroundf(fabsf((float)motor_L) * LEFT_SCALE);
   const int targetR = (int)lroundf(fabsf((float)motor_R) * RIGHT_SCALE);
   const int maxMagnitude = max(targetL, targetR);
   if (maxMagnitude < MOVE_FINISH_SPEED) { failMission(ERR_INVALID_MOVE); return false; }
   LbMotion.stopAndWait();
+  if (untilLine) {
+    // Đợi cơ cấu ổn định sau đi/quay trước khi lấy mốc riêng cho lượt tìm.
+    robot_delay(30);
+    if (check_mission_reset()) return false;
+  }
   resetMotionState();
   const float originDist = (float)LbMotion.getDistanceMm();
   const float originRot = (float)LbMotion.getRotationDeg();
@@ -334,10 +343,12 @@ static bool moveTankCore(int motor_L, int motor_R, float distance_cm, bool until
     const float remaining = targetMm - progressed;
     if (untilLine) {
       LbIRLine.read();
-      if (((int)LbIRLine.value() & 0x0F) != 0) {
+      const int detectedMask = (int)LbIRLine.value() & 0x0F;
+      if (detectedMask != 0) {
         LbMotion.stopAndWait();
+        robot_delay(100);
         resetMotionState();
-        return true;
+        return !missionResetRequested;
       }
     }
     if (remaining <= 0.0f) break;
@@ -383,9 +394,9 @@ static bool moveTankCore(int motor_L, int motor_R, float distance_cm, bool until
     float right = direction * baseR + correction;
     // Giữ tỷ lệ lệnh sửa hướng khi một bánh chạm trần 2000.
     const float peak = max(fabsf(left), fabsf(right));
-    if (peak > MAX_MOTOR_SPEED) {
-      left *= MAX_MOTOR_SPEED / peak;
-      right *= MAX_MOTOR_SPEED / peak;
+    if (peak > speedLimit) {
+      left *= speedLimit / peak;
+      right *= speedLimit / peak;
     }
     const int vL = clampMotor((int)lroundf(left));
     const int vR = clampMotor((int)lroundf(right));
@@ -412,6 +423,7 @@ void moveUntilLine(int speed = 600, float maxDistanceCm = 100.0f) {
       !isfinite(maxDistanceCm) || maxDistanceCm <= 0.0f) {
     failMission(ERR_INVALID_MOVE); return;
   }
+  junctionPending = false; // Không mang giao lộ của lệnh dò line trước sang lượt tìm mới.
   moveTankCore(speed, speed, maxDistanceCm, true);
 }
 
@@ -965,6 +977,7 @@ static void applyMyBlockLineCommand(const LbmbFollowCtx* ctx, const LbmbCommand*
 
 // Cập nhật một bước theo đúng lõi MyBlock, dùng khi tự viết loop.
 void runFollowLine(int bits = -1) {
+  if (missionError != ERR_NONE) { LbMotion.stopAndWait(); return; }
   if (check_mission_reset()) return;
   const uint32_t now = (uint32_t)millis();
   if (lineControlReady && now - lastLineControlTime < LBMB_TICK_MS) return;
@@ -981,6 +994,7 @@ void runFollowLine(int bits = -1) {
 }
 
 static void lbmbFollow(float speedPercent, uint8_t mode, float targetVal) {
+  if (missionError != ERR_NONE) { LbMotion.stopAndWait(); return; }
   if (check_mission_reset()) return;
   lineOperationCompleted = false;
   if (!isfinite(speedPercent) || speedPercent <= 0 || !isfinite(targetVal) ||
