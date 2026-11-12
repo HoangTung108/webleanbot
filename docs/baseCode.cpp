@@ -336,16 +336,22 @@ static bool moveTankCore(int motor_L, int motor_R, float distance_cm, bool until
   float currentMagnitude = min(MOVE_START_SPEED, maxMagnitude);
   float integral = 0.0f, previousError = 0.0f, derivative = 0.0f;
   int previousL = 32767, previousR = 32767;
+  unsigned long lastLineSample = started;
+  bool sampledLine = false;
+  LbmbState searchState = {};
   const unsigned long timeoutMs = 3500UL + (unsigned long)(targetMm * 60.0f);
   while (true) {
     if (check_mission_reset()) return false;
     const float progressed = ((float)LbMotion.getDistanceMm() - originDist) * direction;
     const float remaining = targetMm - progressed;
-    if (untilLine) {
-      LbIRLine.read();
-      const int detectedMask = (int)LbIRLine.value() & 0x0F;
-      if (detectedMask != 0) {
-        LbMotion.stopAndWait();
+    if (untilLine && (!sampledLine || millis() - lastLineSample >= LBMB_TICK_MS || remaining <= 0.0f)) {
+      // Chung luồng SDK và chu kỳ lấy mẫu với hàm dò line đang hoạt động.
+      searchState = lbmbReadState();
+      lastLineSample = millis();
+      sampledLine = true;
+      if ((searchState.lineState & 0x0F) != 0) {
+        // Đặt tốc độ về 0 ngay; không dùng dừng giảm tốc tại mép vạch.
+        LbMotion.runLR(0, 0);
         robot_delay(100);
         resetMotionState();
         return !missionResetRequested;
@@ -405,7 +411,9 @@ static bool moveTankCore(int motor_L, int motor_R, float distance_cm, bool until
     robot_delay(MOTION_FEEDBACK_MS);
   }
   LbMotion.stopAndWait();
-  if (untilLine) { failMission(ERR_LINE_LOST); return false; }
+  if (untilLine) {
+    failMission(ERR_LINE_LOST); return false;
+  }
   return true;
 }
 

@@ -46,3 +46,19 @@ it('does not execute subsequent motion if the line was not found',()=>{
  runtime.start();for(let i=0;i<4000&&runtime.running;i++)runtime.tick(10)
  expect(runtime.running).toBe(false);expect(logs).toContain('MISSION ERROR: 6');expect(runtime.distance).toBe(missedDistance);expect(runtime.rotation).toBe(missedRotation)
 })
+
+it('zeros wheel commands on detection even when SDK stopAndWait has a braking delay',()=>{
+ let searchOrigin=0,searching=false
+ // Model the distinction hidden by the runtime's instantaneous stopAndWait mock.
+ const helpers=base.slice(0,base.indexOf('void setup()')).replaceAll('LbMotion.stopAndWait();','slow_stop();')
+ const source=`void slow_stop(){LbDelay(200);LbMotion.runLR(0,0);}\n`+helpers+`void loop(){
+   move_tank(1000,1000,5);turn_two_wheels(1000,90);
+   Serial.println("SEARCH");moveUntilLine(1500,10);LbMission.end();
+ }`
+ const runtime:CppRuntime=new CppRuntime(source,{motors(){},advance(){},rawLine:()=>searching&&runtime.distance-searchOrigin>=20?[0,4095,0,0]:[0,0,0,0],log(v){if(v==='SEARCH'){searchOrigin=runtime.distance;searching=true}}})
+ runtime.start();for(let i=0;i<4000&&runtime.running;i++)runtime.tick(10)
+ expect(runtime.running).toBe(false);expect(searching).toBe(true)
+ expect(runtime.distance-searchOrigin).toBeGreaterThanOrEqual(20)
+ expect(runtime.distance-searchOrigin).toBeLessThan(20.3)
+ expect([runtime.left,runtime.right]).toEqual([0,0])
+})

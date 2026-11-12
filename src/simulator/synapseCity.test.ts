@@ -59,3 +59,15 @@ describe('Synapse City mat', () => {
     expect(simulator.getRobotPose()).toEqual(SYNAPSE_CITY.initialPose);
   });
 });
+
+it('uses AIROC proportions consistently for the measured 325 mm pitch',()=>{
+ const board=SYNAPSE_CITY,ref=board.metadata!.randomizerReference;
+ expect(ref.scaleMmPerDrawingUnit).toBeCloseTo(.975,9);
+ expect(ref.frameInsetMm).toBeCloseTo(24.6,8);
+ expect(board.lines[0].width).toBeCloseTo(16.25,8);
+ const a=board.cityZones!.find(z=>z.id==='A')!;
+ expect(a.center.x-a.sites[0].x).toBeCloseTo(54.1666667,5);
+ expect(a.sites.map(s=>s.rotation)).toEqual([45,135,135,45]);
+ expect(board.storageSites!.find(s=>s.id==='S1')!.y).toBeCloseTo(1155.6,5);
+ expect(board.storageSites!.find(s=>s.id==='S2')!.x).toBeCloseTo(1155.6,5);
+});

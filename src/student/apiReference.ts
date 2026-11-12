@@ -7,7 +7,7 @@ export const apiReference: ApiReference[] = [
   "description": "Đi thẳng không dò line cho tới khi thấy line đen rồi dừng.",
   "parameters": "speed: 165..2000 (tốc độ tìm thực tế tối đa 350); maxDistanceCm: giới hạn tìm theo cm, mặc định 100.",
   "returns": "void. Hết quãng tìm hoặc lỗi sẽ cập nhật missionError.",
-  "notes": "Dùng PID giữ hướng của move_tank và API LbIRLine.read/value theo ngưỡng SDK. Nếu đã đứng trên đen thì dừng, không bỏ qua line cũ. Chờ ổn định 30 ms sau lệnh trước, giới hạn tốc độ tìm ở 350 kể cả khi yêu cầu cao hơn để giảm vượt vạch. In LINE FOUND khi phát hiện vạch và giữ dừng 100 ms trước lệnh tiếp theo. Có giới hạn thời gian và phát hiện kẹt. Tốc độ cao có thể vượt qua vạch hẹp giữa hai lần đọc; nên bắt đầu ở 600. Hết quãng tìm báo ERR_LINE_LOST.",
+  "notes": "Dùng PID giữ hướng của move_tank và API LbIRLine.read/value theo ngưỡng SDK. Nếu đã đứng trên đen thì dừng, không bỏ qua line cũ. Chờ ổn định 30 ms sau lệnh trước, giới hạn tốc độ tìm ở 350 kể cả khi yêu cầu cao hơn để giảm vượt vạch. Dùng chung lbmbReadState và nhịp 10 ms với PID dò line. Khi nhận đen, đặt LbMotion.runLR(0, 0) ngay thay vì dừng giảm tốc; giữ dừng 100 ms trước lệnh tiếp theo. Không in log tìm line. Có giới hạn thời gian và phát hiện kẹt. Tốc độ cao có thể vượt qua vạch hẹp giữa hai lần đọc; nên bắt đầu ở 600. Hết quãng tìm báo ERR_LINE_LOST.",
   "code": "moveUntilLine(600, 100); // Tìm trong tối đa 100 cm\nif (missionError != ERR_NONE) return;\nfollowLineCm(32.5f); // Bắt đầu dò line sau khi tìm thấy",
   "source": "baseCode.cpp"
 },
