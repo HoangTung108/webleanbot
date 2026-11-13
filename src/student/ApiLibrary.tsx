@@ -3,26 +3,23 @@ import { libraryReference as apiReference } from './libraryReference'
 
 const examples = [
   { id: 'leanbot', title: 'Leanbot', code: `#include <Leanbot.h>\n\nvoid setup() {\n  Leanbot.begin(); // Khởi tạo phần cứng\n}\n\nvoid loop() {\n  LbMission.begin(TB1A + TB1B); // Đợi tín hiệu bắt đầu\n  LbMotion.runLR(1000, 1000);  // Hai bánh đi tới\n  LbMotion.waitDistanceMm(100); // Đợi đi 100 mm\n  LbMotion.stopAndWait();      // Dừng bánh\n  LbMission.end();\n}` },
-  { id: 'iot', title: 'Leanbot IoT', code: `// Ví dụ dùng các hàm Code mở rộng trong baseCode.cpp.
-// Hai robot dùng cùng Asset ID / thuộc tính Color.
-// Trong setup(), sau Leanbot.begin():
+  { id: 'iot', title: 'Leanbot IoT', code: `// Cả hai robot cấu hình cùng AssetID trong setup():
 set_wifi("TenWifi", "MatKhau", F("AssetID"));
-
-// Robot gửi: gửi màu của khối cần xử lý.
-send_iot_color(BLUE);
-// Không cần waiting giữa hai khối cùng màu.
-
-// Robot nhận: gọi một lần khi cần lấy tín hiệu cho lượt xử lý.
-read_iot_color(); // Mỗi lần đọc màu hợp lệ đều thêm một mục
-if (iot_queue_count() > 0) {
-  ObjectColor next = pop_iot_color(); // Lấy mục cũ nhất
-  // Xử lý nhiệm vụ theo next ở đây.
+// Robot gửi:
+read_color(); // Đo khối, lưu màu
+send_iot_color(); // Gửi màu vừa đo; UNKNOWN không gửi
+// Robot nhận:
+if (read_iot_color(30000UL) == BLUE) {
+  close_hand(90); // Chờ tối đa 30 giây rồi xử lý khối xanh
 }
-// Đọc lại giá trị chưa đổi cũng thêm một mục vào hàng chờ.
-// Kênh chỉ lưu giá trị cuối; không tự phân biệt hai lần gửi cùng màu.
-// Khi cần đưa kênh về waiting, gọi reset_iot_color();
-// Xóa hàng chờ cục bộ bằng clear_iot_queue(); không đổi kênh IoT.` },
-  { id: 'sensors', title: 'Cảm biến & Serial', code: `// Dùng với docs/baseCode.cpp. Trong setup():\nSerial.begin(115200); // Trùng baud Serial Debug trên web\ncolorSensorReady = APDS.begin(); // Phải thành công trước khi đo\n\n// Khi đã đặt khối trước cảm biến:\nread_color(); // Tự đọc nhiều mẫu, báo Serial/LED\nif (is_color(BLUE)) {\n  Serial.println("Blue block"); // Không cần khai báo biến\n}\n// Hiệu chuẩn: đặt khối đỏ rồi gọi calibrate_color(RED).\n// Làm riêng cho đủ 5 màu; lưu các dòng mẫu in trên Serial.` },
+// Kênh IoT lưu màu mới nhất, không phải hàng chờ sự kiện.` },
+  { id: 'sensors', title: 'Cảm biến & Serial', code: `// Dùng cùng baseCode.cpp, sau Leanbot.begin():
+if (read_color() == BLUE) {
+  close_hand(90); // Đọc và xử lý khối, không cần get_color/is_color
+}
+// Chỉ đọc và báo Serial/LED:
+read_color();
+// APDS tự khởi tạo trong lần đọc đầu tiên.` },
   { id: 'helpers', title: 'Code mở rộng', code: `// Dùng cùng các định nghĩa trong baseCode.cpp.
 // Cấu hình line: dùng ngưỡng đã chỉnh, hoặc gọi calibrate_line().
 set_line(IR_TH_2L, IR_TH_0L, IR_TH_1R, IR_TH_3R);
@@ -39,7 +36,7 @@ robot_delay(250); // Đợi và cập nhật tay
 // Khởi tạo cảm biến trong setup(): colorSensorReady = APDS.begin();
 // Khởi tạo WiFi/Asset trước khi gửi màu.
 read_color(); // Đọc 5 mẫu và lưu kết quả
-if (is_color(BLUE)) send_iot_color(get_color()); // Không đo lại` },
+send_iot_color(); // Gửi kết quả vừa đo, không đọc lại` },
   { id: 'arduino', title: 'Arduino & Serial', code: `Serial.begin(115200); // Trong setup, trùng baud web
 
 // Trong loop, tránh in quá dày:

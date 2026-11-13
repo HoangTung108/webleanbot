@@ -1,36 +1,36 @@
 export type ApiReference = { group: string; api: string; description: string; parameters: string; returns: string; notes: string; code: string; source: string }
 
 export const apiReference: ApiReference[] = [
-{
-  "group": "helpers",
-  "api": "moveUntilLine(speed = 600, maxDistanceCm = 100);",
-  "description": "Đi thẳng không dò line cho tới khi thấy line đen rồi dừng.",
-  "parameters": "speed: 165..2000 (tốc độ tìm thực tế tối đa 350); maxDistanceCm: giới hạn tìm theo cm, mặc định 100.",
-  "returns": "void. Hết quãng tìm hoặc lỗi sẽ cập nhật missionError.",
-  "notes": "Dùng PID giữ hướng của move_tank và API LbIRLine.read/value theo ngưỡng SDK. Nếu đã đứng trên đen thì dừng, không bỏ qua line cũ. Chờ ổn định 30 ms sau lệnh trước, giới hạn tốc độ tìm ở 350 kể cả khi yêu cầu cao hơn để giảm vượt vạch. Dùng chung lbmbReadState và nhịp 10 ms với PID dò line. Khi nhận đen, đặt LbMotion.runLR(0, 0) ngay thay vì dừng giảm tốc; giữ dừng 100 ms trước lệnh tiếp theo. Không in log tìm line. Có giới hạn thời gian và phát hiện kẹt. Tốc độ cao có thể vượt qua vạch hẹp giữa hai lần đọc; nên bắt đầu ở 600. Hết quãng tìm báo ERR_LINE_LOST.",
-  "code": "moveUntilLine(600, 100); // Tìm trong tối đa 100 cm\nif (missionError != ERR_NONE) return;\nfollowLineCm(32.5f); // Bắt đầu dò line sau khi tìm thấy",
-  "source": "baseCode.cpp"
-},
-{
-  "group": "helpers",
-  "api": "measure_line_values();",
-  "description": "In thông số cảm biến line bằng API Leanbot.",
-  "parameters": "Không có.",
-  "returns": "void.",
-  "notes": "Đọc ADC qua LbIRArray.read và mask qua LbIRLine.read. Đây là số đo tức thời, không phải ngưỡng do SDK hiệu chuẩn và không tự lưu qua lần khởi động.",
-  "code": "measure_line_values(); // Xem ADC 2L/0L/1R/3R và mask trên Serial",
-  "source": "baseCode.cpp"
-},
-{
-  "group": "helpers",
-  "api": "reset_mission();",
-  "description": "Dừng và đặt lại trạng thái bài chạy; TB2B gọi hàm này.",
-  "parameters": "Không có.",
-  "returns": "void.",
-  "notes": "Giữ cấu hình WiFi/Asset và hiệu chuẩn line. Hủy tác vụ tay, giữ góc tay hiện tại; xóa hàng chờ màu cục bộ. Nhả nút rồi bấm TB1B để chạy lại. Lệnh SDK chặn chỉ kiểm tra reset sau khi trả về.",
-  "code": "reset_mission(); // Hoặc chạm TB2B trong bài chạy dùng các hàm baseCode",
-  "source": "baseCode.cpp"
-},
+  {
+    "group": "helpers",
+    "api": "moveUntilLine(speed = 600, maxDistanceCm = 100);",
+    "description": "Đi thẳng không dò line cho tới khi thấy line đen rồi dừng.",
+    "parameters": "speed: 165..2000 (tốc độ tìm thực tế tối đa 350); maxDistanceCm: giới hạn tìm theo cm, mặc định 100.",
+    "returns": "void. Hết quãng tìm hoặc lỗi sẽ cập nhật missionError.",
+    "notes": "Dùng PID giữ hướng của move_tank và API LbIRLine.read/value theo ngưỡng SDK. Nếu đã đứng trên đen thì dừng, không bỏ qua line cũ. Chờ ổn định 30 ms sau lệnh trước, giới hạn tốc độ tìm ở 350 kể cả khi yêu cầu cao hơn để giảm vượt vạch. Dùng chung lbmbReadState và nhịp 10 ms với PID dò line. Khi nhận đen, đặt LbMotion.runLR(0, 0) ngay thay vì dừng giảm tốc; chỉ trả về sau khi phản hồi quãng đường/góc ổn định 150 ms; quá 1,2 giây chưa ổn định thì báo ERR_MOVE_STALL và chặn chuyển động sau. Không in log tìm line. Có giới hạn thời gian và phát hiện kẹt. Tốc độ cao có thể vượt qua vạch hẹp giữa hai lần đọc; nên bắt đầu ở 600. Hết quãng tìm báo ERR_LINE_LOST.",
+    "code": "moveUntilLine(600, 100); // Tìm trong tối đa 100 cm\nif (missionError != ERR_NONE) return;\nfollowLineCm(32.5f); // Bắt đầu dò line sau khi tìm thấy",
+    "source": "baseCode.cpp"
+  },
+  {
+    "group": "helpers",
+    "api": "measure_line_values();",
+    "description": "In thông số cảm biến line bằng API Leanbot.",
+    "parameters": "Không có.",
+    "returns": "void.",
+    "notes": "Đọc ADC qua LbIRArray.read và mask qua LbIRLine.read. Đây là số đo tức thời, không phải ngưỡng do SDK hiệu chuẩn và không tự lưu qua lần khởi động.",
+    "code": "measure_line_values(); // Xem ADC 2L/0L/1R/3R và mask trên Serial",
+    "source": "baseCode.cpp"
+  },
+  {
+    "group": "helpers",
+    "api": "reset_mission();",
+    "description": "Dừng và đặt lại trạng thái bài chạy; TB2B gọi hàm này.",
+    "parameters": "Không có.",
+    "returns": "void.",
+    "notes": "Giữ cấu hình WiFi/Asset và hiệu chuẩn line. Hủy tác vụ tay, giữ góc tay hiện tại; xóa hàng chờ màu cục bộ. Nhả nút rồi bấm TB1B để chạy lại. Lệnh SDK chặn chỉ kiểm tra reset sau khi trả về.",
+    "code": "reset_mission(); // Hoặc chạm TB2B trong bài chạy dùng các hàm baseCode",
+    "source": "baseCode.cpp"
+  },
   {
     "group": "leanbot",
     "api": "Leanbot.begin();",
@@ -1003,92 +1003,22 @@ export const apiReference: ApiReference[] = [
   },
   {
     "group": "helpers",
-    "api": "calibrate_color(RED);",
-    "description": "Học mẫu khi đang đặt đúng khối.",
-    "parameters": "Tên màu thật.",
+    "api": "send_iot_color();",
+    "description": "Gửi màu chỉ định hoặc màu khối vừa đo.",
+    "parameters": "ObjectColor tùy chọn, mặc định là kết quả read_color gần nhất.",
     "returns": "void.",
-    "notes": "Khởi tạo colorSensorReady = APDS.begin() trước. Lấy trung bình 5 mẫu và in lệnh lưu mẫu ra Serial. Khi dùng mẫu hiệu chuẩn cần đủ 5 màu; không gán 5 tên cho cùng khối.",
-    "code": "// Học mẫu khi đang đặt đúng khối.\ncalibrate_color(RED);",
+    "notes": "Không gửi UNKNOWN hoặc enum ngoài phạm vi. WiFi/AssetID đã chọn: ghi thuộc tính Color; chưa chọn WiFi: COLOR: qua Serial/WebSocket Bridge. Không đo khối lần nữa.",
+    "code": "read_color(); // Đọc khối một lần\nsend_iot_color(); // Gửi kết quả vừa đọc\n// Hoặc gửi chủ động:\nsend_iot_color(BLUE);",
     "source": "baseCode.cpp"
   },
   {
     "group": "helpers",
-    "api": "send_iot_color(BLUE);",
-    "description": "Gửi tên màu lên thuộc tính Color.",
-    "parameters": "ObjectColor.",
-    "returns": "void.",
-    "notes": "Cần cấu hình WiFi và Asset.",
-    "code": "// Gửi tên màu lên thuộc tính Color.\nsend_iot_color(BLUE);",
-    "source": "baseCode.cpp"
-  },
-  {
-    "group": "helpers",
-    "api": "iot_queue_count();",
-    "description": "Đọc số tín hiệu đang chờ.",
-    "parameters": "Không có.",
-    "returns": "int 0..16.",
-    "notes": "Chỉ là hàng đợi cục bộ.",
-    "code": "// Đọc số tín hiệu đang chờ.\niot_queue_count();",
-    "source": "baseCode.cpp"
-  },
-  {
-    "group": "helpers",
-    "api": "clear_iot_queue();",
-    "description": "Xóa FIFO và cờ đầy.",
-    "parameters": "Không có.",
-    "returns": "void.",
-    "notes": "Xóa hàng chờ cục bộ và cờ tràn; không đổi giá trị IoT trên mạng. Lần đọc tiếp theo vẫn thêm màu hợp lệ, kể cả giá trị cũ.",
-    "code": "// Xóa FIFO và cờ đầy.\nclear_iot_queue();",
-    "source": "baseCode.cpp"
-  },
-  {
-    "group": "helpers",
-    "api": "pop_iot_color();",
-    "description": "Lấy tín hiệu cũ nhất ra khỏi FIFO.",
-    "parameters": "Không có.",
-    "returns": "ObjectColor; UNKNOWN nếu rỗng.",
-    "notes": "Thứ tự nhận trước, xử lý trước.",
-    "code": "// Lấy tín hiệu cũ nhất ra khỏi FIFO.\npop_iot_color();",
-    "source": "baseCode.cpp"
-  },
-  {
-    "group": "helpers",
-    "api": "read_iot_color();",
-    "description": "Đọc mạng và thêm mỗi màu hợp lệ vào hàng chờ.",
-    "parameters": "Không có.",
-    "returns": "ObjectColor.",
-    "notes": "Mỗi lần đọc màu hợp lệ đều thêm vào FIFO, kể cả cùng màu liên tiếp. Đọc lại giá trị IoT chưa đổi cũng thêm một mục; khi đầy chỉ bật cờ tràn.",
-    "code": "// Mỗi lần đọc hợp lệ thêm một mục, kể cả màu trùng.\nread_iot_color();",
-    "source": "baseCode.cpp"
-  },
-  {
-    "group": "helpers",
-    "api": "reset_iot_color();",
-    "description": "Ghi waiting để mở lượt trao đổi mới.",
-    "parameters": "Không có.",
-    "returns": "void.",
-    "notes": "Không tự xóa FIFO robot nhận. Giá trị waiting không được thêm vào hàng chờ; không bắt buộc giữa hai màu giống nhau.",
-    "code": "// Ghi waiting để mở lượt trao đổi mới.\nreset_iot_color();",
-    "source": "baseCode.cpp"
-  },
-  {
-    "group": "helpers",
-    "api": "wait_iot_color(BLUE, 30000UL);",
-    "description": "Đợi màu đích với thời hạn.",
-    "parameters": "RED, GREEN, BLUE, YELLOW hoặc PURPLE; timeout tính bằng ms, mặc định 30000.",
-    "returns": "bool; false khi lỗi hoặc timeout.",
-    "notes": "Đọc mạng qua read_iot_color nên mỗi lần đọc hợp lệ đều thêm hàng chờ, không tự pop. Màu không hợp lệ báo ERR_COLOR_MISMATCH; quá hạn báo ERR_IOT_TIMEOUT. Thời hạn được kiểm tra giữa các lần đọc mạng.",
-    "code": "// Đợi màu đích với thời hạn.\nwait_iot_color(BLUE, 30000UL);",
-    "source": "baseCode.cpp"
-  },
-  {
-    "group": "helpers",
-    "api": "use_wifi_color_mode();",
-    "description": "Chuyển giao tiếp màu giữa 2 robot sang dùng trực tiếp module WiFi (LbIoT) thay vì cáp USB.",
-    "parameters": "Không có.",
-    "returns": "void.",
-    "notes": "Chỉ bật sau khi helper đã gọi Wifi.begin và có Asset ID; thiếu cấu hình báo ERR_WIFI_CONFIG. Không tự kết nối WiFi hoặc tự chọn máy chủ WebSocket của web.",
-    "code": "// Hai robot dùng cùng Asset ID và thuộc tính Color.\nset_wifi(\"TenWifi\", \"MatKhau\", F(\"AssetID_CHUNG\"));\n// set_wifi đã tự bật mode IoT khi chọn Asset; không cần gọi lại use_wifi_color_mode().",
+    "api": "read_iot_color(timeoutMs = 0);",
+    "description": "Đọc tín hiệu màu từ robot đối tác.",
+    "parameters": "timeoutMs: 0 đọc một lần; >0 đợi màu hợp lệ tối đa số mili giây.",
+    "returns": "ObjectColor, UNKNOWN khi chưa có màu, hết hạn hoặc TB2B reset.",
+    "notes": "Dùng cùng transport với send_iot_color. Không tạo hàng chờ; thuộc tính IoT chỉ chứa giá trị mới nhất, đọc nhiều lần có thể trả cùng màu. Không bảo đảm phân biệt hai lần gửi cùng màu.",
+    "code": "if (read_iot_color(30000UL) == BLUE) {\n  close_hand(90); // Chờ tối đa 30 giây rồi xử lý màu nhận\n}",
     "source": "baseCode.cpp"
   },
   {
@@ -1099,36 +1029,6 @@ export const apiReference: ApiReference[] = [
     "returns": "void.",
     "notes": "Nếu helper chưa gọi Wifi.begin, lưu Asset ID chờ set_wifi(). Nếu đã gọi, thực hiện Asset.begin và bật mode IoT. Asset ID của LeanbotIoT không tự cấu hình kết nối tới WebSocket server web. Để ghép với web cần Bridge Serial hoặc gateway dùng /api/iot/attribute theo cấu hình module.",
     "code": "// Khai báo trước, chọn Asset rồi bấm TB2A để kết nối.\ndeclare_wifi(\"TenWifi\", \"MatKhau\");\nconnect_robot_room(F(\"AssetID_CHUNG\"));\n// Hoặc gọi set_wifi() ngay tại đây.",
-    "source": "baseCode.cpp"
-  },
-  {
-    "group": "helpers",
-    "api": "send_real_robot_color(BLUE);",
-    "description": "Gửi tín hiệu màu sang robot thứ hai qua module WiFi của robot hoặc Serial/WebSocket Bridge.",
-    "parameters": "ObjectColor: RED, GREEN, BLUE, YELLOW, PURPLE.",
-    "returns": "void.",
-    "notes": "Mode WiFi gửi qua thuộc tính Color của Asset đã chọn. Mode Serial chỉ in COLOR:BLUE để Bridge chuyển qua WebSocket; không gọi IoT chưa cấu hình. Hai robot phải dùng cùng Asset ID hoặc cùng phòng Bridge. LeanbotIoT không tự trỏ tới máy chủ WebSocket của web.",
-    "code": "// Gửi tín hiệu màu sang robot đối tác qua WiFi hoặc Serial bridge.\nsend_real_robot_color(BLUE);",
-    "source": "baseCode.cpp"
-  },
-  {
-    "group": "helpers",
-    "api": "read_real_robot_color();",
-    "description": "Đọc tín hiệu màu nhận từ robot khác qua module WiFi hoặc Serial/WebSocket Bridge.",
-    "parameters": "Không có.",
-    "returns": "ObjectColor; UNKNOWN nếu chưa có dữ liệu mới.",
-    "notes": "Mode WiFi đọc thuộc tính Color của Asset. Mode Serial đọc COLOR:... từ Bridge; chưa có dữ liệu trả UNKNOWN, không đọc IoT khi chưa chọn mode WiFi.",
-    "code": "// Đọc tín hiệu màu từ robot đối tác.\nObjectColor received = read_real_robot_color();",
-    "source": "baseCode.cpp"
-  },
-  {
-    "group": "helpers",
-    "api": "wait_real_robot_color(BLUE, 30000UL);",
-    "description": "Đợi nhận đúng màu đích từ robot khác qua module WiFi hoặc Serial/WebSocket Bridge.",
-    "parameters": "expected: ObjectColor; timeoutMs: thời gian chờ tính bằng ms, mặc định 30000.",
-    "returns": "bool; true nếu nhận đúng màu trước hạn.",
-    "notes": "Kiểm tra tín hiệu qua module WiFi (LbIoT) hoặc Serial định kỳ; quá hạn báo lỗi ERR_IOT_TIMEOUT.",
-    "code": "// Đợi robot đối tác gửi tín hiệu màu BLUE qua WiFi.\nwait_real_robot_color(BLUE, 30000UL);",
     "source": "baseCode.cpp"
   },
   {
@@ -1174,31 +1074,11 @@ export const apiReference: ApiReference[] = [
   {
     "group": "helpers",
     "api": "read_color();",
-    "description": "Đọc màu khối bằng một lệnh, không cần khai báo biến.",
+    "description": "Đọc khối và trả trực tiếp màu nhận diện.",
     "parameters": "Không có.",
-    "returns": "bool: false khi lỗi cảm biến; true khi đọc đủ mẫu, kể cả khi kết quả là UNKNOWN.",
-    "notes": "Giữ nhận diện 5 mẫu/4 phiếu và mẫu hiệu chuẩn hiện tại. Tự in Serial, chỉ đổi LED khi có màu xác định. Lỗi hoặc chưa chắc chắn xóa màu lưu về UNKNOWN.",
-    "code": "read_color(); // Đọc và báo màu, không cần bool valid hay biến color",
-    "source": "baseCode.cpp"
-  },
-  {
-    "group": "helpers",
-    "api": "get_color();",
-    "description": "Lấy màu của lần đo gần nhất mà không đo lại.",
-    "parameters": "Không có.",
-    "returns": "ObjectColor; UNKNOWN nếu chưa đo, đo lỗi hoặc chưa chắc chắn.",
-    "notes": "Gọi read_color trước khi cần kết quả mới; không tự gửi IoT.",
-    "code": "read_color(); // Cập nhật một lần\nif (is_color(BLUE)) send_iot_color(get_color()); // Không khai báo biến",
-    "source": "baseCode.cpp"
-  },
-  {
-    "group": "helpers",
-    "api": "is_color(BLUE);",
-    "description": "Kiểm tra màu đã đo để rẽ nhánh mà không khai báo biến.",
-    "parameters": "ObjectColor mong đợi.",
-    "returns": "bool; UNKNOWN luôn trả false.",
-    "notes": "Chỉ kiểm tra kết quả đã lưu, không đọc cảm biến lần nữa.",
-    "code": "read_color();\nif (is_color(RED)) {\n  close_hand(GRIP_CLOSE_ANGLE); // Xử lý khi nhận diện được đỏ\n}",
+    "returns": "ObjectColor: RED, GREEN, BLUE, YELLOW, PURPLE hoặc UNKNOWN.",
+    "notes": "Tự khởi tạo APDS lần đầu, đo 5 mẫu và cần 4 phiếu đồng thuận. Lưu kết quả cho lần gửi mặc định; chỉ đổi LED khi biết màu. Lỗi cảm biến báo missionError, trả UNKNOWN.",
+    "code": "if (read_color() == BLUE) {\n  close_hand(90); // Xử lý khối xanh dương\n}\n// Hoặc chỉ gọi read_color(); để thông báo Serial/LED.",
     "source": "baseCode.cpp"
   },
   {

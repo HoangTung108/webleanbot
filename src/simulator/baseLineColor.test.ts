@@ -15,16 +15,16 @@ function run(body:string,samples:readonly (readonly [number,number,number])[],re
 it.each([
  ['RED',[200,20,10]],['YELLOW',[200,180,10]],['GREEN',[20,200,20]],['BLUE',[20,30,200]],['PURPLE',[140,20,180]],
 ] as const)('executes five-sample voting and caches %s without requiring caller variables',(color,rgb)=>{
- const r=run(`read_color();Serial.println(is_color(${color}));`,[rgb]);
+ const r=run(`Serial.println(read_color()==${color});`,[rgb]);
  expect(r.logs.some(log=>log.includes(`-> ${color}`))).toBe(true);expect(r.logs.at(-1)).toBe('true');expect(r.reads).toBe(15);expect(r.lights).toHaveLength(2);
 });
 it('rejects neutral samples and keeps the previous LED notification',()=>{
- const r=run('read_color();read_color();Serial.println(get_color());',Array.from({length:10},(_,i)=>i<5?[200,20,10] as const:[60,60,60] as const));
+ const r=run('read_color();Serial.println(read_color());',Array.from({length:10},(_,i)=>i<5?[200,20,10] as const:[60,60,60] as const));
  expect(r.logs.at(-1)).toBe('0');expect(r.lights).toHaveLength(2);expect(r.lights.at(-1)).toEqual([255,0,0]);
 });
 it('reports unavailable sensors and mismatched required colors',()=>{
- expect(run('read_color();Serial.println(get_color());',[],false).logs).toEqual(['MISSION ERROR: 8','0']);
- expect(run('requireColor(BLUE);',[[200,20,10]]).logs.at(-1)).toBe('MISSION ERROR: 9');
+ expect(run('Serial.println(read_color());',[],false).logs).toEqual(['MISSION ERROR: 8','0']);
+
 });
 it('uses the actual shared MyBlock core for all line wrappers',()=>{
  for(const name of ['followLineDistance','followLineCm','followLineSeconds','followLineUntilJunction'])expect(helpers).toContain(`void ${name}(`);

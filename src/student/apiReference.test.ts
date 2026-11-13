@@ -5,7 +5,7 @@ it('documents selected helpers that exist in baseCode', () => {
   const functions = [...baseCode.matchAll(/^(?:void|bool|int|float|ObjectColor) (\w+)\([^;\n]*\)\s*\{/gm)].map(match => match[1]).filter(name => !['setup', 'loop'].includes(name))
   const documented = new Set(apiReference.filter(row => row.group === 'helpers').map(row => row.api.split('(')[0]))
   for (const name of documented) expect(functions, name).toContain(name)
-  for (const name of ['read_color', 'get_color', 'is_color', 'send_iot_color']) {
+  for (const name of ['read_color', 'send_iot_color', 'read_iot_color']) {
     expect(documented.has(name), name).toBe(true)
   }
 })

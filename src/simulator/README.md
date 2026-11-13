@@ -348,7 +348,7 @@ Kiểm thử native C++ kiểm tra lưu cấu hình, thứ tự WiFi/Asset, đ�
 
 ### Dò line và kiểm tra màu trong base code
 
-Các hàm tương thích vẫn gồm `runFollowLine`, `followLineDistance`, `followLineUntilJunction`, `followLineMultipleJunctions`, `goToJunction`, `requireColor`. Hàm gọi đơn giản để đọc khối là `read_color()`; `get_color()` lấy màu đã đo, `is_color(RED)` kiểm tra cache. Không dùng mẫu RGB của giả lập để thay các mẫu hiệu chuẩn thực tế của từng khối.
+Các hàm line vẫn giữ nguyên. Luồng màu chỉ còn ba API: `read_color()` trả trực tiếp enum; `send_iot_color()` gửi màu vừa đo (hoặc truyền RED/GREEN/BLUE/YELLOW/PURPLE); `read_iot_color(timeoutMs=0)` đọc một lần hoặc chờ màu hợp lệ. UNKNOWN không được gửi; hết hạn nhận trả UNKNOWN. WiFi/Asset và Serial/WebSocket dùng chung ba API này, không có hàng chờ cục bộ hay các tên hàm màu tương thích cũ. Hiệu chuẩn cảm biến được giữ ở helper nội bộ; không dùng RGB giả lập làm mẫu cho robot thật.
 
 ### API dò line tinh gọn
 

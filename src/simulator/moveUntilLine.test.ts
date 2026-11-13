@@ -9,7 +9,7 @@ function run(visibleAt:number, distance=100){
  expect(runtime.running).toBe(false);expect([runtime.left,runtime.right]).toEqual([0,0]);return {logs,time:runtime.time}
 }
 it('stops immediately when already on black',()=>{expect(run(0).logs).toContain('0')})
-it('drives blind and stops when a sensor detects black',()=>{const result=run(500);expect(result.logs).toContain('0');expect(result.time).toBeGreaterThanOrEqual(500);expect(result.time).toBeLessThan(700)})
+it('drives blind and stops when a sensor detects black',()=>{const result=run(500);expect(result.logs).toContain('0');expect(result.time).toBeGreaterThanOrEqual(500);expect(result.time).toBeLessThan(750)})
 it('reports failure and stops if no line is found within the distance limit',()=>{const result=run(Infinity,1);expect(result.logs).toContain('6');expect(result.logs.some(v=>v.startsWith('MISSION ERROR:'))).toBe(true)})
 
 it('uses fresh origins after moving and turning, and on repeated searches',()=>{
@@ -61,4 +61,15 @@ it('zeros wheel commands on detection even when SDK stopAndWait has a braking de
  expect(runtime.distance-searchOrigin).toBeGreaterThanOrEqual(20)
  expect(runtime.distance-searchOrigin).toBeLessThan(20.3)
  expect([runtime.left,runtime.right]).toEqual([0,0])
+})
+
+it('waits for wheel feedback to settle before the next turn in the reported sequence',()=>{
+ let searching=false,searchOrigin=0,returned=false
+ const helpers=base.slice(0,base.indexOf('void setup()')).replaceAll('LbMotion.runLR(0, 0);','delayed_zero();')
+ const source=`bool zeroStarted=false;unsigned long zeroAt=0;
+ void delayed_zero(){if(!zeroStarted){zeroStarted=true;zeroAt=millis();}if(millis()-zeroAt>=250UL)LbMotion.runLR(0,0);}
+`+helpers+`void loop(){move_tank(-2000,-2000,3);turn_two_wheels(2000,30);Serial.println("SEARCH");moveUntilLine(1500);Serial.println("AFTER");turn_two_wheels(2000,45);LbMission.end();}`
+ const runtime:CppRuntime=new CppRuntime(source,{motors(){},advance(){},rawLine:()=>searching&&runtime.distance-searchOrigin>=20?[0,4095,0,0]:[0,0,0,0],log(v){if(v==='SEARCH'){searching=true;searchOrigin=runtime.distance}if(v==='AFTER'){returned=true;expect([runtime.left,runtime.right]).toEqual([0,0]);expect(runtime.time).toBeGreaterThan(400)}}})
+ runtime.start();for(let i=0;i<4000&&runtime.running;i++)runtime.tick(10)
+ expect(runtime.running).toBe(false);expect(returned).toBe(true)
 })
