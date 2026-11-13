@@ -1067,7 +1067,7 @@ export const apiReference: ApiReference[] = [
     "description": "Đọc khối và trả trực tiếp màu nhận diện.",
     "parameters": "Không có.",
     "returns": "ObjectColor: RED, GREEN, BLUE, YELLOW, PURPLE hoặc UNKNOWN.",
-    "notes": "Tự khởi tạo APDS lần đầu, đo 5 mẫu và cần 4 phiếu đồng thuận. Lưu kết quả cho lần gửi mặc định; chỉ đổi LED khi biết màu. Lỗi cảm biến báo missionError, trả UNKNOWN.",
+    "notes": "COLOR_DEBUG mặc định false để giảm flash; bật true khi cần log RGB. Tự khởi tạo APDS lần đầu, đo 5 mẫu và cần 4 phiếu đồng thuận. Lưu kết quả cho lần gửi mặc định; chỉ đổi LED khi biết màu. Lỗi cảm biến báo missionError, trả UNKNOWN.",
     "code": "if (read_color() == BLUE) {\n  close_hand(90); // Xử lý khối xanh dương\n}\n// Hoặc chỉ gọi read_color(); để thông báo Serial/LED.",
     "source": "baseCode.cpp"
   },

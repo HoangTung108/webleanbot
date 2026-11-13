@@ -32,3 +32,5 @@ Không còn get_color/is_color/requireColor, các alias send/read/wait_robot_col
 Kênh Asset Color chỉ chứa giá trị mới nhất, không phải hàng chờ. Hai lần đọc có thể trả cùng màu, không phân biệt được hai lần gửi cùng màu nếu không có giao thức mã lượt riêng. Thời hạn nhận được kiểm tra trước/sau lời gọi SDK; lời gọi SDK chặn có thể kéo dài thời gian thực tế.
 
 Ngưỡng, gain và mẫu hiệu chuẩn màu được giữ trong phần cấu hình/helper nội bộ của baseCode; logic nhận diện và LED không đổi. Không dùng mẫu RGB của giả lập để hiệu chuẩn khối thật.
+
+Để tiết kiệm flash, log RGB mặc định tắt (`COLOR_DEBUG = false`). Đổi thành true khi cần chẩn đoán; tên màu trả về và LED vẫn hoạt động khi tắt log.

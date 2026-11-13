@@ -16,3 +16,9 @@ Trước đây ứng dụng biên dịch như Uno (32256 byte), uploader cũng s
 Hãy biên dịch lại để lấy HEX mới. Nếu vẫn báo chương trình vượt 30720 byte, cần giảm dung lượng chương trình/thư viện trước khi nạp. Không sửa HEX bằng cách xóa phần cuối và không tắt verify. Code trong IDE hoặc firmware cũ đã tạo bằng Uno không tự nhỏ đi chỉ do đổi cấu hình uploader.
 
 Đã kiểm tra bằng bộ test uploader/compiler và compiler Cloud với chương trình trống; chưa nạp thử vào robot thật trong phiên này. Nếu HEX mới nằm dưới giới hạn nhưng vẫn lỗi ở địa chỉ khác, cần kiểm tra riêng kết nối/nguồn và bootloader, không kết luận rằng mọi lỗi verify đều do kích thước.
+
+## Khi chương trình vượt giới hạn vài trăm byte
+
+BaseCode mặc định `COLOR_DEBUG = false`: bỏ tổng hợp/in RGB và tên màu trên Serial trong bản nạp gọn; kết quả trả về, LED và IoT không đổi. Các thông báo hiệu chuẩn/reset đã được rút ngắn. Bật `COLOR_DEBUG = true` để chẩn đoán sẽ tăng lại dung lượng flash.
+
+Đo cục bộ phần đọc màu bằng AVR-GCC 7.3 `-Os`: object trước tối ưu có text 763 byte, sau tối ưu 350 byte (giảm 413 byte), chưa tính phần giảm thông báo ở các hàm khác. Đây là số đo riêng phần mã, không phải dung lượng firmware hoàn chỉnh liên kết với LeanbotCore dựng sẵn; cần biên dịch bằng đúng SDK để xác nhận tổng dưới 30720 byte.

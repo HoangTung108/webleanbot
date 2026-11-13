@@ -70,6 +70,7 @@ auto IoTColor = LbIoT.Asset.attribute(F("Color"));
 
 
 // Đọc và hiệu chuẩn màu
+const bool COLOR_DEBUG = false; // Bật khi cần xem RGB; tắt để tiết kiệm flash.
 const int COLOR_MIN_CHANNEL = 4;
 const float COLOR_MIN_SATURATION = 0.20f;
 const float COLOR_RED_YELLOW_HUE = 25.0f;
@@ -500,12 +501,11 @@ void calibrate_line() {
   wait_hand();
   resetMotionState();
   junctionPending = false;
-  Serial.println(F("Line calibration: use TB1A and follow SDK black/white steps."));
+  Serial.println(F("Line calibration: TB1A"));
   LbIRLine.doManualCalibration(TB1A);
   if (check_mission_reset()) return;
   measure_line_values();
   resetMotionState();
-  Serial.println(F("Line calibration returned. Check sensors on black and white."));
 }
 
 
@@ -1184,26 +1184,28 @@ ObjectColor read_color() {
       return UNKNOWN;
     }
     ++votes[(int)classifyColor(red, green, blue)];
-    totalRed += red; totalGreen += green; totalBlue += blue;
+    if (COLOR_DEBUG) { totalRed += red; totalGreen += green; totalBlue += blue; }
   }
   ObjectColor color = UNKNOWN;
   for (int candidate = RED; candidate <= PURPLE; ++candidate) {
     if (votes[candidate] >= 4) color = (ObjectColor)candidate;
   }
-  const int red = totalRed / 5;
-  const int green = totalGreen / 5;
-  const int blue = totalBlue / 5;
-  Serial.print(F("Color RGB: ")); Serial.print(red); Serial.print(' ');
-  Serial.print(green); Serial.print(' '); Serial.print(blue);
-  // Chỉ in số nguyên để không kéo bộ in float vào flash của Nano.
-  Serial.print(F(" -> "));
-  switch (color) {
-    case RED: Serial.println(F("RED")); break;
-    case GREEN: Serial.println(F("GREEN")); break;
-    case BLUE: Serial.println(F("BLUE")); break;
-    case YELLOW: Serial.println(F("YELLOW")); break;
-    case PURPLE: Serial.println(F("PURPLE")); break;
-    default: Serial.println(F("UNKNOWN / unstable")); break;
+  if (COLOR_DEBUG) {
+    const int red = totalRed / 5;
+    const int green = totalGreen / 5;
+    const int blue = totalBlue / 5;
+    Serial.print(F("Color RGB: ")); Serial.print(red); Serial.print(' ');
+    Serial.print(green); Serial.print(' '); Serial.print(blue);
+    // Chỉ in số nguyên để không kéo bộ in float vào flash của Nano.
+    Serial.print(F(" -> "));
+    switch (color) {
+      case RED: Serial.println(F("RED")); break;
+      case GREEN: Serial.println(F("GREEN")); break;
+      case BLUE: Serial.println(F("BLUE")); break;
+      case YELLOW: Serial.println(F("YELLOW")); break;
+      case PURPLE: Serial.println(F("PURPLE")); break;
+      default: Serial.println(F("UNKNOWN / unstable")); break;
+    }
   }
   lastMeasuredColor = color;
   if (color != UNKNOWN) {
@@ -1277,7 +1279,7 @@ void reset_mission() {
   lastMeasuredColor = UNKNOWN; resetMotionState();
   missionArmed = false; missionButtons = 8; missionButtonChangedAt = millis();
   LbRGB.fillColor(CRGB::Black); LbRGB.fillColor(CRGB::Green, BITMAP(ledA,ledB)); LbRGB.show();
-  Serial.println(F("MISSION RESET: release buttons, then press TB1B to run again."));
+  Serial.println(F("MISSION RESET: TB1B"));
 }
 
 static bool check_mission_reset() {
