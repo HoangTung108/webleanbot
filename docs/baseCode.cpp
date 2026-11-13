@@ -59,19 +59,15 @@ static ObjectColor classifyColor(int red, int green, int blue);
 ObjectColor lastMeasuredColor = UNKNOWN;
 // Ba API màu: đọc khối, gửi màu, nhận màu. UNKNOWN là chưa xác định/không có tín hiệu.
 ObjectColor read_color();
-void send_iot_color(ObjectColor color = lastMeasuredColor);
-ObjectColor read_iot_color(unsigned long timeoutMs = 0UL);
+void send_iot_color(ObjectColor color = lastMeasuredColor, uint8_t numberObject = 1);
+ObjectColor read_iot_color(unsigned long timeoutMs = 0UL, uint8_t numberObject = 1);
 void measure_line_values();
 void reset_mission();
 static bool check_mission_reset();
 
-auto IoTColor = LbIoT.Asset.attribute(F("Color"));
 
 
-// Đọc và hiệu chuẩn màu
-const bool LINE_DEBUG = false; // Bật để tự in ADC sau hiệu chuẩn; vẫn có measure_line_values().
-const bool COLOR_DEBUG = false; // Bật khi cần xem RGB; tắt để tiết kiệm flash.
-const bool IOT_DEBUG = true; // Bật để xem bước Asset/write; RETURNED không xác nhận server đã nhận.
+
 // Chờ một chu kỳ tích phân mới sau đổi LED; hiệu chỉnh nếu đổi ATIME của APDS.
 const unsigned long COLOR_EXPOSURE_MS = 35UL;
 const unsigned long COLOR_READY_TIMEOUT_MS = 850UL;
@@ -158,7 +154,8 @@ const float LBMB_FLL_MIN_FACTOR = 0.42f;
 enum ErrorCode {
   ERR_NONE = 0, ERR_INVALID_MOVE, ERR_MOVE_TIMEOUT, ERR_MOVE_STALL,
   ERR_TURN_TIMEOUT, ERR_TURN_STALL, ERR_LINE_LOST,
-  ERR_JUNCTION_TIMEOUT, ERR_COLOR_SENSOR, ERR_COLOR_MISMATCH, ERR_IOT_TIMEOUT, ERR_WIFI_CONFIG
+  ERR_JUNCTION_TIMEOUT, ERR_COLOR_SENSOR, ERR_COLOR_MISMATCH, ERR_IOT_TIMEOUT, ERR_WIFI_CONFIG,
+  ERR_IOT_ATTRIBUTE
 };
 
 ErrorCode missionError = ERR_NONE;
@@ -200,7 +197,7 @@ bool handBusy = false;
 
 void update_hand() {
   if (!handBusy) return;
-  const unsigned long elapsed = millis() - handStarted;
+  const signed long elapsed = millis() - handStarted;
   const long step = (long)(handTarget - handFrom) * (long)min(elapsed, (unsigned long)handDuration);
   const int angle = handFrom + (int)((step + (step >= 0 ? handDuration / 2 : -handDuration / 2)) / handDuration);
   if (angle != handAngle) {
@@ -470,11 +467,7 @@ void set_wifi() {
     failMission(ERR_WIFI_CONFIG); return;
   }
   LbIoT.Wifi.begin(wifiSsid.c_str(), wifiPassword.c_str());
-  if (IOT_DEBUG) {
-    Serial.print(F("IOT: Asset.begin START, ID=")); Serial.println(wifiAssetId);
-  }
   LbIoT.Asset.begin(wifiAssetId);
-  if (IOT_DEBUG) Serial.println(F("IOT: Asset.begin RETURNED (not an online confirmation)"));
   iotConfigured = true;
 }
 
@@ -509,10 +502,8 @@ void calibrate_line() {
   wait_hand();
   resetMotionState();
   junctionPending = false;
-  if (LINE_DEBUG) Serial.println(F("Line calibration: TB1A"));
   LbIRLine.doManualCalibration(TB1A);
   if (check_mission_reset()) return;
-  if (LINE_DEBUG) measure_line_values();
   resetMotionState();
 }
 
@@ -1184,7 +1175,6 @@ ObjectColor read_color() {
     }
     ++sampleCount;
     ++votes[(int)classifyColor(red, green, blue)];
-    if (COLOR_DEBUG) { totalRed += red; totalGreen += green; totalBlue += blue; }
     int bestVotes = 0;
     for (int candidate = RED; candidate <= PURPLE; ++candidate) {
       bestVotes = max(bestVotes, votes[candidate]);
@@ -1193,23 +1183,6 @@ ObjectColor read_color() {
     if (color != UNKNOWN || bestVotes + (5 - sampleCount) < 4) break;
   }
   LbRGB.setBrightness(originalBrightness);
-  if (COLOR_DEBUG) {
-    const int red = totalRed / sampleCount;
-    const int green = totalGreen / sampleCount;
-    const int blue = totalBlue / sampleCount;
-    Serial.print(F("Color RGB: ")); Serial.print(red); Serial.print(' ');
-    Serial.print(green); Serial.print(' '); Serial.print(blue);
-    // Chỉ in số nguyên để không kéo bộ in float vào flash của Nano.
-    Serial.print(F(" -> "));
-    switch (color) {
-      case RED: Serial.println(F("RED")); break;
-      case GREEN: Serial.println(F("GREEN")); break;
-      case BLUE: Serial.println(F("BLUE")); break;
-      case YELLOW: Serial.println(F("YELLOW")); break;
-      case PURPLE: Serial.println(F("PURPLE")); break;
-      default: Serial.println(F("UNKNOWN / unstable")); break;
-    }
-  }
   lastMeasuredColor = color;
   {
     const CRGB colors[6] = {CRGB(0, 0, 0), CRGB(255, 0, 0), CRGB(0, 255, 0),
@@ -1243,24 +1216,39 @@ static ObjectColor parseColorSignal(String signal) {
   return UNKNOWN;
 }
 
-void send_iot_color(ObjectColor color) {
+static const __FlashStringHelper* colorAttribute(uint8_t numberObject) {
+  switch (numberObject) {
+    case 1: return F("Color1");
+    case 2: return F("Color2");
+    case 3: return F("Color3");
+    case 4: return F("Color4");
+    case 5: return F("Color5");
+    case 6: return F("Color6");
+    case 7: return F("Color7");
+    default: return nullptr;
+  }
+}
+
+void send_iot_color(ObjectColor color, uint8_t numberObject) {
   if (check_mission_reset()) {
-    if (IOT_DEBUG) Serial.println(F("IOT: send skipped, mission reset"));
     return;
   }
   if (color < RED || color > PURPLE) {
-    if (IOT_DEBUG) Serial.println(F("IOT: send skipped, UNKNOWN/invalid color"));
     return;
   }
   if (!iotConfigured) { failMission(ERR_WIFI_CONFIG); return; }
-  if (IOT_DEBUG) { Serial.print(F("IOT: Color.write START, value=")); Serial.println(colorSignal(color)); }
+  const __FlashStringHelper* attributeName = colorAttribute(numberObject);
+  if (attributeName == nullptr) { failMission(ERR_IOT_ATTRIBUTE); return; }
+  auto IoTColor = LbIoT.Asset.attribute(attributeName);
   IoTColor.write(colorSignal(color));
-  if (IOT_DEBUG) Serial.println(F("IOT: Color.write RETURNED (not a delivery confirmation)"));
 }
 
-ObjectColor read_iot_color(unsigned long timeoutMs) {
+ObjectColor read_iot_color(unsigned long timeoutMs, uint8_t numberObject) {
   if (check_mission_reset()) return UNKNOWN;
   if (!iotConfigured) { failMission(ERR_WIFI_CONFIG); return UNKNOWN; }
+  const __FlashStringHelper* attributeName = colorAttribute(numberObject);
+  if (attributeName == nullptr) { failMission(ERR_IOT_ATTRIBUTE); return UNKNOWN; }
+  auto IoTColor = LbIoT.Asset.attribute(attributeName);
   const unsigned long started = millis();
   while (true) {
     if (check_mission_reset()) return UNKNOWN;
@@ -1343,8 +1331,12 @@ void FullMission() {
     LbRGB.show();
     // Chạy bài: đặt các lệnh nhiệm vụ tại đây.
     // Ví dụ: followLineCm(100, 100); // Tốc độ dò line tính bằng %.
-    // Robot gửi: ghi Blue vào thuộc tính Color của Asset đã cấu hình trong setup().
-    send_iot_color(BLUE);
+    // Gửi các mẫu màu vào Color1-Color5 của Asset đã cấu hình trong setup().
+    send_iot_color(BLUE,1);
+    send_iot_color(RED,2);
+    send_iot_color(YELLOW,3);
+    send_iot_color(PURPLE,4);
+    send_iot_color(GREEN,5);
     // Robot nhận dùng read_iot_color(...) trong chương trình riêng.
   } 
   else if (buttons == 4) // Nút TB2A: kết nối Internet
@@ -1370,7 +1362,7 @@ void setup() {
   // Điền WiFi và cùng Asset ID trên cả hai robot; TB2A thực hiện kết nối.
   // SSID trống: báo ERR_WIFI_CONFIG, không thử kết nối nhầm mạng.
   // declare_wifi("", "", F("AssetID"));
-  set_wifi("Minh Châu", "13144838", F("7k6cEX9rOCpYcJ2ZlBTDXo"));
+  set_wifi("", "", F("7k6cEX9rOCpYcJ2ZlBTDXo"));
   showReadyLED();
 //   set_line(IR_TH_2L, IR_TH_0L, IR_TH_1R, IR_TH_3R); // Ngưỡng dự phòng.
 }

@@ -1,10 +1,11 @@
 import {expect,it} from 'vitest'
 import base from '../../docs/baseCode.cpp?raw'
 import {CppRuntime} from './cppRuntime'
-const helpers=base.slice(0,base.indexOf('void setup()'))
+const helpers=base.slice(0,base.indexOf('void setup()')).replace('const bool IOT_DEBUG = true;','const bool IOT_DEBUG = false;')
 function run(body:string,incoming:(time:number)=>string=()=> 'waiting'){
  const logs:string[]=[],writes:string[]=[]
- const runtime:CppRuntime=new CppRuntime(`${helpers}void loop(){set_wifi("test","pass",F("ROOM"));${body}LbMission.end();}`,{motors(){},advance(){},color:()=>[200,20,10],iotRead:()=>incoming(runtime.time),iotWrite:(_key,value)=>writes.push(value),log:v=>logs.push(v)})
+ let currentValue:string|undefined
+ const runtime:CppRuntime=new CppRuntime(`${helpers}void loop(){set_wifi("test","pass",F("ROOM"));${body}LbMission.end();}`,{motors(){},advance(){},color:()=>[200,20,10],iotRead:()=>currentValue??incoming(runtime.time),iotWrite:(_key,value)=>{writes.push(value);currentValue=value},log:v=>logs.push(v)})
  runtime.start();for(let i=0;i<1000&&runtime.running;i++)runtime.tick(10)
  expect(runtime.running).toBe(false);return {logs:logs.filter(v=>!v.startsWith("IoT giả lập:")),writes,time:runtime.time}
 }

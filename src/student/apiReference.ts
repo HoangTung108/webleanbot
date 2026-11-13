@@ -1005,20 +1005,20 @@ export const apiReference: ApiReference[] = [
     "group": "helpers",
     "api": "send_iot_color();",
     "description": "Gửi màu chỉ định hoặc màu khối vừa đo.",
-    "parameters": "ObjectColor tùy chọn, mặc định là kết quả read_color gần nhất.",
+    "parameters": "ObjectColor tùy chọn, mặc định là kết quả read_color gần nhất; numberObject tùy chọn trong khoảng 1-5, mặc định 1 để ghi thuộc tính Color1.",
     "returns": "void.",
-    "notes": "Chỉ ghi thuộc tính Color qua LeanbotIoT. Cần set_wifi với SSID và AssetID; thiếu cấu hình báo ERR_WIFI_CONFIG. UNKNOWN không gửi. Không đọc cảm biến lần nữa.",
-    "code": "read_color(); // Đọc khối một lần\nsend_iot_color(); // Gửi kết quả vừa đọc\n// Hoặc gửi chủ động:\nsend_iot_color(BLUE);",
+    "notes": "Ghi thuộc tính Color1-Color5 qua LeanbotIoT. Cần set_wifi với SSID và AssetID; thiếu cấu hình báo ERR_WIFI_CONFIG. Chỉ hỗ trợ numberObject 1-5; giá trị ngoài khoảng báo ERR_IOT_ATTRIBUTE. UNKNOWN không gửi. Không đọc cảm biến lần nữa.",
+    "code": "read_color(); // Đọc khối một lần\nsend_iot_color(); // Gửi kết quả vừa đọc vào Color1\n// Hoặc ghi Color2:\nsend_iot_color(BLUE, 2);",
     "source": "baseCode.cpp"
   },
   {
     "group": "helpers",
-    "api": "read_iot_color(timeoutMs = 0);",
+    "api": "read_iot_color(timeoutMs = 0, numberObject = 1);",
     "description": "Đọc tín hiệu màu từ robot đối tác.",
-    "parameters": "timeoutMs: 0 đọc một lần; >0 đợi màu hợp lệ tối đa số mili giây.",
+    "parameters": "timeoutMs: 0 đọc một lần; >0 đợi màu hợp lệ tối đa số mili giây. numberObject chọn thuộc tính Color1-Color5, mặc định 1.",
     "returns": "ObjectColor, UNKNOWN khi chưa có màu, hết hạn hoặc TB2B reset.",
-    "notes": "Chỉ đọc thuộc tính Color qua LeanbotIoT sau set_wifi với AssetID. Thiếu cấu hình báo ERR_WIFI_CONFIG và trả UNKNOWN. Kênh lưu giá trị cuối, không phải hàng chờ; đọc lại có thể nhận cùng màu.",
-    "code": "if (read_iot_color(30000UL) == BLUE) {\n  close_hand(90); // Chờ tối đa 30 giây rồi xử lý màu nhận\n}",
+    "notes": "Chỉ đọc thuộc tính Color1-Color5 qua LeanbotIoT sau set_wifi với AssetID; dùng cùng numberObject trên robot gửi và nhận. Thiếu cấu hình báo ERR_WIFI_CONFIG và trả UNKNOWN. Giá trị ngoài khoảng 1-5 báo ERR_IOT_ATTRIBUTE. Kênh lưu giá trị cuối, không phải hàng chờ; đọc lại có thể nhận cùng màu.",
+    "code": "if (read_iot_color(30000UL, 2) == BLUE) {\n  close_hand(90); // Chờ tối đa 30 giây rồi xử lý màu nhận từ Color2\n}",
     "source": "baseCode.cpp"
   },
   {
