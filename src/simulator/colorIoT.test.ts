@@ -28,3 +28,13 @@ it('offers exactly three public color workflow functions',()=>{
  const names=[...base.matchAll(/^(?:void|bool|ObjectColor|int) (\w*color\w*)\([^;\n]*\)\s*\{/gm)].map(m=>m[1])
  expect(names.sort()).toEqual(['read_color','read_iot_color','send_iot_color'])
 })
+
+it('requires both SSID and AssetID and never emits COLOR frames as fallback',()=>{
+ for(const config of ['set_wifi("test","pass");','set_wifi("","pass",F("ROOM"));']){
+  let networkCalls=0;const logs:string[]=[]
+  const runtime=new CppRuntime(`${helpers}void loop(){${config}send_iot_color(RED);Serial.println(read_iot_color());LbMission.end();}`,{motors(){},advance(){},iotRead(){networkCalls++;return 'Blue'},iotWrite(){networkCalls++},log:v=>logs.push(v)})
+  runtime.start();for(let i=0;i<100&&runtime.running;i++)runtime.tick(10)
+  expect(runtime.running).toBe(false);expect(networkCalls).toBe(0);expect(logs).toContain('MISSION ERROR: 11');expect(logs.some(v=>v.startsWith('COLOR:'))).toBe(false)
+ }
+ expect(base).not.toContain('Serial.readStringUntil');expect(base).not.toContain('connect_robot_room');
+})

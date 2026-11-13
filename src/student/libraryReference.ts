@@ -8,7 +8,7 @@ const primaryCommands = new Set([
   'declare_wifi', 'set_wifi', 'set_line', 'measure_line', 'calibrate_line',
   'followLineCm', 'followLineSeconds', 'followLineUntilJunction',
   'followLineMultipleJunctions', 'goToJunction',
-  'read_color', 'send_iot_color', 'read_iot_color', 'connect_robot_room',
+  'read_color', 'send_iot_color', 'read_iot_color',
 ])
 
 export const libraryReference = apiReference.filter(row =>

@@ -81,7 +81,7 @@ it('clears the previous error at the start of a deliberately requested new run',
   expect(logs.filter(log => log === '0')).toHaveLength(2)
 })
 
-it('exchanges color signals in WiFi mode (no USB) via connect_robot_room and send/wait_real_robot_color', () => {
+it('exchanges color signals in WiFi mode (no USB) through the Color attribute', () => {
   const iotWrites: Array<{ attribute: string; value: string; assetId: string }> = []
   let incomingColor = 'waiting'
   const logs: string[] = []
@@ -89,7 +89,6 @@ it('exchanges color signals in WiFi mode (no USB) via connect_robot_room and sen
   const runtime: CppRuntime = new CppRuntime(`${source}
     void loop() {
       set_wifi("LeanbotWiFi", "12345678", F("ROOM99"));
-      connect_robot_room(F("ROOM99"));
       send_iot_color(BLUE);
       bool ok = (read_iot_color(500UL) == GREEN);
       Serial.println(ok);
@@ -123,12 +122,12 @@ it('uses the configured Asset ID when TB2A starts WiFi',()=>{
  expect(runtime.running).toBe(false);expect(writes).toEqual([{attribute:'Color',value:'Blue',assetId:'TEAM42'}]);
 });
 
-it('keeps Serial Bridge traffic off the unconfigured IoT transport',()=>{
+it('rejects unconfigured IoT without falling back to Serial Bridge',()=>{
  let calls=0;const logs:string[]=[];
  const helpers=base.slice(0,base.indexOf('// Chỉ nhận lượt mới'));
  const runtime=new CppRuntime(`${helpers}void loop(){send_iot_color(BLUE);Serial.println(read_iot_color());LbMission.end();}`,{
   motors(){},advance(){},log:m=>logs.push(m),iotRead(){calls++;return 'Red';},iotWrite(){calls++;},
- });runtime.start();runtime.tick(1);expect(calls).toBe(0);expect(logs).toEqual(['COLOR:BLUE','0']);
+ });runtime.start();runtime.tick(1);expect(calls).toBe(0);expect(logs).toEqual(['MISSION ERROR: 11','MISSION ERROR: 11','0']);
 });
 
 
@@ -139,7 +138,7 @@ it('reports SDK ADC and mask after SDK calibration', () => {
 
 it('TB2B cancels blocking helpers and requires a fresh start', () => {
   const logs = run(t => t >= 100 && t < 200 ? 2 : t >= 350 && t < 700 ? 8 : t >= 1100 && t < 1200 ? 2 : 0,
-    2500, 'robot_delay(600); send_iot_color(RED);')
+    2500, 'set_wifi("test","pass",F("ROOM")); robot_delay(600); send_iot_color(RED);')
   expect(logs.filter(log => log === 'RUN')).toHaveLength(2)
   expect(logs.filter(log => log.startsWith('MISSION RESET:'))).toHaveLength(1)
   expect(logs.slice(-5)).toEqual(['0', 'false', 'false', 'false', 'false'])

@@ -28,18 +28,15 @@ int main(){
  String ssid="Test SSID",password="test-password";
  declare_wifi(ssid,password,F("asset-test"));ssid="changed";password="changed";
  assert(LbIoT.Wifi.calls==0);set_wifi();
- assert(LbIoT.Wifi.ssid=="Test SSID");assert(LbIoT.Wifi.password=="test-password");assert(LbIoT.Asset.id=="asset-test");assert(wifiColorMode);assert(events[0]=="wifi"&&events[1]=="asset");
- set_wifi("Open Network", "");assert(LbIoT.Wifi.calls==2);assert(LbIoT.Wifi.password.empty());assert(LbIoT.Asset.calls==1);assert(!wifiColorMode);
- set_wifi("Second Network","second-password",F("second-asset"));assert(LbIoT.Wifi.calls==3);assert(LbIoT.Asset.calls==2);assert(LbIoT.Asset.id=="second-asset");
- set_wifi("","password",F("asset"));assert(failures==2);assert(LbIoT.Wifi.calls==3);assert(!wifiColorMode&&!wifiBeginCalled);
- declare_wifi("Deferred", "");connect_robot_room(F("deferred-asset"));
- assert(!wifiColorMode&&LbIoT.Asset.calls==2);set_wifi();
- assert(wifiColorMode&&LbIoT.Asset.id=="deferred-asset");
+ assert(LbIoT.Wifi.ssid=="Test SSID");assert(LbIoT.Wifi.password=="test-password");assert(LbIoT.Asset.id=="asset-test");assert(iotConfigured);assert(events[0]=="wifi"&&events[1]=="asset");
+ set_wifi("Open Network", "", F("open-asset"));assert(LbIoT.Wifi.calls==2);assert(LbIoT.Wifi.password.empty());assert(LbIoT.Asset.calls==2);assert(iotConfigured);
+ set_wifi("Second Network","second-password",F("second-asset"));assert(LbIoT.Wifi.calls==3);assert(LbIoT.Asset.calls==3);assert(LbIoT.Asset.id=="second-asset");
+ set_wifi("","password",F("asset"));assert(failures==2);assert(LbIoT.Wifi.calls==3);assert(!iotConfigured);
+ set_wifi("No asset", "");assert(failures==3);assert(LbIoT.Wifi.calls==3);assert(!iotConfigured);
+ declare_wifi("Deferred", "", F("deferred-asset"));
+ assert(!iotConfigured&&LbIoT.Asset.calls==3);set_wifi();
+ assert(iotConfigured&&LbIoT.Asset.id=="deferred-asset");
  assert(events[events.size()-2]=="wifi"&&events.back()=="asset");
- connect_robot_room(F("switched-asset"));assert(wifiColorMode&&LbIoT.Asset.id=="switched-asset");
- declare_wifi("No asset", "");assert(!wifiColorMode);set_wifi();assert(!wifiColorMode);
- use_wifi_color_mode();assert(failures==3&&!wifiColorMode);
- connect_robot_room(nullptr);assert(failures==4&&!wifiColorMode);
 }
 `;
   const input=join(dir,'wifi.cpp'),binary=join(dir,'wifi');writeFileSync(input,source);

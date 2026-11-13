@@ -1,6 +1,6 @@
 # Ba hàm màu của baseCode
 
-Cấu hình WiFi và AssetID như trước (`set_wifi(...)` hoặc TB2A). Cả hai robot dùng cùng AssetID và thuộc tính Color. Khi chưa chọn kênh WiFi/Asset, các hàm gửi/nhận dùng giao thức `COLOR:` qua Serial/WebSocket Bridge.
+Cấu hình WiFi và AssetID như trước (`set_wifi(...)` hoặc TB2A). Cả hai robot dùng cùng AssetID và thuộc tính Color. Gửi/nhận chỉ dùng LeanbotIoT: `Wifi.begin` → `Asset.begin` → thuộc tính `Color`. Không có giao tiếp màu qua Serial/WebSocket; Serial chỉ dùng log chẩn đoán. Thiếu SSID hoặc AssetID báo ERR_WIFI_CONFIG.
 
 ```cpp
 // Robot gửi: một lần đo, một lần gửi; không cần biến màu.

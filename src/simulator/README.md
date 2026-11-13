@@ -326,29 +326,27 @@ Base code và code sinh từ lộ trình không dùng cờ `missionOK`. Các tha
 
 Các hàm thao tác trong base code dùng `void`. Hàm tính toán (`clampMotor`, `lineErrorForMask`...), đọc màu và chờ nhận dữ liệu IoT vẫn trả về dữ liệu/trạng thái cần thiết.
 
-Cấu hình được sao chép vào các `String` riêng, sau đó gọi API `LbIoT.Wifi.begin` và, khi có Asset ID, `LbIoT.Asset.begin`:
+Cấu hình được sao chép vào các `String` riêng, sau đó gọi API `LbIoT.Wifi.begin` rồi `LbIoT.Asset.begin`; phải khai báo SSID và AssetID:
 
 ```cpp
 declare_wifi("TEN_WIFI", "MAT_KHAU", F("ASSET_ID"));
 set_wifi();
 // Hoặc gộp cả hai bước:
 set_wifi("TEN_WIFI", "MAT_KHAU", F("ASSET_ID"));
-// Chỉ kết nối Wi-Fi, chưa khởi tạo asset:
-set_wifi("TEN_WIFI", "MAT_KHAU");
 ```
 
-Base hiện tại gọi `declare_wifi("", "", F("AssetID"))` trong `setup()`. Điền SSID, mật khẩu và Asset ID thật tại dòng này trên cả hai robot. Nhấn TB2A để gọi `set_wifi()` theo thứ tự `LbIoT.Wifi.begin` → `LbIoT.Asset.begin` → bật mode IoT. Muốn kết nối ngay lúc khởi động, gọi `set_wifi()` sau phần khai báo. SSID trống báo lỗi, không thử kết nối; mật khẩu trống vẫn dùng được cho mạng mở.
+Base hiện tại gọi `declare_wifi("", "", F("AssetID"))` trong `setup()`. Điền SSID, mật khẩu và Asset ID thật tại dòng này trên cả hai robot. Nhấn TB2A để gọi `set_wifi()` theo thứ tự `LbIoT.Wifi.begin` → `LbIoT.Asset.begin` → cho phép gửi/nhận Color. Muốn kết nối ngay lúc khởi động, gọi `set_wifi()` sau phần khai báo. SSID trống hoặc thiếu AssetID báo lỗi, không thử kết nối; mật khẩu trống vẫn dùng được cho mạng mở.
 
-`connect_robot_room(F("AssetID"))` giữ tên cũ nhưng chọn Asset của LeanbotIoT. Chọn trước khi gọi helper `set_wifi()` sẽ lưu ID và hoãn `Asset.begin` đến sau `Wifi.begin`; chọn sau đó sẽ đổi Asset ngay. Khai báo WiFi mới xóa mode cũ. `wifiBeginCalled` chỉ ghi nhận lời gọi API, không chứng minh robot đã online.
+Không còn `connect_robot_room` hay lựa chọn mode giao tiếp. Khi cần đổi AssetID, gọi lại `set_wifi("SSID", "password", F("NEW_ASSET"))`. Khai báo lại WiFi sẽ xóa cờ cấu hình IoT cũ. `iotConfigured` chỉ ghi nhận đã gọi hai API SDK, không chứng minh robot đã online.
 
-Hai robot dùng cùng Asset ID và thuộc tính `Color` để trao đổi qua dịch vụ LeanbotIoT. WebSocket của web là luồng riêng: Bridge USB/Serial chuyển các dòng `COLOR:BLUE` giữa robot và phòng WebSocket. Trong mode Serial, base không gọi mạng IoT. Backend còn có `/api/iot/attribute` và chế độ WebSocket `?mode=wifi`, nhưng module/gateway cần được cấu hình trỏ tới những endpoint đó; chỉ gọi `Asset.begin` không chứng minh SDK đang sử dụng máy chủ web này.
+Hai robot dùng cùng Asset ID và thuộc tính `Color` để trao đổi qua dịch vụ LeanbotIoT. Base không gửi khung `COLOR:` qua Serial, không đọc Serial để nhận màu và không kết nối WebSocket. Serial chỉ dùng cho log.
 
-Kiểm thử native C++ kiểm tra lưu cấu hình, thứ tự WiFi/Asset, đổi Asset và cấu hình thiếu. Kiểm thử server dùng hai WebSocket client trên localhost; chưa kiểm chứng kết nối Internet với hai bo Leanbot thật.
+Kiểm thử native C++ kiểm tra lưu cấu hình, thứ tự WiFi/Asset và cấu hình thiếu; giả lập kiểm tra thuộc tính Color. Chưa kiểm chứng kết nối Internet với hai bo Leanbot thật.
 
 
 ### Dò line và kiểm tra màu trong base code
 
-Các hàm line vẫn giữ nguyên. Luồng màu chỉ còn ba API: `read_color()` trả trực tiếp enum; `send_iot_color()` gửi màu vừa đo (hoặc truyền RED/GREEN/BLUE/YELLOW/PURPLE); `read_iot_color(timeoutMs=0)` đọc một lần hoặc chờ màu hợp lệ. UNKNOWN không được gửi; hết hạn nhận trả UNKNOWN. WiFi/Asset và Serial/WebSocket dùng chung ba API này, không có hàng chờ cục bộ hay các tên hàm màu tương thích cũ. Hiệu chuẩn cảm biến được giữ ở helper nội bộ; không dùng RGB giả lập làm mẫu cho robot thật.
+Các hàm line vẫn giữ nguyên. Luồng màu chỉ còn ba API: `read_color()` trả trực tiếp enum; `send_iot_color()` gửi màu vừa đo (hoặc truyền RED/GREEN/BLUE/YELLOW/PURPLE); `read_iot_color(timeoutMs=0)` đọc một lần hoặc chờ màu hợp lệ. UNKNOWN không được gửi; hết hạn nhận trả UNKNOWN. Chỉ WiFi/Asset qua LeanbotIoT dùng ba API này; Serial dành cho log, không có giao tiếp màu qua WebSocket, không có hàng chờ cục bộ hay các tên hàm màu tương thích cũ. Hiệu chuẩn cảm biến được giữ ở helper nội bộ; không dùng RGB giả lập làm mẫu cho robot thật.
 
 ### API dò line tinh gọn
 

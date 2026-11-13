@@ -905,9 +905,9 @@ export const apiReference: ApiReference[] = [
     "group": "helpers",
     "api": "set_wifi();",
     "description": "Kết nối theo cấu hình đã khai báo.",
-    "parameters": "Không có nếu đã gọi declare_wifi; hoặc truyền SSID, mật khẩu và Asset ID tùy chọn.",
+    "parameters": "Không có nếu đã gọi declare_wifi đủ SSID/AssetID; hoặc truyền SSID, mật khẩu và AssetID. AssetID bắt buộc để trao đổi màu.",
     "returns": "void.",
-    "notes": "Thứ tự Wifi.begin → Asset.begin (nếu có Asset ID) → bật giao tiếp màu IoT. SSID trống ghi ERR_WIFI_CONFIG. Khai báo lại WiFi xóa chế độ IoT cũ. Trong base hiện tại, setup lưu cấu hình và TB2A gọi set_wifi(). Chưa xác nhận mạng online chỉ từ cờ cấu hình.",
+    "notes": "Gọi LbIoT.Wifi.begin(SSID, password), rồi LbIoT.Asset.begin(assetId). SSID hoặc AssetID chưa khai báo báo ERR_WIFI_CONFIG. Không kết nối WebSocket. Cờ iotConfigured chỉ ghi nhận đã gọi cấu hình SDK, không xác nhận online.",
     "code": "// Điền cấu hình trong setup sau Leanbot.begin():\ndeclare_wifi(\"TenWifi\", \"MatKhau\", F(\"AssetID_CHUNG\"));\n// TB2A trong FullMission gọi set_wifi();\n// Hoặc kết nối ngay: set_wifi(\"TenWifi\", \"MatKhau\", F(\"AssetID_CHUNG\"));",
     "source": "baseCode.cpp"
   },
@@ -1007,7 +1007,7 @@ export const apiReference: ApiReference[] = [
     "description": "Gửi màu chỉ định hoặc màu khối vừa đo.",
     "parameters": "ObjectColor tùy chọn, mặc định là kết quả read_color gần nhất.",
     "returns": "void.",
-    "notes": "Không gửi UNKNOWN hoặc enum ngoài phạm vi. WiFi/AssetID đã chọn: ghi thuộc tính Color; chưa chọn WiFi: COLOR: qua Serial/WebSocket Bridge. Không đo khối lần nữa.",
+    "notes": "Chỉ ghi thuộc tính Color qua LeanbotIoT. Cần set_wifi với SSID và AssetID; thiếu cấu hình báo ERR_WIFI_CONFIG. UNKNOWN không gửi. Không đọc cảm biến lần nữa.",
     "code": "read_color(); // Đọc khối một lần\nsend_iot_color(); // Gửi kết quả vừa đọc\n// Hoặc gửi chủ động:\nsend_iot_color(BLUE);",
     "source": "baseCode.cpp"
   },
@@ -1017,18 +1017,8 @@ export const apiReference: ApiReference[] = [
     "description": "Đọc tín hiệu màu từ robot đối tác.",
     "parameters": "timeoutMs: 0 đọc một lần; >0 đợi màu hợp lệ tối đa số mili giây.",
     "returns": "ObjectColor, UNKNOWN khi chưa có màu, hết hạn hoặc TB2B reset.",
-    "notes": "Dùng cùng transport với send_iot_color. Không tạo hàng chờ; thuộc tính IoT chỉ chứa giá trị mới nhất, đọc nhiều lần có thể trả cùng màu. Không bảo đảm phân biệt hai lần gửi cùng màu.",
+    "notes": "Chỉ đọc thuộc tính Color qua LeanbotIoT sau set_wifi với AssetID. Thiếu cấu hình báo ERR_WIFI_CONFIG và trả UNKNOWN. Kênh lưu giá trị cuối, không phải hàng chờ; đọc lại có thể nhận cùng màu.",
     "code": "if (read_iot_color(30000UL) == BLUE) {\n  close_hand(90); // Chờ tối đa 30 giây rồi xử lý màu nhận\n}",
-    "source": "baseCode.cpp"
-  },
-  {
-    "group": "helpers",
-    "api": "connect_robot_room(F(\"ROOM_ID\"));",
-    "description": "Chọn Asset ID trao đổi màu; giữ tên hàm cũ để tương thích.",
-    "parameters": "Asset ID dạng flash F(\"AssetID_CHUNG\"). nullptr báo ERR_WIFI_CONFIG.",
-    "returns": "void.",
-    "notes": "Nếu helper chưa gọi Wifi.begin, lưu Asset ID chờ set_wifi(). Nếu đã gọi, thực hiện Asset.begin và bật mode IoT. Asset ID của LeanbotIoT không tự cấu hình kết nối tới WebSocket server web. Để ghép với web cần Bridge Serial hoặc gateway dùng /api/iot/attribute theo cấu hình module.",
-    "code": "// Khai báo trước, chọn Asset rồi bấm TB2A để kết nối.\ndeclare_wifi(\"TenWifi\", \"MatKhau\");\nconnect_robot_room(F(\"AssetID_CHUNG\"));\n// Hoặc gọi set_wifi() ngay tại đây.",
     "source": "baseCode.cpp"
   },
   {

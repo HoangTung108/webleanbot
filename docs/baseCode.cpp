@@ -62,7 +62,6 @@ ObjectColor lastMeasuredColor = UNKNOWN;
 ObjectColor read_color();
 void send_iot_color(ObjectColor color = lastMeasuredColor);
 ObjectColor read_iot_color(unsigned long timeoutMs = 0UL);
-void connect_robot_room(const __FlashStringHelper *assetId);
 void measure_line_values();
 void reset_mission();
 static bool check_mission_reset();
@@ -450,38 +449,24 @@ void moveUntilLine(int speed = 600, float maxDistanceCm = 100.0f) {
 String wifiSsid;
 String wifiPassword;
 const __FlashStringHelper *wifiAssetId = nullptr;
-bool wifiColorMode = false;
-// Chỉ ghi nhận đã gọi Wifi.begin(), không phải trạng thái online của phần cứng.
-bool wifiBeginCalled = false;
-
-// Tên hàm giữ tương thích; tham số là Asset ID của LeanbotIoT.
-// Nếu chưa gọi set_wifi(), lưu Asset ID và chọn sau khi Wifi.begin().
-void connect_robot_room(const __FlashStringHelper *assetId) {
-  if (assetId == nullptr) { failMission(ERR_WIFI_CONFIG); return; }
-  wifiAssetId = assetId;
-  if (wifiBeginCalled) {
-    LbIoT.Asset.begin(wifiAssetId);
-    wifiColorMode = true;
-  }
-}
+// Cờ cấu hình SDK, không phải xác nhận trạng thái online từ phần cứng.
+bool iotConfigured = false;
 
 void declare_wifi(const String &ssid, const String &password, const __FlashStringHelper *assetId = nullptr) {
   wifiSsid = ssid;
   wifiPassword = password;
   wifiAssetId = assetId;
-  wifiBeginCalled = false;
-  wifiColorMode = false;
+  iotConfigured = false;
 }
 
 void set_wifi() {
-  wifiBeginCalled = false;
-  wifiColorMode = false;
-  if (wifiSsid.length() == 0) {
+  iotConfigured = false;
+  if (wifiSsid.length() == 0 || wifiAssetId == nullptr) {
     failMission(ERR_WIFI_CONFIG); return;
   }
   LbIoT.Wifi.begin(wifiSsid.c_str(), wifiPassword.c_str());
-  wifiBeginCalled = true;
-  if (wifiAssetId != nullptr) connect_robot_room(wifiAssetId);
+  LbIoT.Asset.begin(wifiAssetId);
+  iotConfigured = true;
 }
 
 void set_wifi(const String &ssid, const String &password, const __FlashStringHelper *assetId = nullptr) {
@@ -1254,31 +1239,22 @@ static ObjectColor parseColorSignal(String signal) {
 }
 
 // Không tham số: gửi kết quả vừa đo, không đọc cảm biến thêm lần nữa.
-// WiFi/Asset đã cấu hình: LeanbotIoT; còn lại: Serial/WebSocket Bridge.
+// Chỉ gửi qua thuộc tính Color của LeanbotIoT.
 void send_iot_color(ObjectColor color) {
   if (check_mission_reset() || color < RED || color > PURPLE) return;
-  if (wifiColorMode) IoTColor.write(colorSignal(color));
-  else {
-    Serial.print(F("COLOR:"));
-    String signal = colorSignal(color); signal.toUpperCase();
-    Serial.println(signal);
-  }
+  if (!iotConfigured) { failMission(ERR_WIFI_CONFIG); return; }
+  IoTColor.write(colorSignal(color));
 }
 
 // timeoutMs=0: đọc một lần; >0: chờ màu hợp lệ, UNKNOWN nếu hết hạn/reset.
 // Attribute là giá trị hiện tại, đọc lại có thể trả cùng màu; không tạo FIFO giả.
 ObjectColor read_iot_color(unsigned long timeoutMs) {
+  if (check_mission_reset()) return UNKNOWN;
+  if (!iotConfigured) { failMission(ERR_WIFI_CONFIG); return UNKNOWN; }
   const unsigned long started = millis();
   while (true) {
     if (check_mission_reset()) return UNKNOWN;
-    String signal = "";
-    if (wifiColorMode) signal = IoTColor.read();
-    else if (Serial.available() > 0) {
-      signal = Serial.readStringUntil('\n');
-      signal.trim(); signal.toUpperCase();
-      if (signal.indexOf("COLOR:") == 0) signal = signal.substring(6);
-      else signal = "";
-    }
+    String signal = IoTColor.read();
     // SDK đọc mạng có thể chặn: kiểm tra lại hạn và reset sau khi nó trả về.
     if (check_mission_reset()) return UNKNOWN;
     const unsigned long elapsed = millis() - started;
@@ -1370,7 +1346,7 @@ void FullMission() {
 
 void setup() {
   Leanbot.begin();
-  Serial.begin(115200); // Serial/WebSocket Bridge và log cấu hình.
+  Serial.begin(115200); // Log chẩn đoán.
   // Điền WiFi và cùng Asset ID trên cả hai robot; TB2A thực hiện kết nối.
   // SSID trống: báo ERR_WIFI_CONFIG, không thử kết nối nhầm mạng.
   declare_wifi("", "", F("AssetID"));
