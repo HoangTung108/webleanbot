@@ -4,7 +4,7 @@ import { LEANBOT_PROFILE } from './leanbotDeviceProfile'
 describe('Leanbot Standard hardware profile', () => {
   it('uses the verified compiler and Web Serial configuration from REF-02', () => {
     expect(LEANBOT_PROFILE.target).toBe('leanbot-standard')
-    expect(LEANBOT_PROFILE.fqbn).toBe('arduino:avr:uno')
+    expect(LEANBOT_PROFILE.fqbn).toBe('arduino:avr:nano:cpu=atmega328')
     expect(LEANBOT_PROFILE.serial).toMatchObject({
       baudRate: 115200,
       bufferSize: 2048,
@@ -25,7 +25,7 @@ describe('Leanbot Standard hardware profile', () => {
       writeFlashTimeoutMs: 750,
       readFlashTimeoutMs: 750,
       baudRates: [115200, 57600],
-      maximumApplicationBytes: 32256,
+      maximumApplicationBytes: 30720,
       legacyMaximumApplicationBytes: 30720,
     })
   })

@@ -93,7 +93,8 @@ export class Stk500Uploader {
           await delay(serial.bootloaderSettleMs,this.signal)
           this.onProgress('syncing',0)
           await this.transact([0x30],0,uploader.getSyncTimeoutMs,'SYNC_ERROR')
-          this.applicationLimit=baud===57600?uploader.legacyMaximumApplicationBytes:uploader.maximumApplicationBytes
+          // Baud rate does not identify fuse/boot-section size. Both Nano profiles reserve 2 KB.
+          this.applicationLimit=uploader.maximumApplicationBytes
           // The reference Leanbot uploader proceeds straight from GET_SYNC to
           // LOAD_ADDRESS; do not require a separate ENTER_PROGMODE response.
           return

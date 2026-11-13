@@ -26,3 +26,9 @@ describe('Intel HEX decoder', () => {
     expect(pages[0].data).toHaveLength(128)
   })
 })
+
+it('measures sparse application addresses instead of just counting payload bytes',async()=>{
+ const {applicationFlashSize}=await import('./intelHex')
+ expect(applicationFlashSize(':0177FF000188\n:00000001FF')).toBe(30720)
+ expect(()=>applicationFlashSize(':01780000CFB8\n:00000001FF')).toThrow('0x7800')
+})

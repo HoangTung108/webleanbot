@@ -5,7 +5,7 @@ describe('compiler request validation', () => {
   it('maps the only public target to the verified FQBN', () => {
     expect(validateCompileRequest({ target: 'leanbot-standard', source: 'void setup() {}' })).toEqual({
       target: 'leanbot-standard',
-      fqbn: 'arduino:avr:uno',
+      fqbn: 'arduino:avr:nano:cpu=atmega328',
       source: 'void setup() {}',
     })
   })

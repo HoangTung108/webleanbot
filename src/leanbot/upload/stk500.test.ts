@@ -129,3 +129,14 @@ describe('STK500v1 Leanbot uploader', () => {
   })
 
 })
+
+it('rejects the Nano boot section at exactly 0x7800 even at 115200 baud',async()=>{
+ const transport=new FakeTransport()
+ await expect(new Stk500Uploader(transport).upload(':01780000CFB8\n:00000001FF')).rejects.toMatchObject({code:'WRITE_ERROR',message:expect.stringContaining('30720')})
+ expect(transport.writes).toHaveLength(0);expect(transport.closed).toBe(true)
+})
+it('allows the last application page immediately below 0x7800',async()=>{
+ const transport=new FakeTransport()
+ await new Stk500Uploader(transport).upload(':0177FF000188\n:00000001FF')
+ expect(transport.memory[0x77ff]).toBe(1)
+})

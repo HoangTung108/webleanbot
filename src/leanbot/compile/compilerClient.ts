@@ -1,5 +1,5 @@
 import type { CompileResult } from '../../types'
-import { decodeIntelHex } from '../upload/intelHex'
+import { applicationFlashSize } from '../upload/intelHex'
 import { LEANBOT_PROFILE } from '../profile/leanbotDeviceProfile'
 
 export interface CompileOptions { signal?: AbortSignal }
@@ -40,6 +40,11 @@ export class OwnCompilerAdapter implements CompilerAdapter {
       if (response.status === 405 || response.status === 404) return failure(`Compiler local không có API POST tại ${endpoint} (HTTP ${response.status}). Hãy chạy compiler server, cấu hình VITE_COMPILER_API tới backend, hoặc dùng Leanbot Cloud (bỏ VITE_COMPILER_API).`)
       return failure(`Compiler trả về HTTP ${response.status} với dữ liệu không hợp lệ.`)
     }
+    if (payload.success && response.ok && payload.hex) {
+      try { applicationFlashSize(payload.hex) } catch (error) {
+        return failure(error instanceof Error ? error.message : String(error))
+      }
+    }
     return {
       success: payload.success && response.ok,
       hex: payload.hex,
@@ -76,7 +81,7 @@ export class PythaverseCompilerAdapter implements CompilerAdapter {
       if (!response.ok || typeof result.hex !== 'string' || !result.hex.trim()) return failure(log || `Leanbot Cloud trả về HTTP ${response.status}; chưa có firmware để nạp.`)
       const encoded = result.hex.trim()
       const hex = encoded.startsWith(':') ? encoded : new TextDecoder().decode(Uint8Array.from(atob(encoded), character => character.charCodeAt(0)))
-      if (!decodeIntelHex(hex).size) return failure('Compiler trả về firmware trống; chưa thể nạp Leanbot.')
+      if (!applicationFlashSize(hex)) return failure('Compiler trả về firmware trống; chưa thể nạp Leanbot.')
       return { success: true, hex, stdout: log, errors: [] }
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') throw error

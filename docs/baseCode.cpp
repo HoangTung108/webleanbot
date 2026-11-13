@@ -1195,7 +1195,7 @@ ObjectColor read_color() {
   const int blue = totalBlue / 5;
   Serial.print(F("Color RGB: ")); Serial.print(red); Serial.print(' ');
   Serial.print(green); Serial.print(' '); Serial.print(blue);
-  Serial.print(F(" Hue: ")); Serial.print(colorHue(red * colorRedGain, green * colorGreenGain, blue * colorBlueGain));
+  // Chỉ in số nguyên để không kéo bộ in float vào flash của Nano.
   Serial.print(F(" -> "));
   switch (color) {
     case RED: Serial.println(F("RED")); break;

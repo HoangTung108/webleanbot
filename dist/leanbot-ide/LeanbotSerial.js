@@ -1109,6 +1109,9 @@ class Uploader {
     for (const block of mergedBlocks) {
       let addr = block.address;
       for (let i = 0; i < block.bytes.length; i++, addr++) {
+        if (addr < 0 || addr >= 0x7800) {
+          throw new Error(`Firmware vượt vùng ứng dụng Nano 30720 byte tại 0x${addr.toString(16)}. Không ghi đè bootloader; hãy giảm dung lượng và biên dịch lại.`);
+        }
         const pageIndex = Math.floor(addr / Uploader.#config.pageSizeByte);
         const pageBase = pageIndex * Uploader.#config.pageSizeByte;
         const pageOffset = addr % Uploader.#config.pageSizeByte;

@@ -1,7 +1,7 @@
 LeanbotCompiler:
   PredictedTotalMs: 10000 
   CompilePayload:            # Tempate for compile payload
-    fqbn: "arduino:avr:uno"
+    fqbn: "arduino:avr:nano:cpu=atmega328"
     flags:
       verbose: false
       preferLocal: false

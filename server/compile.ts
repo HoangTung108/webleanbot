@@ -1,3 +1,5 @@
+import {LEANBOT_PROFILE} from '../src/leanbot/profile/leanbotDeviceProfile.js'
+import {applicationFlashSize} from '../src/leanbot/upload/intelHex.js'
 import { spawn } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
 import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
@@ -9,12 +11,12 @@ export interface CompileRequest { target?: string; source?: string }
 
 export interface ValidCompileRequest {
   target: 'leanbot-standard'
-  fqbn: 'arduino:avr:uno'
+  fqbn: typeof LEANBOT_PROFILE.fqbn
   source: string
 }
 
 const MAX_SOURCE_BYTES = 256_000
-const TARGETS = { 'leanbot-standard': 'arduino:avr:uno' } as const
+const TARGETS = { 'leanbot-standard': LEANBOT_PROFILE.fqbn } as const
 const compileCache = new Map<string, CompileResult>()
 
 export function validateCompileRequest(request: CompileRequest): ValidCompileRequest {
@@ -54,6 +56,7 @@ function cacheKey(request: ValidCompileRequest) {
   return createHash('sha256').update([
     request.source,
     request.target,
+    request.fqbn,
     process.env.LEANBOT_LIBRARY_VERSION || 'unversioned',
     process.env.ARDUINO_CORE_VERSION || 'unversioned',
   ].join('\0')).digest('hex')
@@ -113,9 +116,13 @@ export async function compileArduino(input: CompileRequest, signal?: AbortSignal
     if (execution.code !== 0) return { success: false, stdout: execution.stdout || 'Arduino CLI biên dịch thất bại.', errors: parsed.errors }
     const hexPath = await findHex(outputDirectory)
     if (!hexPath) return { success: false, stdout: 'Compiler không tạo tệp Intel HEX.', errors: [] }
+    const hex = await readFile(hexPath, 'utf8')
+    try { applicationFlashSize(hex) } catch (error) {
+      return {success:false,stdout: error instanceof Error ? error.message : String(error),errors:[]}
+    }
     const result: CompileResult = {
       success: true,
-      hex: await readFile(hexPath, 'utf8'),
+      hex,
       stdout: execution.stdout || 'Biên dịch thành công.',
       flashUsed: parsed.flashUsed,
       ramUsed: parsed.ramUsed,

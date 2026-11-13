@@ -24,7 +24,7 @@ try {
   log('Compiling diagnostic firmware with Leanbot Cloud...')
   const response = await fetch('https://cs.leanbot.space/v3/compile', {
     method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ fqbn: 'arduino:avr:uno', files: [{ name: 'LeanbotSketch/LeanbotSketch.ino', content: source }], flags: { verbose: false, preferLocal: false }, libs: [] }),
+    body: JSON.stringify({ fqbn: 'arduino:avr:nano:cpu=atmega328', files: [{ name: 'LeanbotSketch/LeanbotSketch.ino', content: source }], flags: { verbose: false, preferLocal: false }, libs: [] }),
     signal: AbortSignal.timeout(90000),
   })
   const result = await response.json() as { hex?: string; log?: string }

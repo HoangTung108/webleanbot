@@ -66,3 +66,13 @@ export function toFlashPages(hex: string, pageSize = LEANBOT_PROFILE.uploader.pa
   // boundary for the detected bootloader before programming anything.
   return [...pages].sort(([a],[b])=>a-b).map(([address,data])=>({address,data}))
 }
+
+/** Highest used byte, including sparse records; never truncate protected flash. */
+export function applicationFlashSize(hex: string): number {
+  const memory = decodeIntelHex(hex)
+  let end = 0
+  for (const address of memory.keys()) end = Math.max(end, address + 1)
+  const limit = LEANBOT_PROFILE.uploader.maximumApplicationBytes
+  if (end > limit) throw new Error(`Firmware cần ${end} byte, vượt vùng ứng dụng Nano ${limit} byte (bootloader bắt đầu tại 0x7800). Hãy giảm dung lượng chương trình và biên dịch lại; không thể nạp bằng cách bỏ xác minh.`)
+  return end
+}

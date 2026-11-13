@@ -11,7 +11,7 @@ function record(address, bytes) {
   return ':' + [...data, (-data.reduce((a,b)=>a+b,0)) & 255].map(b=>b.toString(16).padStart(2,'0')).join('');
 }
 const hex = [record(0,[12,148,1,0]), record(128,[2,3,4,5]), ':00000001FF'].join('\n');
-async function run(corruptSecondPage) {
+async function run(corruptSecondPage, firmware=hex, protectedAddress=false) {
   const memory = new Uint8Array(32768).fill(255), writes = [], reads = [];
   let address = 0, response = [];
   const uploader = new context.TestUploader({
@@ -35,7 +35,12 @@ async function run(corruptSecondPage) {
     },
     waitForSerialData: async length => { assert.equal(response.length,length); return Uint8Array.from(response); },
   });
-  const result=await uploader.upload2(Promise.resolve({hexText:hex}));
+  const result=await uploader.upload2(Promise.resolve({hexText:firmware}));
+  if (protectedAddress) {
+    assert.equal(result.success,false);
+    assert.equal(writes.filter(data=>data[0]===0x64).length,0,'protected flash must be rejected before any page write');
+    return;
+  }
   assert.equal(result.success,!corruptSecondPage);
   assert.deepEqual(reads,[0,128], 'full verification must read both pages');
   assert.equal(writes.filter(data=>data[0]===0x64).length,2);
@@ -44,7 +49,8 @@ async function run(corruptSecondPage) {
 (async()=>{
   await run(false);
   await run(true);
+  await run(false,[record(0x7800,[0xcf]),':00000001FF'].join('\n'),true);
   assert(logs.some(line=>line==='[VERIFY] Expected: 0c 94 01 00 ff ff ff ff ff ff ff ff ff ff ff ff'));
   assert(logs.some(line=>line.startsWith('[VERIFY] Actual:')));
-  console.log('PASS: legacy atomic page writes, full verification, later-page corruption detection, word addresses, first-16-byte logs');
+  console.log('PASS: legacy atomic page writes, full verification, later-page corruption detection, word addresses, first-16-byte logs, Nano boot boundary');
 })().catch(error=>{console.error(error);process.exitCode=1});

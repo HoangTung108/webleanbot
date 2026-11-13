@@ -50,7 +50,7 @@ describe('PythaverseCompilerAdapter', () => {
     expect(result).toMatchObject({ success: true, hex: ':0400000001020304F2\n:00000001FF\n', stdout: 'compiled' })
     expect(fetchMock).toHaveBeenCalledWith('https://cs.leanbot.space/v3/compile', expect.objectContaining({
       body: JSON.stringify({
-        fqbn: 'arduino:avr:uno',
+        fqbn: 'arduino:avr:nano:cpu=atmega328',
         files: [{ content: '#include <Leanbot.h>', name: 'LeanbotSketch/LeanbotSketch.ino' }],
         flags: { verbose: false, preferLocal: false },
         libs: [],
@@ -84,4 +84,10 @@ describe('compiler routing on static hosting', () => {
     vi.stubGlobal('fetch', vi.fn(async () => { throw new DOMException('cancelled', 'AbortError') }))
     await expect(new PythaverseCompilerAdapter().compile('code')).rejects.toMatchObject({ name: 'AbortError' })
   })
+})
+
+it.each([['local',new OwnCompilerAdapter('/api/compile')],['cloud',new PythaverseCompilerAdapter()]] as const)('rejects Nano boot-section bytes from the %s compiler',async(_name,adapter)=>{
+ vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify({success:true,hex:':01780000CFB8\n:00000001FF',log:'ok',stdout:'ok'}),{status:200,headers:{'content-type':'application/json'}})))
+ const result=await adapter.compile('void setup(){} void loop(){}')
+ expect(result.success).toBe(false);expect(result.hex).toBeUndefined();expect(result.stdout).toContain('0x7800')
 })

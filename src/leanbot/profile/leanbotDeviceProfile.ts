@@ -1,6 +1,6 @@
 export const LEANBOT_PROFILE = Object.freeze({
   target: 'leanbot-standard',
-  fqbn: 'arduino:avr:uno',
+  fqbn: 'arduino:avr:nano:cpu=atmega328',
   serial: Object.freeze({
     baudRate: 115200,
     bufferSize: 2048,
@@ -21,7 +21,7 @@ export const LEANBOT_PROFILE = Object.freeze({
     writeFlashTimeoutMs: 750,
     readFlashTimeoutMs: 750,
     baudRates: Object.freeze([115200, 57600]),
-    maximumApplicationBytes: 32256,
+    maximumApplicationBytes: 30720,
     legacyMaximumApplicationBytes: 30720,
   }),
 })
