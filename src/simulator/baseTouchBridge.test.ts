@@ -3,7 +3,7 @@ import base from '../../docs/baseCode.cpp?raw';
 import {RobotSimulator} from './robotSimulator';
 import {CppSimulatorBridge} from './cppBridge';
 
-function setup(source=base){
+function setup(source=base.replace('const bool LINE_DEBUG = false;', 'const bool LINE_DEBUG = true;')){
  const robot=new RobotSimulator();robot.setBoard({name:'Test',width:2000,height:2000,lines:[],walls:[],obstacles:[],initialPose:{x:500,y:500,heading:0}});
  const bridge=new CppSimulatorBridge(robot);
  expect(bridge.loadCode(source)).toEqual({success:true});robot.start();bridge.startExecution(0);

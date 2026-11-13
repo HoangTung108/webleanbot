@@ -1057,7 +1057,7 @@ export const apiReference: ApiReference[] = [
     "description": "Hiệu chuẩn line bằng nút TB1A qua API Leanbot.",
     "parameters": "Không có tham số.",
     "returns": "void.",
-    "notes": "Dừng bánh, đợi tay, gọi doManualCalibration. Chỉ gọi một lần khi cần; SDK có thể chặn chờ thao tác. Không gọi set_line sau đó.",
+    "notes": "Dừng bánh, đợi tay, gọi doManualCalibration. LINE_DEBUG mặc định false để giảm flash; bật true để tự in ADC sau hiệu chuẩn, hoặc gọi measure_line_values() khi cần. Chỉ gọi một lần khi cần; SDK có thể chặn chờ thao tác. Không gọi set_line sau đó.",
     "code": "// Trong setup, sau Leanbot.begin và Serial.begin(115200):\ncalibrate_line(); // Đặt cảm biến theo quy trình SDK, chạm TB1A xác nhận\n// Sau đó mới bắt đầu nhiệm vụ.",
     "source": "baseCode.cpp"
   },

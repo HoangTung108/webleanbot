@@ -7,7 +7,7 @@ import base from '../../docs/baseCode.cpp?raw'
 it('reads color with no caller variables, reuses the result and clears stale colors on uncertain/failed reads', () => {
  const dir=mkdtempSync(join(tmpdir(),'leanbot-simple-color-'))
  try {
-  const color=base.slice(base.indexOf('// Đọc và hiệu chuẩn màu'),base.indexOf('// Hiệu chỉnh thông số'))+base.slice(base.indexOf('static void set_color_white'),base.indexOf('// Chỉ chuyển đổi giao thức'))
+  const color=base.slice(base.indexOf('// Đọc và hiệu chuẩn màu'),base.indexOf('// Hiệu chỉnh thông số'))+base.slice(base.indexOf('static bool readAPDSColor'),base.indexOf('// Chỉ chuyển đổi giao thức'))
   const source=`#include <algorithm>
 #include <array>
 #include <vector>

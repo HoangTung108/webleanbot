@@ -26,7 +26,7 @@ it('executes MyBlock analog steering, marker/time/distance modes, loss and stall
  try {
   const types=between(base,'struct LbmbState {','enum ObjectColor')
   const core=between(base,'const uint16_t LBMB_TICK_MS','enum ErrorCode')+between(base,'inline int32_t lbmbAbs32','LbmbFollowCtx defaultLineContext')
-  const adapter=between(base,'LbmbFollowCtx defaultLineContext','void set_color_white')
+  const adapter=between(base,'LbmbFollowCtx defaultLineContext','static bool readAPDSColor')
   const outer=SYNAPSE_CITY.lines[0];
   const arc=outer.points.slice(0,17), origin=arc[0], end=arc[16];
   const track=[{x:origin.x,y:origin.y+150},...arc,{x:end.x+300,y:end.y}].map(p=>[origin.y+150-p.y,p.x-origin.x]);
@@ -47,6 +47,7 @@ unsigned long clockMs=0,lastLineControlTime=0;
 unsigned long millis(){return clockMs;}
 float lastLineError=0,physicalDistance=0;
 int peak=0,services=0,error=0;
+#define missionError error
 bool lineControlReady=false,junctionPending=false,stalled=false;
 struct {int left=0,right=0;void runLR(int l,int r){assert(abs(l)<=2000&&abs(r)<=2000);left=l;right=r;peak=max(peak,max(abs(l),abs(r)));}void stopAndWait(){left=right=0;}float getDistanceMm(){return physicalDistance*DISTANCE_SCALE;}float getRotationDeg(){return 0;}} LbMotion;
 int bits=6;int raw[4]={10,100,100,10};

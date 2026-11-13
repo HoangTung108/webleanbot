@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest'
-import base from '../../docs/baseCode.cpp?raw'
+import sourceBase from '../../docs/baseCode.cpp?raw'
+const base = sourceBase.replace('const bool LINE_DEBUG = false;', 'const bool LINE_DEBUG = true;')
 import { CppRuntime } from './cppRuntime'
 
 function run(touches: (time: number) => number, duration = 2500, mission = 'robot_delay(100);') {

@@ -177,7 +177,7 @@ followLineCm(32.5f);
 // Giới hạn tốc độ 50%:
 followLineCm(32.5f, 50);`,source:"baseCode.cpp"},{group:"helpers",api:"measure_line_error();",description:"Đọc tâm line analog.",parameters:"Không có.",returns:"float -3..3; NAN nếu không thấy line.",notes:"Kết quả -3..3, NAN nếu mặt nạ không hợp lệ. Khi độ tương phản IR yếu. Cần đo lại ngưỡng dưới ánh sáng thật. Giá trị IR ở cảm biến ngoài vạch bị loại khỏi trọng số, tránh kéo sai dấu lỗi.",code:`float error = measure_line_error(); // Không làm robot di chuyển
 if (isfinite(error)) Serial.println(error);
-else Serial.println("No line");`,source:"baseCode.cpp"},{group:"helpers",api:"calibrate_line();",description:"Hiệu chuẩn line bằng nút TB1A qua API Leanbot.",parameters:"Không có tham số.",returns:"void.",notes:"Dừng bánh, đợi tay, gọi doManualCalibration. Chỉ gọi một lần khi cần; SDK có thể chặn chờ thao tác. Không gọi set_line sau đó.",code:`// Trong setup, sau Leanbot.begin và Serial.begin(115200):
+else Serial.println("No line");`,source:"baseCode.cpp"},{group:"helpers",api:"calibrate_line();",description:"Hiệu chuẩn line bằng nút TB1A qua API Leanbot.",parameters:"Không có tham số.",returns:"void.",notes:"Dừng bánh, đợi tay, gọi doManualCalibration. LINE_DEBUG mặc định false để giảm flash; bật true để tự in ADC sau hiệu chuẩn, hoặc gọi measure_line_values() khi cần. Chỉ gọi một lần khi cần; SDK có thể chặn chờ thao tác. Không gọi set_line sau đó.",code:`// Trong setup, sau Leanbot.begin và Serial.begin(115200):
 calibrate_line(); // Đặt cảm biến theo quy trình SDK, chạm TB1A xác nhận
 // Sau đó mới bắt đầu nhiệm vụ.`,source:"baseCode.cpp"},{group:"helpers",api:"read_color();",description:"Đọc khối và trả trực tiếp màu nhận diện.",parameters:"Không có.",returns:"ObjectColor: RED, GREEN, BLUE, YELLOW, PURPLE hoặc UNKNOWN.",notes:"COLOR_DEBUG mặc định false để giảm flash; bật true khi cần log RGB. Tự khởi tạo APDS lần đầu, đo 5 mẫu và cần 4 phiếu đồng thuận. Lưu kết quả cho lần gửi mặc định; chỉ đổi LED khi biết màu. Lỗi cảm biến báo missionError, trả UNKNOWN.",code:`if (read_color() == BLUE) {
   close_hand(90); // Xử lý khối xanh dương
@@ -620,7 +620,6 @@ inline LbmbState lbmbReadState();
 
 enum ObjectColor { UNKNOWN, RED, GREEN, BLUE, YELLOW, PURPLE };
 static ObjectColor classifyColor(int red, int green, int blue);
-static void set_color_reference(ObjectColor color, int red, int green, int blue);
 ObjectColor lastMeasuredColor = UNKNOWN;
 // Ba API màu: đọc khối, gửi màu, nhận màu. UNKNOWN là chưa xác định/không có tín hiệu.
 ObjectColor read_color();
@@ -634,6 +633,7 @@ auto IoTColor = LbIoT.Asset.attribute(F("Color"));
 
 
 // Đọc và hiệu chuẩn màu
+const bool LINE_DEBUG = false; // Bật để tự in ADC sau hiệu chuẩn; vẫn có measure_line_values().
 const bool COLOR_DEBUG = false; // Bật khi cần xem RGB; tắt để tiết kiệm flash.
 const int COLOR_MIN_CHANNEL = 4;
 const float COLOR_MIN_SATURATION = 0.20f;
@@ -760,9 +760,9 @@ bool handBusy = false;
 
 void update_hand() {
   if (!handBusy) return;
-  const signed long elapsed = millis() - handStarted;
-  const float ratio = constrain((float)elapsed / handDuration, 0.0f, 1.0f);
-  const int angle = handFrom + (int)lroundf((handTarget - handFrom) * ratio);
+  const unsigned long elapsed = millis() - handStarted;
+  const long step = (long)(handTarget - handFrom) * (long)min(elapsed, (unsigned long)handDuration);
+  const int angle = handFrom + (int)((step + (step >= 0 ? handDuration / 2 : -handDuration / 2)) / handDuration);
   if (angle != handAngle) {
     LbGripper.moveToLR(angle, angle, 0);
     handAngle = angle;
@@ -786,8 +786,8 @@ void close_hand_async(int degree) {
   handFrom = handAngle;
   handTarget = target;
   // Góc nhỏ dùng thời gian tương ứng; giữ tốc độ của hành trình gắp chuẩn.
-  handDuration = constrain((int)lroundf(GRIP_MOVE_MS * fabsf((float)target - handFrom) /
-    max(1, GRIP_CLOSE_ANGLE)), 1, GRIP_MOVE_MS);
+  const int span = max(1, GRIP_CLOSE_ANGLE);
+  handDuration = constrain((int)(((long)GRIP_MOVE_MS * abs(target - handFrom) + span / 2) / span), 1, GRIP_MOVE_MS);
   handStarted = millis();
   handBusy = true;
 }
@@ -810,7 +810,7 @@ void turn_angle(int speed, float angle_deg, TurnMode mode) {
   speed = min(speed, 2000);
   const float target = fabsf(angle_deg) * TURN_SCALE[(int)mode] *(mode == TWO_WHEELS ? TURN_TWO_SCALE : TURN_ONE_SCALE);
   const int direction = angle_deg > 0.0f ? 1 : -1;
-  const float origin = (float)LbMotion.getRotationDeg();
+  const auto origin = LbMotion.getRotationDeg();
   unsigned long started = millis(), lastAdvance = started, lastRamp = started;
   float bestProgress = 0.0f;
   int currentSpeed = TURN_FINISH_SPEED;
@@ -818,7 +818,7 @@ void turn_angle(int speed, float angle_deg, TurnMode mode) {
   const unsigned long timeoutMs = 3500UL + (unsigned long)(target * 90.0f);
   while (true) {
     if (check_mission_reset()) return;
-    const float progress = ((float)LbMotion.getRotationDeg() - origin) * direction;
+    const float progress = (float)(LbMotion.getRotationDeg() - origin) * direction;
     const float remaining = target - progress;
     if (remaining <= TURN_BRAKE_LEAD_DEG) break;
     const unsigned long now = millis();
@@ -860,8 +860,8 @@ void turn_two_wheels(int speed, float angle) {
 // Chỉ trả quyền cho lệnh kế tiếp sau khi phản hồi bánh đã ổn định.
 static bool stopOnDetectedLine() {
   LbMotion.runLR(0, 0);
-  float distance = (float)LbMotion.getDistanceMm();
-  float rotation = (float)LbMotion.getRotationDeg();
+  long distance = LbMotion.getDistanceMm();
+  long rotation = LbMotion.getRotationDeg();
   const unsigned long started = millis();
   unsigned long stableSince = started;
   while (millis() - started < 1200UL) {
@@ -869,9 +869,9 @@ static bool stopOnDetectedLine() {
     robot_delay(10);
     if (check_mission_reset()) return false;
     LbMotion.runLR(0, 0);
-    const float nextDistance = (float)LbMotion.getDistanceMm();
-    const float nextRotation = (float)LbMotion.getRotationDeg();
-    if (fabsf(nextDistance - distance) > 0.1f || fabsf(nextRotation - rotation) > 0.1f) {
+    const long nextDistance = LbMotion.getDistanceMm();
+    const long nextRotation = LbMotion.getRotationDeg();
+    if (nextDistance != distance || nextRotation != rotation) {
       distance = nextDistance; rotation = nextRotation;
       stableSince = millis();
     }
@@ -910,8 +910,8 @@ static bool moveTankCore(int motor_L, int motor_R, float distance_cm, bool until
     if (check_mission_reset()) return false;
   }
   resetMotionState();
-  const float originDist = (float)LbMotion.getDistanceMm();
-  const float originRot = (float)LbMotion.getRotationDeg();
+  const auto originDist = LbMotion.getDistanceMm();
+  const auto originRot = LbMotion.getRotationDeg();
   unsigned long started = millis(), lastAdvance = started, lastControl = started;
   float bestProgress = 0.0f;
   float currentMagnitude = min(MOVE_START_SPEED, maxMagnitude);
@@ -923,7 +923,7 @@ static bool moveTankCore(int motor_L, int motor_R, float distance_cm, bool until
   const unsigned long timeoutMs = 3500UL + (unsigned long)(targetMm * 60.0f);
   while (true) {
     if (check_mission_reset()) return false;
-    const float progressed = ((float)LbMotion.getDistanceMm() - originDist) * direction;
+    const float progressed = (float)(LbMotion.getDistanceMm() - originDist) * direction;
     const float remaining = targetMm - progressed;
     if (untilLine && (!sampledLine || millis() - lastLineSample >= LBMB_TICK_MS || remaining <= 0.0f)) {
       // Chung luồng SDK và chu kỳ lấy mẫu với hàm dò line đang hoạt động.
@@ -953,7 +953,7 @@ static bool moveTankCore(int motor_L, int motor_R, float distance_cm, bool until
     const float baseL = targetL * magRatio, baseR = targetR * magRatio;
 
     // PID giữ hướng ban đầu, đúng dấu khi tiến/lùi; không đảo bánh gần đích.
-    const float error = (float)LbMotion.getRotationDeg() - originRot;
+    const float error = (float)(LbMotion.getRotationDeg() - originRot);
     if (dt > 0.0f) {
       derivative += dt / (0.05f + dt) *
         ((error - previousError) / dt - derivative);
@@ -1065,10 +1065,10 @@ void calibrate_line() {
   wait_hand();
   resetMotionState();
   junctionPending = false;
-  Serial.println(F("Line calibration: TB1A"));
+  if (LINE_DEBUG) Serial.println(F("Line calibration: TB1A"));
   LbIRLine.doManualCalibration(TB1A);
   if (check_mission_reset()) return;
-  measure_line_values();
+  if (LINE_DEBUG) measure_line_values();
   resetMotionState();
 }
 
@@ -1104,7 +1104,7 @@ inline float lbmbDtSec(uint32_t now, uint32_t before) {
 inline int16_t lbmbTargetSpeedFromPercent(float speedPercent) {
   float mag = fabs(speedPercent);
   if (mag > 100.0f) mag = 100.0f;
-  int32_t s = (int32_t)round(mag * 20.0f);
+  int32_t s = (int32_t)lroundf(mag * 20.0f);
   if (s < 20) s = 20;
   if (s > ((int16_t)2000)) s = ((int16_t)2000);
   return (int16_t)s;
@@ -1301,10 +1301,10 @@ inline LbmbCommand lbmbFollowCoreStep(
 
   if (mode == 4) {
     if (targetVal <= 0.0f || isnan(targetVal)) return cmd;
-    targetMm = (int32_t)round(targetVal * 10.0f);
+    targetMm = (int32_t)lroundf(targetVal * 10.0f);
   } else if (mode == 5) {
     if (targetVal <= 0.0f || isnan(targetVal)) return cmd;
-    targetMs = (uint32_t)round(targetVal * 1000.0f);
+    targetMs = (uint32_t)lroundf(targetVal * 1000.0f);
   }
 
   // Marker stop modes.
@@ -1373,7 +1373,7 @@ inline LbmbCommand lbmbFollowCoreStep(
     return cmd;
   }
 
-  int16_t fallback1000 = (int16_t)round(ctx->prevError * 3000.0f);
+  int16_t fallback1000 = (int16_t)lroundf(ctx->prevError * 3000.0f);
   int16_t position1000 = lbmbLinePosition1000(state, fallback1000);
   float error = (float)position1000 / 3000.0f;
   error = lbmbClampF(error, -1.0f, 1.0f);
@@ -1481,11 +1481,11 @@ inline LbmbCommand lbmbFollowCoreStep(
     steering = steeringGain * ( LBMB_FLL_KP * error + LBMB_FLL_KI * candidateI + LBMB_FLL_KD * ctx->filteredDerivative);
   }
   steering = lbmbClampF(steering, -steerLimit, steerLimit);
-  int16_t base = lbmbClamp16( (int32_t)round(ctx->baseSpeed), 0, targetSpeed);
+  int16_t base = lbmbClamp16( (int32_t)lroundf(ctx->baseSpeed), 0, targetSpeed);
   int16_t targetLeft = base;
   int16_t targetRight = base;
   if (ctx->markerCount == 0) {
-    int16_t steerMag = lbmbClamp16( (int32_t)round(lbmbAbsF(steering)), 0, ctx->sharpTurn ? (int16_t)round(base * 1.40f) : base);
+    int16_t steerMag = lbmbClamp16( (int32_t)lroundf(lbmbAbsF(steering)), 0, ctx->sharpTurn ? (int16_t)lroundf(base * 1.40f) : base);
     if (steering > 0.0f) {
       targetRight = base - steerMag;
     } else if (steering < 0.0f) {
@@ -1628,14 +1628,6 @@ void goToJunction() {
   centerDetectedJunction();
 }
 
-static void set_color_white(int red, int green, int blue) {
-  if (min(red, min(green, blue)) < COLOR_MIN_CHANNEL) return;
-  const float average = ((float)red + green + blue) / 3.0f;
-  colorRedGain = average / red;
-  colorGreenGain = average / green;
-  colorBlueGain = average / blue;
-}
-
 static bool readAPDSColor(int &r, int &g, int &b) {
   if (check_mission_reset()) return false;
   APDS.colorAvailable();
@@ -1650,35 +1642,6 @@ static bool readAPDSColor(int &r, int &g, int &b) {
   return APDS.readColor(r, g, b);
 }
 
-
-static void set_color_reference(ObjectColor color, int red, int green, int blue) {
-  if (color < RED || color > PURPLE || red < 0 || green < 0 || blue < 0) return;
-  const float total = (float)red + green + blue;
-  if (max(red, max(green, blue)) < COLOR_MIN_CHANNEL || total <= 0) return;
-  colorReference[(int)color][0] = red / total;
-  colorReference[(int)color][1] = green / total;
-  colorReference[(int)color][2] = blue / total;
-  colorReferenceReady[(int)color] = true;
-}
-
-static void calibrate_color(ObjectColor color) {
-  if (color < RED || color > PURPLE) return;
-  if (!colorSensorReady) { failMission(ERR_COLOR_SENSOR); return; }
-  long sums[3] = {0, 0, 0};
-  for (int i = 0; i < 5; ++i) {
-    int r = 0, g = 0, b = 0;
-    if (!readAPDSColor(r, g, b) || r < 0 || g < 0 || b < 0) { failMission(ERR_COLOR_SENSOR); return; }
-    sums[0] += r; sums[1] += g; sums[2] += b;
-  }
-  const int r = sums[0] / 5;
-  const int g = sums[1] / 5;
-  const int b = sums[2] / 5;
-  if (max(r, max(g, b)) < COLOR_MIN_CHANNEL) { Serial.println(F("Calibration failed: too dark")); return; }
-  set_color_reference(color, r, g, b);
-  Serial.print(F("set_color_reference((ObjectColor)")); Serial.print((int)color);
-  Serial.print(F(", ")); Serial.print(r); Serial.print(F(", ")); Serial.print(g);
-  Serial.print(F(", ")); Serial.print(b); Serial.println(F(");"));
-}
 
 static float colorHue(float red, float green, float blue) {
   const float top = max(red, max(green, blue));
@@ -1834,6 +1797,12 @@ ObjectColor read_iot_color(unsigned long timeoutMs) {
   return UNKNOWN;
 }
 
+static void showReadyLED() {
+  LbRGB.fillColor(CRGB::Black);
+  LbRGB.fillColor(CRGB::Green, BITMAP(ledA,ledB));
+  LbRGB.show();
+}
+
 // Reset bài, giữ cấu hình WiFi/Asset và ngưỡng line của SDK.
 void reset_mission() {
   missionResetRequested = true;
@@ -1842,7 +1811,7 @@ void reset_mission() {
   missionError = ERR_NONE; junctionPending = false; lineOperationCompleted = false;
   lastMeasuredColor = UNKNOWN; resetMotionState();
   missionArmed = false; missionButtons = 8; missionButtonChangedAt = millis();
-  LbRGB.fillColor(CRGB::Black); LbRGB.fillColor(CRGB::Green, BITMAP(ledA,ledB)); LbRGB.show();
+  showReadyLED();
   Serial.println(F("MISSION RESET: TB1B"));
 }
 
@@ -1905,9 +1874,7 @@ void FullMission() {
   junctionPending = false;
   lineOperationCompleted = false;
   missionButtonChangedAt = millis();
-  LbRGB.fillColor(CRGB::Black);
-  LbRGB.fillColor(CRGB::Green, BITMAP(ledA,ledB));
-  LbRGB.show();
+  showReadyLED();
 }
 
 void setup() {
@@ -1916,9 +1883,7 @@ void setup() {
   // Điền WiFi và cùng Asset ID trên cả hai robot; TB2A thực hiện kết nối.
   // SSID trống: báo ERR_WIFI_CONFIG, không thử kết nối nhầm mạng.
   declare_wifi("", "", F("AssetID"));
-  LbRGB.fillColor(CRGB::Black);
-  LbRGB.fillColor(CRGB::Green, BITMAP(ledA,ledB));
-  LbRGB.show();
+  showReadyLED();
 //   set_line(IR_TH_2L, IR_TH_0L, IR_TH_1R, IR_TH_3R); // Ngưỡng dự phòng.
 }
 

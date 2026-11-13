@@ -22,3 +22,13 @@ Hãy biên dịch lại để lấy HEX mới. Nếu vẫn báo chương trình 
 BaseCode mặc định `COLOR_DEBUG = false`: bỏ tổng hợp/in RGB và tên màu trên Serial trong bản nạp gọn; kết quả trả về, LED và IoT không đổi. Các thông báo hiệu chuẩn/reset đã được rút ngắn. Bật `COLOR_DEBUG = true` để chẩn đoán sẽ tăng lại dung lượng flash.
 
 Đo cục bộ phần đọc màu bằng AVR-GCC 7.3 `-Os`: object trước tối ưu có text 763 byte, sau tối ưu 350 byte (giảm 413 byte), chưa tính phần giảm thông báo ở các hàm khác. Đây là số đo riêng phần mã, không phải dung lượng firmware hoàn chỉnh liên kết với LeanbotCore dựng sẵn; cần biên dịch bằng đúng SDK để xác nhận tổng dưới 30720 byte.
+
+## Bản gọn tiếp theo
+
+- Đã bỏ set_color_white/calibrate_color/set_color_reference không được gọi để hết cảnh báo unused-function. Hàm chết có thể đã được linker bỏ trước đó, nên không cộng chúng thành số byte tiết kiệm.
+- Tay gắp dùng số nguyên có làm tròn thay nội suy float.
+- Đổi round rồi ép số nguyên thành lroundf trong PID; giữ cách làm tròn và công thức điều khiển. Fixture AVR-GCC 7.3 -Os -flto cho lõi PID giảm text 7494 → 7186 byte (308 byte).
+- LINE_DEBUG mặc định false để không tự kéo phần in ADC vào firmware; API measure_line_values() vẫn gọi được khi cần. Bật true nếu muốn tự in sau hiệu chuẩn.
+- Các phép so sánh đứng yên dùng long đúng kiểu trả về SDK. Gom thông báo LED sẵn sàng vào một helper.
+
+Các số đo fixture không phải tổng firmware LeanbotCore thực tế và không cộng trực tiếp để suy ra dung lượng bản nạp. Tổng cần được kiểm tra lại bằng đúng compiler/SDK đang dùng; giữ nguyên giới hạn 30720 byte.
