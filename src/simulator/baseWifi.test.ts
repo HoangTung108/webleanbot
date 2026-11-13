@@ -19,6 +19,8 @@ struct __FlashStringHelper {};
 const int ERR_WIFI_CONFIG=11;
 int failures=0;
 void failMission(int code){assert(code==ERR_WIFI_CONFIG);++failures;}
+const bool IOT_DEBUG=false;
+struct {template<class T>void print(T){}template<class T>void println(T){}} Serial;
 struct WifiApi{int calls=0;String ssid,password;void begin(const char*s,const char*p){++calls;events.push_back("wifi");ssid=s;password=p;}};
 struct AssetApi{int calls=0;String id;void begin(const __FlashStringHelper*s){++calls;events.push_back("asset");id=reinterpret_cast<const char*>(s);}};
 struct IoTApi{WifiApi Wifi;AssetApi Asset;} LbIoT;

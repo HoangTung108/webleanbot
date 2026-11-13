@@ -91,7 +91,7 @@ export class OnlineCompetition {
    this.resetField();this.elapsedMs=0;this.flow.phase='running';for(const actor of this.players.values()){actor.runtime=this.runtime(actor,actor.code!);actor.runtime.start();}
   }else if(cmd.action==='touch'){
    if(!['preparation','running'].includes(this.flow.phase)||!p.runtime?.running)throw new Error('Chưa có chương trình robot đang chạy.');
-   if(![1,2,4,8].includes(cmd.button??0))throw new Error('Nút chạm không hợp lệ.');
+   if(![1,2,3,4,8].includes(cmd.button??0))throw new Error('Nút chạm không hợp lệ.');
    p.runtime.pressTouch(cmd.button!);
   }else if(cmd.action==='stop'){
    if(this.flow.phase==='running')this.finish('STOP · kết thúc lượt cả đội');

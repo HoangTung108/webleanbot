@@ -27,7 +27,7 @@ export const apiReference: ApiReference[] = [
     "description": "Dừng và đặt lại trạng thái bài chạy; TB2B gọi hàm này.",
     "parameters": "Không có.",
     "returns": "void.",
-    "notes": "Giữ cấu hình WiFi/Asset và hiệu chuẩn line. Hủy tác vụ tay, giữ góc tay hiện tại; xóa hàng chờ màu cục bộ. Nhả nút rồi bấm TB1B để chạy lại. Lệnh SDK chặn chỉ kiểm tra reset sau khi trả về.",
+    "notes": "Giữ cấu hình WiFi/Asset và hiệu chuẩn line. Hủy tác vụ tay, giữ góc tay hiện tại; xóa màu đã đo trong base, không xóa thuộc tính Color trên cloud. Nhả nút rồi bấm TB1B để chạy lại. Lệnh SDK chặn chỉ kiểm tra reset sau khi trả về.",
     "code": "reset_mission(); // Hoặc chạm TB2B trong bài chạy dùng các hàm baseCode",
     "source": "baseCode.cpp"
   },
@@ -404,52 +404,52 @@ export const apiReference: ApiReference[] = [
   {
     "group": "iot",
     "api": "LbIoT.Wifi.begin(ssid, password);",
-    "description": "Thiết lập kết nối WiFi.",
-    "parameters": "SSID và mật khẩu const char* theo script.",
-    "returns": "Ví dụ không sử dụng kết quả trả về; đối chiếu kiểu trả về với SDK đang cài.",
-    "notes": "Chỉ gọi ngoài vòng điều khiển động cơ; không in mật khẩu.",
-    "code": "// Thiết lập kết nối WiFi.\nLbIoT.Wifi.begin(ssid, password);",
-    "source": "Bộ sinh Blockly trong project / các lời gọi SDK hiện có"
+    "description": "Khởi tạo WiFi trước khi chọn Asset và đọc/ghi thuộc tính.",
+    "parameters": "SSID và mật khẩu: chuỗi const char*. Với String, base truyền ssid.c_str() và password.c_str().",
+    "returns": "Base không sử dụng kết quả. Chưa xác minh kiểu trả về và mã thành công từ header SDK gốc.",
+    "notes": "Cần #include <LeanbotIoT.h>. Gọi sau Leanbot.begin() và trước LbIoT.Asset.begin(). Có thể chặn; tránh gọi trong vòng điều khiển bánh. Giả lập không kết nối WiFi thật và không kiểm tra mật khẩu. Cờ iotConfigured của base không xác nhận robot đã online.",
+    "code": "// Trong setup(), sau Leanbot.begin():\nLbIoT.Wifi.begin(\"TenWifi\", \"MatKhau\");\nLbIoT.Asset.begin(F(\"AssetID\"));",
+    "source": "docs/baseCode.cpp: set_wifi; src/simulator/cppRuntime.ts. Chưa đọc được header LeanbotIoT gốc do kho Pythaverse yêu cầu đăng nhập."
   },
   {
     "group": "iot",
     "api": "LbIoT.Asset.begin(F(\"AssetID\"));",
     "description": "Chọn Asset để truy cập dữ liệu.",
-    "parameters": "Asset ID dạng const __FlashStringHelper*; Stream* tùy chọn trong header compiler.",
-    "returns": "int8_t theo header đã xuất hiện trong log compiler.",
-    "notes": "Không suy đoán mã thành công khi chưa có header đầy đủ; không truyền c_str().",
+    "parameters": "Base dùng const __FlashStringHelper*: truyền F(\"AssetID\"). Chưa xác minh toàn bộ overload và tham số tùy chọn của SDK.",
+    "returns": "Base bỏ qua kết quả; cần header đúng phiên bản để xác nhận kiểu và ý nghĩa mã trả về.",
+    "notes": "Dùng AssetID thật có quyền truy cập; hai robot trao đổi màu cần cùng AssetID và tên Color. Không thay F(...) bằng String.c_str() khi dùng chữ ký hiện tại của base. Giả lập dùng AssetID để phân vùng dữ liệu, không xác thực quyền trên cloud Pythaverse.",
     "code": "// Chọn Asset để truy cập dữ liệu.\nLbIoT.Asset.begin(F(\"AssetID\"));",
-    "source": "Bộ sinh Blockly trong project / các lời gọi SDK hiện có"
+    "source": "docs/baseCode.cpp: wifiAssetId và set_wifi; chưa đối chiếu header LeanbotIoT gốc."
   },
   {
     "group": "iot",
     "api": "LbIoT.Asset.attribute(F(\"Color\"));",
     "description": "Tạo đối tượng truy cập thuộc tính.",
     "parameters": "Tên thuộc tính dạng F(...).",
-    "returns": "Đối tượng thuộc tính; dùng auto để nhận.",
-    "notes": "Ví dụ khai báo toàn cục auto IoTColor = LbIoT.Asset.attribute(F(\"Color\"));",
-    "code": "// Tạo đối tượng truy cập thuộc tính.\nLbIoT.Asset.attribute(F(\"Color\"));",
-    "source": "Bộ sinh Blockly trong project / các lời gọi SDK hiện có"
+    "returns": "Đối tượng thuộc tính; base dùng auto, chưa xác minh tên lớp SDK.",
+    "notes": "Khai báo toàn cục giống base; cấu hình WiFi/Asset trước khi read/write. IoTColor là tên biến do chương trình đặt, Color là tên thuộc tính. Lời gọi này không đủ để chứng minh thuộc tính mới được tạo trên cloud.",
+    "code": "// Khai báo toàn cục, sau #include <LeanbotIoT.h>:\nauto IoTColor = LbIoT.Asset.attribute(F(\"Color\"));\n// Trong setup(): khởi tạo Leanbot, WiFi và Asset.\n// Trong loop(): dùng IoTColor.read() / IoTColor.write(...).",
+    "source": "docs/baseCode.cpp: khai báo IoTColor; src/simulator/cppRuntime.ts: đối tượng thuộc tính giả lập."
   },
   {
     "group": "iot",
     "api": "IoTColor.write(\"Blue\");",
     "description": "Ghi giá trị vào thuộc tính đã chọn.",
-    "parameters": "Chuỗi giá trị, ví dụ Blue/Red/Green/Yellow/Purple.",
-    "returns": "Ví dụ không sử dụng kết quả trả về; đối chiếu kiểu trả về với SDK đang cài.",
-    "notes": "Hai robot phải có quyền truy cập cùng Asset và tên thuộc tính.",
+    "parameters": "Base truyền const char*: Red, Green, Blue, Yellow hoặc Purple. Đây là giao thức màu của dự án, không phải toàn bộ kiểu dữ liệu SDK hỗ trợ.",
+    "returns": "Base không sử dụng kết quả; chưa xác minh mã xác nhận ghi hoặc lỗi mạng của SDK.",
+    "notes": "Ghi giá trị hiện tại, không có xác nhận robot kia đã xử lý. UNKNOWN được helper send_iot_color lọc trước khi gọi SDK. Hai lần gửi cùng màu không thể phân biệt chỉ bằng giá trị Color; cần giao thức mã lượt/ACK riêng nếu bài yêu cầu xử lý từng lần gửi.",
     "code": "// Ghi giá trị vào thuộc tính đã chọn.\nIoTColor.write(\"Blue\");",
-    "source": "Bộ sinh Blockly trong project / các lời gọi SDK hiện có"
+    "source": "docs/baseCode.cpp: colorSignal và send_iot_color; src/simulator/colorIoT.test.ts."
   },
   {
     "group": "iot",
     "api": "String value = IoTColor.read();",
     "description": "Đọc giá trị hiện tại của thuộc tính.",
     "parameters": "Không có tham số.",
-    "returns": "Giá trị gán cho String theo script.",
-    "notes": "Không tự phân biệt dữ liệu mới/cũ; FIFO cục bộ không khôi phục bản tin bị ghi đè.",
+    "returns": "Base nhận kết quả vào String; chưa xác minh kiểu trả về gốc và biểu diễn lỗi của SDK.",
+    "notes": "Đọc lại có thể trả cùng màu, không tiêu thụ một sự kiện. Helper read_iot_color(timeoutMs) trim chuỗi, không phân biệt hoa/thường, trả UNKNOWN nếu không có màu hợp lệ hoặc hết hạn. Timeout của helper không ngắt được một lời gọi SDK đang chặn. Giả lập trả waiting khi chưa có dữ liệu; không coi waiting là cam kết của SDK thật.",
     "code": "// Đọc giá trị hiện tại của thuộc tính.\nString value = IoTColor.read();",
-    "source": "Bộ sinh Blockly trong project / các lời gọi SDK hiện có"
+    "source": "docs/baseCode.cpp: parseColorSignal và read_iot_color; src/simulator/cppRuntime.ts."
   },
   {
     "group": "sensors",
@@ -1067,7 +1067,7 @@ export const apiReference: ApiReference[] = [
     "description": "Đọc khối và trả trực tiếp màu nhận diện.",
     "parameters": "Không có.",
     "returns": "ObjectColor: RED, GREEN, BLUE, YELLOW, PURPLE hoặc UNKNOWN.",
-    "notes": "COLOR_DEBUG mặc định false để giảm flash; bật true khi cần log RGB. Tự khởi tạo APDS lần đầu, đo 5 mẫu và cần 4 phiếu đồng thuận. Lưu kết quả cho lần gửi mặc định; chỉ đổi LED khi biết màu. Lỗi cảm biến báo missionError, trả UNKNOWN.",
+    "notes": "Tự khởi tạo APDS. Mỗi mẫu gồm LED đỏ/xanh lá/xanh dương/tắt, trừ nền rồi phân loại 5 màu. Cần 4 phiếu trong tối đa 5 mẫu; dừng sớm khi đủ phiếu hoặc không còn khả năng đạt 4. Khôi phục độ sáng LED sau đo; UNKNOWN/lỗi tắt LED đo, TB2B giữ LED sẵn sàng. Lỗi cảm biến báo missionError. COLOR_DEBUG bật log RGB đã trừ nền. Cần giữ khối đứng yên và hiệu chuẩn lại gain/mẫu tham chiếu trên robot thật.",
     "code": "if (read_color() == BLUE) {\n  close_hand(90); // Xử lý khối xanh dương\n}\n// Hoặc chỉ gọi read_color(); để thông báo Serial/LED.",
     "source": "baseCode.cpp"
   },

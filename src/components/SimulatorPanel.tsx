@@ -3,6 +3,7 @@ import { CppSimulatorBridge } from '../simulator/cppBridge';
 import { RobotSimulator } from '../simulator/robotSimulator';
 import { SimulatorRenderer, RendererOptions } from '../simulator/renderer';
 import { SYNAPSE_CITY } from '../simulator/boardConfigs';
+import { RobotTouchControls, BaseCodeHelp } from '../simulator/RobotTouchControls';
 import { BoardConfig, Pose } from '../simulator/types';
 
 interface SimulatorPanelProps {
@@ -344,6 +345,9 @@ export const SimulatorPanel: React.FC<SimulatorPanelProps> = ({
         <div style={{ flex: 1 }} />
 
         <span>Synapse City · 4 ft × 4 ft</span>
+        <RobotTouchControls disabled={!isRunning || isPaused}
+          onPress={button => { bridgeRef.current?.pressTouch(button); }} />
+        <BaseCodeHelp />
 
       </div>
 

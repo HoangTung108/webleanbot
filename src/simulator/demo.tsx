@@ -1,6 +1,7 @@
 import {formatRouteLength} from './routeMeasurements';
 import {MOTION_CALIBRATION} from './motionCalibration';
 import { HeadingDial } from './HeadingDial';
+import { RobotTouchControls, BaseCodeHelp } from './RobotTouchControls';
 import { SimulatorDock } from './SimulatorDock';
 import { RoutePlannerPanel } from './RoutePlannerPanel';
 import type {OnlineCompetitionState,OnlineCommand} from './onlineCompetition';
@@ -450,13 +451,10 @@ export const SimulatorDemo: React.FC<{ cppCode?: string;visible?:boolean;onCodeL
           {/* Speed multiplier controls */}
           <div className="sim-speed" role="group" aria-label="Tốc độ mô phỏng"><span>Tua</span>{[1,2,5,10].map(speed => <button key={speed} className="sim-button" aria-pressed={speedMultiplier === speed} disabled={!!onlineRef.current&&!robotNetworkManager.isHost()} onClick={() => handleSpeedChange(speed)} title={`Tốc độ ${speed} lần`}>{speed}×</button>)}</div>
         </div>
-        <div role="group" aria-label="Nút chạm Leanbot" className="sim-speed">
-          <span>Nút robot</span>
-          {([{button:1,label:'TB1A · Line'},{button:2,label:'TB1B · Bài'},{button:4,label:'TB2A · WiFi'},{button:8,label:'TB2B · Reset'}]).map(({button,label})=><button key={button} className="sim-button" disabled={!isRunning||isPaused} onClick={()=>{
+        <RobotTouchControls disabled={!isRunning||isPaused} onPress={button=>{
             if(onlineRef.current)sendOnline({action:'touch',button});
             else bridgeRef.current?.pressTouch(button);
-          }}>{label}</button>)}
-        </div>
+        }} />
         <HeadingDial value={robotHeading} disabled={isRunning||flowRef.current.localCodeLocked||(competitionMode&&!['setup','preparation'].includes(flowRef.current.phase))} onChange={value => {
           if(onlineRef.current){const pose=simulatorRef.current?.getRobotPose();if(pose)sendOnline({action:'place-robot',pose:{...pose,heading:value}});return;}
           setScoreResult(null);
@@ -467,6 +465,7 @@ export const SimulatorDemo: React.FC<{ cppCode?: string;visible?:boolean;onCodeL
           rendererRef.current?.render();
         }} />
         <span className="sim-toolbar-note">{competitionMode&&['ready','running','finished','complete'].includes(flowRef.current.phase)?`Còn ${Math.ceil(Math.max(0,ROUND_LIMIT_MS/1000-stats.time))} s / 120 s`:`Luyện tập · ${stats.time.toFixed(1)} s · Không giới hạn 120 s`}</span>
+        <BaseCodeHelp />
       </div>
 <SimulatorDock logEvent={logs.at(-1)} onPanelChange={id => { activeDockRef.current = id; setActiveDock(id); if (id === 'logs' && followLogs) requestAnimationFrame(() => { if (logViewRef.current) logViewRef.current.scrollTop = logViewRef.current.scrollHeight; }); }} panels={[
 { id: 'route', label: 'Lộ trình', icon: <MousePointer2 size={20} />, content: <><div ref={setRouteToolsHost} /><div ref={setRoutePreviewHost} /></> },

@@ -95,7 +95,9 @@ export interface RuntimeHost {
   touch?(buttons: number): boolean;
   lineMask?(): number;
   rawLine?(): readonly number[]; // 2L, 0L, 1R, 3R
+  // Ideal object response under full RGB illumination; null means sensor unavailable.
   color?(): readonly [number,number,number] | null;
+  colorAmbient?(): readonly [number,number,number];
   led?(rgb:readonly number[],brightness:number):void;
   iotRead?(attribute:string,assetId:string):string|undefined;
   iotWrite?(attribute:string,value:string,assetId:string):void;
@@ -137,6 +139,8 @@ export class CppRuntime {
   private thresholds=[69,78,106,70];
   private brightness=255;
   private rgb:number[]=[0,0,0];
+  private shownRgb:number[]=[0,0,0];
+  private shownBrightness=255;
   private assetId='';
   private serial='';
   private touchMask=0;
@@ -144,7 +148,7 @@ export class CppRuntime {
   private touchUntil=0;
   /** A physical-button pulse in simulation time, including startup/release debounce. */
   pressTouch(button:number):boolean {
-    if(!this.running||![1,2,4,8].includes(button)||this.time<this.touchUntil)return false;
+    if(!this.running||![1,2,3,4,8].includes(button)||this.time<this.touchUntil)return false;
     this.touchMask=button;
     this.touchFrom=Math.max(this.time,this.touchUntil+40,50);
     this.touchUntil=this.touchFrom+100;
@@ -257,7 +261,12 @@ export class CppRuntime {
       case 'LbIoT.Wifi.begin':this.host.log?.('IoT giả lập: dùng thuộc tính cục bộ, không kết nối máy chủ thật.');return null;
       case 'APDS.begin':return !!this.host.color;
       case 'APDS.colorAvailable':return !!this.host.color?.();
-      case 'APDS.readColor':{const sample=this.host.color?.();if(!sample)return false;args.forEach((v,i)=>{if(isRef(v))v.write(sample[i]);});return true;}
+      case 'APDS.readColor':{
+        const sample=this.host.color?.();if(!sample)return false;
+        const ambient=this.host.colorAmbient?.()??[0,0,0];
+        const measured=sample.map((value,i)=>value<0?value:Math.round(ambient[i]+value*(this.shownRgb[i]??0)/255*this.shownBrightness/255));
+        args.forEach((v,i)=>{if(isRef(v))v.write(measured[i]);});return true;
+      }
       case 'LbIRArray.read':{const index=[2,0,1,3].indexOf(a);return this.host.rawLine?.()[index]??((this.host.lineMask?.()??0)&(1<<(3-index))?4095:0);}
       case 'LbIRLine.isBlackDetected':return this.cachedLineMask!==0;
       case 'LbIRLine.doManualCalibration':this.host.log?.('Line giả lập dùng cảm biến lý tưởng theo hình học sa bàn; hiệu chuẩn nút chạm cần robot thật.');return null;
@@ -265,7 +274,7 @@ export class CppRuntime {
       case 'LbRGB.getBrightness':return this.brightness;
       case 'LbRGB.setBrightness':this.brightness=a;return null;
       case 'LbRGB.fillColor':this.rgb=[...(args[0] as number[])];return null;
-      case 'LbRGB.show':this.host.led?.(this.rgb,this.brightness);return null;
+      case 'LbRGB.show':this.shownRgb=[...this.rgb];this.shownBrightness=this.brightness;this.host.led?.(this.rgb,this.brightness);return null;
       case 'LbIRLine.value': return this.cachedLineMask;
       case 'Leanbot.begin': case 'Serial.begin': return null;
       case 'Serial.available': return 0;
@@ -367,7 +376,7 @@ export class CppRuntime {
       yield { ms: 1 };
     }
   }
-  start() { this.touchMask=this.touchFrom=this.touchUntil=0;this.missionStarted=false;this.cachedLineMask=0;this.thresholds=[69,78,106,70];this.serial='';this.iot.clear();this.brightness=255;this.rgb=[0,0,0];this.assetId='';this.host.led?.(this.rgb,this.brightness);this.scopes = [new Map()]; this.iterator = this.program(); this.running = true; this.time = this.distance = this.rotation = this.pending = 0; this.motors(0, 0); }
+  start() { this.touchMask=this.touchFrom=this.touchUntil=0;this.missionStarted=false;this.cachedLineMask=0;this.thresholds=[69,78,106,70];this.serial='';this.iot.clear();this.brightness=this.shownBrightness=255;this.rgb=[0,0,0];this.shownRgb=[0,0,0];this.assetId='';this.host.led?.(this.rgb,this.brightness);this.scopes = [new Map()]; this.iterator = this.program(); this.running = true; this.time = this.distance = this.rotation = this.pending = 0; this.motors(0, 0); }
   stop() { this.touchMask=this.touchFrom=this.touchUntil=0;this.running = false; this.motors(0, 0); }
   tick(milliseconds: number) {
     if (!Number.isFinite(milliseconds) || milliseconds < 0) return;

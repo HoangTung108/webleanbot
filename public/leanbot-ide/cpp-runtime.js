@@ -1563,6 +1563,8 @@ var LeanbotCpp = (() => {
     thresholds = [69, 78, 106, 70];
     brightness = 255;
     rgb = [0, 0, 0];
+    shownRgb = [0, 0, 0];
+    shownBrightness = 255;
     assetId = "";
     serial = "";
     touchMask = 0;
@@ -1570,7 +1572,7 @@ var LeanbotCpp = (() => {
     touchUntil = 0;
     /** A physical-button pulse in simulation time, including startup/release debounce. */
     pressTouch(button) {
-      if (!this.running || ![1, 2, 4, 8].includes(button) || this.time < this.touchUntil) return false;
+      if (!this.running || ![1, 2, 3, 4, 8].includes(button) || this.time < this.touchUntil) return false;
       this.touchMask = button;
       this.touchFrom = Math.max(this.time, this.touchUntil + 40, 50);
       this.touchUntil = this.touchFrom + 100;
@@ -1832,8 +1834,10 @@ var LeanbotCpp = (() => {
         case "APDS.readColor": {
           const sample = this.host.color?.();
           if (!sample) return false;
+          const ambient = this.host.colorAmbient?.() ?? [0, 0, 0];
+          const measured = sample.map((value, i) => value < 0 ? value : Math.round(ambient[i] + value * (this.shownRgb[i] ?? 0) / 255 * this.shownBrightness / 255));
           args.forEach((v, i) => {
-            if (isRef(v)) v.write(sample[i]);
+            if (isRef(v)) v.write(measured[i]);
           });
           return true;
         }
@@ -1858,6 +1862,8 @@ var LeanbotCpp = (() => {
           this.rgb = [...args[0]];
           return null;
         case "LbRGB.show":
+          this.shownRgb = [...this.rgb];
+          this.shownBrightness = this.brightness;
           this.host.led?.(this.rgb, this.brightness);
           return null;
         case "LbIRLine.value":
@@ -2080,8 +2086,9 @@ var LeanbotCpp = (() => {
       this.thresholds = [69, 78, 106, 70];
       this.serial = "";
       this.iot.clear();
-      this.brightness = 255;
+      this.brightness = this.shownBrightness = 255;
       this.rgb = [0, 0, 0];
+      this.shownRgb = [0, 0, 0];
       this.assetId = "";
       this.host.led?.(this.rgb, this.brightness);
       this.scopes = [/* @__PURE__ */ new Map()];

@@ -87,3 +87,15 @@ it('caches line read results for value() and clears them on restart',()=>{
  logs.length=0;runtime.start();runtime.tick(10);
  expect(logs).toEqual(['0','10','10']);expect(reads).toBe(2);
 });
+
+it('measures reflected color using displayed illumination and ambient light',()=>{
+ const logs:string[]=[];
+ const runtime=new CppRuntime(`void loop(){int r,g,b;
+ LbRGB.fillColor(CRGB(255,0,0));APDS.readColor(r,g,b);Serial.println(r);
+ LbRGB.setBrightness(128);LbRGB.show();APDS.readColor(r,g,b);Serial.println(r);Serial.println(g);
+ LbRGB.fillColor(CRGB(0,0,255));APDS.readColor(r,g,b);Serial.println(r);
+ LbRGB.show();APDS.readColor(r,g,b);Serial.println(b);LbMission.end();}`,{
+  motors(){},advance(){},color:()=>[100,150,200],colorAmbient:()=>[10,20,30],log:m=>logs.push(m),
+ });runtime.start();runtime.tick(1);expect(logs).toEqual(['10','60','20','60','130']);
+ logs.length=0;runtime.start();runtime.tick(1);expect(logs).toEqual(['10','60','20','60','130']);
+});
