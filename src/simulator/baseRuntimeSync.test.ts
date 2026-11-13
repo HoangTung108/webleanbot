@@ -14,6 +14,7 @@ describe('current base runs without helper rewrites',()=>{
  it('runs the actual turn profile',()=>{const r=run('turn_two_wheels(2000,90);');expect(r.angle).toBeGreaterThan(89.4);expect(r.angle).toBeLessThan(90);});
  it('runs MyBlock pointer/struct feedback in mm and cm',()=>{const r=run('followLineDistance(100);followLineCm(22.5);');expect(r.path).toBeCloseTo(325,0);expect(r.logs).toEqual([]);});
  it('runs the asynchronous hand, color voting and IoT attribute',()=>{const r=run('set_wifi("test","pass",F("ROOM"));close_hand_async(50);read_color();send_iot_color();Serial.println(read_iot_color());wait_hand();');expect(r.hands.at(-1)).toEqual([50,50]);expect(r.logs).toContain('1');expect(r.logs).toContain('1');});
+ it('knocks each hand separately and returns it to rest',()=>{const r=run('knock_left_hand();knock_right_hand();');expect(r.hands).toContainEqual([90,0]);expect(r.hands).toContainEqual([0,90]);expect(r.hands.at(-1)).toEqual([0,0]);expect(r.logs).toEqual([]);});
 });
 
 it('follows the actual Synapse curved line in both directions',async()=>{

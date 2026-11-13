@@ -853,6 +853,26 @@ export const apiReference: ApiReference[] = [
   },
   {
     "group": "helpers",
+    "api": "knock_left_hand(90);",
+    "description": "Đánh tay trái một lần để hất khối rồi tự trở về góc ban đầu.",
+    "parameters": "Góc đánh, độ; mặc định 90, giới hạn -30..120.",
+    "returns": "void.",
+    "notes": "Tay phải giữ nguyên. Có thể gọi không đối số để dùng góc mặc định.",
+    "code": "// Đánh tay trái một lần để hất khối.\nknock_left_hand();",
+    "source": "baseCode.cpp"
+  },
+  {
+    "group": "helpers",
+    "api": "knock_right_hand(90);",
+    "description": "Đánh tay phải một lần để hất khối rồi tự trở về góc ban đầu.",
+    "parameters": "Góc đánh, độ; mặc định 90, giới hạn -30..120.",
+    "returns": "void.",
+    "notes": "Tay trái giữ nguyên. Có thể gọi không đối số để dùng góc mặc định.",
+    "code": "// Đánh tay phải một lần để hất khối.\nknock_right_hand();",
+    "source": "baseCode.cpp"
+  },
+  {
+    "group": "helpers",
     "api": "turn_angle(2000, 90, TWO_WHEELS);",
     "description": "Quay có phản hồi, tăng/giảm tốc và kiểm tra kẹt.",
     "parameters": "Tốc độ, góc độ, TurnMode.",

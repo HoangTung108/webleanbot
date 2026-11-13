@@ -129,6 +129,7 @@ const int IR_TH_3R = 60;
 const int GRIP_CLOSE_ANGLE = 50;
 const int GRIP_MOVE_MS = 750;
 const int GRIP_SETTLE_MS = 120;
+const int KNOCK_MOVE_MS = 250;
 
 const uint16_t LBMB_TICK_MS = 10;
 const int16_t LBMB_START_SPEED = 200;
@@ -232,6 +233,44 @@ void open_hand_async() { close_hand_async(0); }
 void wait_hand() { while (handBusy) robot_delay(1); }
 void close_hand(int degree) { close_hand_async(degree); wait_hand(); }
 void open_hand() { open_hand_async(); wait_hand(); }
+
+static int interpolateHandAngle(int from, int target, unsigned long elapsed, unsigned long duration) {
+  const long step = (long)(target - from) * (long)elapsed;
+  return from + (int)((step + (step >= 0 ? (long)duration / 2 : -(long)duration / 2)) / (long)duration);
+}
+
+static void move_hand_pair_blocking(int fromLeft, int fromRight, int targetLeft, int targetRight,
+                                    unsigned long duration) {
+  const unsigned long started = millis();
+  while (true) {
+    if (check_mission_reset()) return;
+    const unsigned long elapsed = min(millis() - started, duration);
+    LbGripper.moveToLR(interpolateHandAngle(fromLeft, targetLeft, elapsed, duration),
+                       interpolateHandAngle(fromRight, targetRight, elapsed, duration), 0);
+    if (elapsed >= duration) break;
+    robot_delay(min(5UL, duration - elapsed));
+  }
+  robot_delay(GRIP_SETTLE_MS);
+}
+
+static void knock_hand(bool left, int degree) {
+  if (check_mission_reset()) return;
+  wait_hand();
+  if (check_mission_reset()) return;
+  const int restingAngle = handAngle;
+  const int hitAngle = constrain(degree, -30, 120);
+  const int hitLeft = left ? hitAngle : restingAngle;
+  const int hitRight = left ? restingAngle : hitAngle;
+  move_hand_pair_blocking(restingAngle, restingAngle, hitLeft, hitRight, KNOCK_MOVE_MS);
+  if (check_mission_reset()) return;
+  move_hand_pair_blocking(hitLeft, hitRight, restingAngle, restingAngle, KNOCK_MOVE_MS);
+  if (check_mission_reset()) return;
+  handFrom = handTarget = handAngle = restingAngle;
+  handBusy = false;
+}
+
+void knock_left_hand(int degree = 90) { knock_hand(true, degree); }
+void knock_right_hand(int degree = 90) { knock_hand(false, degree); }
 
 // Đi và quay có phản hồi
 void turn_angle(int speed, float angle_deg, TurnMode mode) {
@@ -1331,13 +1370,9 @@ void FullMission() {
     LbRGB.show();
     // Chạy bài: đặt các lệnh nhiệm vụ tại đây.
     // Ví dụ: followLineCm(100, 100); // Tốc độ dò line tính bằng %.
-    // Gửi các mẫu màu vào Color1-Color5 của Asset đã cấu hình trong setup().
-    send_iot_color(BLUE,1);
-    send_iot_color(RED,2);
-    send_iot_color(YELLOW,3);
-    send_iot_color(PURPLE,4);
-    send_iot_color(GREEN,5);
-    // Robot nhận dùng read_iot_color(...) trong chương trình riêng.
+    // knock_left_hand(); // Đánh tay trái một lần; tay phải giữ nguyên.
+    // knock_right_hand(); // Đánh tay phải một lần; tay trái giữ nguyên.
+
   } 
   else if (buttons == 4) // Nút TB2A: kết nối Internet
   {
