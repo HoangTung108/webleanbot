@@ -56,26 +56,16 @@ inline LbmbState lbmbReadState();
 
 enum ObjectColor { UNKNOWN, RED, GREEN, BLUE, YELLOW, PURPLE };
 static ObjectColor classifyColor(int red, int green, int blue);
-bool read_color();
-ObjectColor get_color();
-bool is_color(ObjectColor expected);
-void requireColor(ObjectColor expected);
-void send_iot_color(ObjectColor color);
-void set_color_reference(ObjectColor color, int red, int green, int blue);
-void calibrate_color(ObjectColor color);
-ObjectColor peek_iot_color();
-ObjectColor pop_iot_color();
-ObjectColor read_iot_color();
-bool wait_iot_color(ObjectColor expected, unsigned long timeoutMs = 30000UL);
-void use_wifi_color_mode();
-void connect_robot_room(const __FlashStringHelper *roomId);
-void send_real_robot_color(ObjectColor color);
-ObjectColor read_real_robot_color();
-bool wait_real_robot_color(ObjectColor expected, unsigned long timeoutMs = 30000UL);
+static void set_color_reference(ObjectColor color, int red, int green, int blue);
+ObjectColor lastMeasuredColor = UNKNOWN;
+// Ba API màu: đọc khối, gửi màu, nhận màu. UNKNOWN là chưa xác định/không có tín hiệu.
+ObjectColor read_color();
+void send_iot_color(ObjectColor color = lastMeasuredColor);
+ObjectColor read_iot_color(unsigned long timeoutMs = 0UL);
+void connect_robot_room(const __FlashStringHelper *assetId);
 void measure_line_values();
 void reset_mission();
 static bool check_mission_reset();
-ObjectColor lastMeasuredColor = UNKNOWN;
 
 auto IoTColor = LbIoT.Asset.attribute(F("Color"));
 
@@ -303,6 +293,33 @@ void turn_two_wheels(int speed, float angle) {
   turn_angle(speed, angle, TWO_WHEELS);
 }
 
+// Chỉ trả quyền cho lệnh kế tiếp sau khi phản hồi bánh đã ổn định.
+static bool stopOnDetectedLine() {
+  LbMotion.runLR(0, 0);
+  float distance = (float)LbMotion.getDistanceMm();
+  float rotation = (float)LbMotion.getRotationDeg();
+  const unsigned long started = millis();
+  unsigned long stableSince = started;
+  while (millis() - started < 1200UL) {
+    if (check_mission_reset()) return false;
+    robot_delay(10);
+    if (check_mission_reset()) return false;
+    LbMotion.runLR(0, 0);
+    const float nextDistance = (float)LbMotion.getDistanceMm();
+    const float nextRotation = (float)LbMotion.getRotationDeg();
+    if (fabsf(nextDistance - distance) > 0.1f || fabsf(nextRotation - rotation) > 0.1f) {
+      distance = nextDistance; rotation = nextRotation;
+      stableSince = millis();
+    }
+    if (millis() - stableSince >= 150UL) {
+      resetMotionState();
+      return true;
+    }
+  }
+  failMission(ERR_MOVE_STALL);
+  return false;
+}
+
 static bool moveTankCore(int motor_L, int motor_R, float distance_cm, bool untilLine) {
   if (missionError != ERR_NONE) { LbMotion.stopAndWait(); return false; }
   if (check_mission_reset()) return false;
@@ -350,11 +367,7 @@ static bool moveTankCore(int motor_L, int motor_R, float distance_cm, bool until
       lastLineSample = millis();
       sampledLine = true;
       if ((searchState.lineState & 0x0F) != 0) {
-        // Đặt tốc độ về 0 ngay; không dùng dừng giảm tốc tại mép vạch.
-        LbMotion.runLR(0, 0);
-        robot_delay(100);
-        resetMotionState();
-        return !missionResetRequested;
+        return stopOnDetectedLine();
       }
     }
     if (remaining <= 0.0f) break;
@@ -440,13 +453,6 @@ const __FlashStringHelper *wifiAssetId = nullptr;
 bool wifiColorMode = false;
 // Chỉ ghi nhận đã gọi Wifi.begin(), không phải trạng thái online của phần cứng.
 bool wifiBeginCalled = false;
-
-void use_wifi_color_mode() {
-  if (!wifiBeginCalled || wifiAssetId == nullptr) {
-    failMission(ERR_WIFI_CONFIG); return;
-  }
-  wifiColorMode = true;
-}
 
 // Tên hàm giữ tương thích; tham số là Asset ID của LeanbotIoT.
 // Nếu chưa gọi set_wifi(), lưu Asset ID và chọn sau khi Wifi.begin().
@@ -1073,7 +1079,7 @@ void goToJunction() {
   centerDetectedJunction();
 }
 
-void set_color_white(int red, int green, int blue) {
+static void set_color_white(int red, int green, int blue) {
   if (min(red, min(green, blue)) < COLOR_MIN_CHANNEL) return;
   const float average = ((float)red + green + blue) / 3.0f;
   colorRedGain = average / red;
@@ -1081,7 +1087,7 @@ void set_color_white(int red, int green, int blue) {
   colorBlueGain = average / blue;
 }
 
-bool readAPDSColor(int &r, int &g, int &b) {
+static bool readAPDSColor(int &r, int &g, int &b) {
   if (check_mission_reset()) return false;
   APDS.colorAvailable();
   robot_delay(35);
@@ -1096,7 +1102,7 @@ bool readAPDSColor(int &r, int &g, int &b) {
 }
 
 
-void set_color_reference(ObjectColor color, int red, int green, int blue) {
+static void set_color_reference(ObjectColor color, int red, int green, int blue) {
   if (color < RED || color > PURPLE || red < 0 || green < 0 || blue < 0) return;
   const float total = (float)red + green + blue;
   if (max(red, max(green, blue)) < COLOR_MIN_CHANNEL || total <= 0) return;
@@ -1106,7 +1112,7 @@ void set_color_reference(ObjectColor color, int red, int green, int blue) {
   colorReferenceReady[(int)color] = true;
 }
 
-void calibrate_color(ObjectColor color) {
+static void calibrate_color(ObjectColor color) {
   if (color < RED || color > PURPLE) return;
   if (!colorSensorReady) { failMission(ERR_COLOR_SENSOR); return; }
   long sums[3] = {0, 0, 0};
@@ -1178,17 +1184,19 @@ static ObjectColor classifyColor(int red, int green, int blue) {
   return PURPLE;
 }
 
-// Read and cache one measurement; false means a sensor error.
-bool read_color() {
+// Đọc 5 mẫu, lấy ít nhất 4 phiếu; trả trực tiếp tên màu.
+ObjectColor read_color() {
   lastMeasuredColor = UNKNOWN; // Không giữ lại màu cũ nếu lần đo này thất bại.
-  if (!colorSensorReady) { failMission(ERR_COLOR_SENSOR); return false; }
+  if (check_mission_reset()) return UNKNOWN;
+  if (!colorSensorReady) colorSensorReady = APDS.begin();
+  if (!colorSensorReady) { failMission(ERR_COLOR_SENSOR); return UNKNOWN; }
   int votes[6] = {0, 0, 0, 0, 0, 0};
   long totalRed = 0, totalGreen = 0, totalBlue = 0;
   for (int sample = 0; sample < 5; ++sample) {
     int red = 0, green = 0, blue = 0;
     if (!readAPDSColor(red, green, blue) || red < 0 || green < 0 || blue < 0) {
       failMission(ERR_COLOR_SENSOR);
-      return false;
+      return UNKNOWN;
     }
     ++votes[(int)classifyColor(red, green, blue)];
     totalRed += red; totalGreen += green; totalBlue += blue;
@@ -1219,174 +1227,69 @@ bool read_color() {
     LbRGB.fillColor(colors[(int)color]);
     LbRGB.show();
   }
-  return true;
+  return color;
 }
 
 
-ObjectColor get_color() { return lastMeasuredColor; } // Không đo lại.
-bool is_color(ObjectColor expected) {
-  return expected != UNKNOWN && lastMeasuredColor == expected;
+// Chỉ chuyển đổi giao thức ở nội bộ, không thêm API màu cho người dùng.
+static const char* colorSignal(ObjectColor color) {
+  switch (color) {
+    case RED: return "Red";
+    case GREEN: return "Green";
+    case BLUE: return "Blue";
+    case YELLOW: return "Yellow";
+    case PURPLE: return "Purple";
+    default: return "Unknown";
+  }
 }
-void requireColor(ObjectColor expected) {
-  if (read_color() && lastMeasuredColor != expected) failMission(ERR_COLOR_MISMATCH);
+
+static ObjectColor parseColorSignal(String signal) {
+  signal.trim(); signal.toUpperCase();
+  if (signal == "RED") return RED;
+  if (signal == "GREEN") return GREEN;
+  if (signal == "BLUE") return BLUE;
+  if (signal == "YELLOW") return YELLOW;
+  if (signal == "PURPLE") return PURPLE;
+  return UNKNOWN;
 }
-// Tín hiệu màu IoT và hàng chờ
+
+// Không tham số: gửi kết quả vừa đo, không đọc cảm biến thêm lần nữa.
+// WiFi/Asset đã cấu hình: LeanbotIoT; còn lại: Serial/WebSocket Bridge.
 void send_iot_color(ObjectColor color) {
-  if (check_mission_reset()) return;
-  switch (color) {
-    case RED:   IoTColor.write("Red"); break;
-    case GREEN: IoTColor.write("Green"); break;
-    case BLUE:  IoTColor.write("Blue"); break;
-    case YELLOW: IoTColor.write("Yellow"); break;
-    case PURPLE: IoTColor.write("Purple"); break;
-    default:          IoTColor.write("Unknown"); break;
+  if (check_mission_reset() || color < RED || color > PURPLE) return;
+  if (wifiColorMode) IoTColor.write(colorSignal(color));
+  else {
+    Serial.print(F("COLOR:"));
+    String signal = colorSignal(color); signal.toUpperCase();
+    Serial.println(signal);
   }
 }
-// FIFO cố định, không cấp phát động trên ATmega328P.
-const int IOT_QUEUE_CAPACITY = 16;
-ObjectColor iotColorQueue[IOT_QUEUE_CAPACITY];
-int iotQueueHead = 0;
-int iotQueueSize = 0;
-bool iotQueueOverflow = false;
-int iot_queue_count() { return iotQueueSize; }
-void clear_iot_queue() {
-  iotQueueHead = 0;
-  iotQueueSize = 0;
-  iotQueueOverflow = false;
-}
-ObjectColor peek_iot_color() {
-  if (iotQueueSize == 0) return UNKNOWN;
-  return iotColorQueue[iotQueueHead];
-}
-ObjectColor pop_iot_color() {
-  const ObjectColor color = peek_iot_color();
-  if (iotQueueSize > 0) {
-    iotQueueHead = (iotQueueHead + 1) % IOT_QUEUE_CAPACITY;
-    --iotQueueSize;
-  }
-  return color;
-}
-ObjectColor read_iot_color() {
-  String signal = IoTColor.read();
-  signal.trim();
-  signal.toUpperCase();
-  ObjectColor color = UNKNOWN;
-  if (signal == "RED") color = RED;
-  else if (signal == "GREEN") color = GREEN;
-  else if (signal == "BLUE") color = BLUE;
-  else if (signal == "YELLOW") color = YELLOW;
-  else if (signal == "PURPLE") color = PURPLE;
-  if (color == UNKNOWN) return color;
-  if (iotQueueSize < IOT_QUEUE_CAPACITY) {
-    const int tail = (iotQueueHead + iotQueueSize) % IOT_QUEUE_CAPACITY;
-    iotColorQueue[tail] = color;
-    ++iotQueueSize;
-  } else {
-    iotQueueOverflow = true;
-  }
-  return color;
-}
-void reset_iot_color() { IoTColor.write("waiting"); }
-bool wait_iot_color(ObjectColor expected, unsigned long timeoutMs) {
-  if (expected < RED || expected > PURPLE) {
-    failMission(ERR_COLOR_MISMATCH);
-    return false;
-  }
+
+// timeoutMs=0: đọc một lần; >0: chờ màu hợp lệ, UNKNOWN nếu hết hạn/reset.
+// Attribute là giá trị hiện tại, đọc lại có thể trả cùng màu; không tạo FIFO giả.
+ObjectColor read_iot_color(unsigned long timeoutMs) {
   const unsigned long started = millis();
-  while (millis() - started < timeoutMs) {
-    if (check_mission_reset()) return false;
-    const ObjectColor received = read_iot_color();
-    const unsigned long elapsed = millis() - started;
-    if (elapsed >= timeoutMs) break;
-    if (received == expected) return true;
-    const unsigned long remaining = timeoutMs - elapsed;
-    robot_delay(min(250UL, remaining));
-  }
-  failMission(ERR_IOT_TIMEOUT);
-  return false;
-}
-
-// Hai robot dùng cùng Asset ID/Color qua LeanbotIoT; hoặc dùng Serial / WebSocket Bridge.
-// Asset.begin() không tự mở kết nối tới WebSocket server của web.
-// Ghép với server web cần gateway gọi /api/iot/attribute hoặc Bridge Serial đã có.
-// WiFi Robot Setup (không cần cáp USB):
-// 1. set_wifi("SSID", "Password", F("AssetID")); // WiFi -> Asset.begin -> thuộc tính Color
-// 2. connect_robot_room(F("AssetID")); // Chọn Asset khác sau khi đã kết nối WiFi
-// 3. send_robot_color(BLUE);                // Gửi màu trực tiếp qua WiFi
-// 4. wait_robot_color(GREEN, 30000UL);      // Đợi nhận màu từ robot đối tác qua WiFi
-void send_robot_color(ObjectColor color) {
-  if (check_mission_reset()) return;
-  if (wifiColorMode) { send_iot_color(color); return; }
-  Serial.print(F("COLOR:"));
-  switch (color) {
-    case RED:    Serial.println(F("RED")); break;
-    case GREEN:  Serial.println(F("GREEN")); break;
-    case BLUE:   Serial.println(F("BLUE")); break;
-    case YELLOW: Serial.println(F("YELLOW")); break;
-    case PURPLE: Serial.println(F("PURPLE")); break;
-    default:     Serial.println(F("UNKNOWN")); break;
-  }
-}
-
-ObjectColor read_robot_color() {
-  if (wifiColorMode) return read_iot_color();
-  if (Serial.available() <= 0) return UNKNOWN;
-  String line = Serial.readStringUntil('\n');
-  line.trim();
-  line.toUpperCase();
-  int idx = line.indexOf("COLOR:");
-  if (idx < 0) return UNKNOWN;
-  String colorStr = line.substring(idx + 6);
-  colorStr.trim();
-  ObjectColor color = UNKNOWN;
-  if (colorStr == "RED") color = RED;
-  else if (colorStr == "GREEN") color = GREEN;
-  else if (colorStr == "BLUE") color = BLUE;
-  else if (colorStr == "YELLOW") color = YELLOW;
-  else if (colorStr == "PURPLE") color = PURPLE;
-  if (color != UNKNOWN && iotQueueSize < IOT_QUEUE_CAPACITY) {
-    const int tail = (iotQueueHead + iotQueueSize) % IOT_QUEUE_CAPACITY;
-    iotColorQueue[tail] = color;
-    ++iotQueueSize;
-  }
-  return color;
-}
-
-bool wait_robot_color(ObjectColor expected, unsigned long timeoutMs) {
-  if (wifiColorMode) {
-    return wait_iot_color(expected, timeoutMs);
-  }
-  if (expected < RED || expected > PURPLE) {
-    failMission(ERR_COLOR_MISMATCH);
-    return false;
-  }
-  const unsigned long started = millis();
-  while (millis() - started < timeoutMs) {
-    if (check_mission_reset()) return false;
-    const ObjectColor received = read_robot_color();
-    if (received == expected) return true;
-    if (iot_queue_count() > 0 && peek_iot_color() == expected) {
-      pop_iot_color();
-      return true;
+  while (true) {
+    if (check_mission_reset()) return UNKNOWN;
+    String signal = "";
+    if (wifiColorMode) signal = IoTColor.read();
+    else if (Serial.available() > 0) {
+      signal = Serial.readStringUntil('\n');
+      signal.trim(); signal.toUpperCase();
+      if (signal.indexOf("COLOR:") == 0) signal = signal.substring(6);
+      else signal = "";
     }
+    // SDK đọc mạng có thể chặn: kiểm tra lại hạn và reset sau khi nó trả về.
+    if (check_mission_reset()) return UNKNOWN;
     const unsigned long elapsed = millis() - started;
-    if (elapsed >= timeoutMs) break;
+    if (timeoutMs > 0 && elapsed >= timeoutMs) break;
+    const ObjectColor color = parseColorSignal(signal);
+    if (color != UNKNOWN) return color;
+    if (timeoutMs == 0) return UNKNOWN;
     robot_delay(min(50UL, timeoutMs - elapsed));
+    if (millis() - started >= timeoutMs) break;
   }
-  failMission(ERR_IOT_TIMEOUT);
-  return false;
-}
-
-void send_real_robot_color(ObjectColor color) {
-  send_robot_color(color);
-}
-
-ObjectColor read_real_robot_color() {
-  return read_robot_color();
-}
-
-bool wait_real_robot_color(ObjectColor expected, unsigned long timeoutMs) {
-  return wait_robot_color(expected, timeoutMs);
+  return UNKNOWN;
 }
 
 // Reset bài, giữ cấu hình WiFi/Asset và ngưỡng line của SDK.
@@ -1395,7 +1298,7 @@ void reset_mission() {
   LbMotion.stopAndWait();
   handBusy = false; handFrom = handTarget = handAngle;
   missionError = ERR_NONE; junctionPending = false; lineOperationCompleted = false;
-  lastMeasuredColor = UNKNOWN; clear_iot_queue(); resetMotionState();
+  lastMeasuredColor = UNKNOWN; resetMotionState();
   missionArmed = false; missionButtons = 8; missionButtonChangedAt = millis();
   LbRGB.fillColor(CRGB::Black); LbRGB.fillColor(CRGB::Green, BITMAP(ledA,ledB)); LbRGB.show();
   Serial.println(F("MISSION RESET: release buttons, then press TB1B to run again."));
