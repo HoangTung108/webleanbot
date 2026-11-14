@@ -74,8 +74,8 @@ unsigned long missionButtonChangedAt = 0;
 static int clampMotor(int v) { return constrain(v, -MAX_MOTOR_SPEED, MAX_MOTOR_SPEED); }
 static int signInt(int n) { return (n > 0) - (n < 0); }
 void resetMotionState() { lastLineError = 0; lineControlReady = false; lastLineControlTime = millis(); }
-void close_hand(int d) { LbGripper.moveTo(d); }
-void open_hand() { LbGripper.moveTo(0); }
+void close_hand(int d) { LbGripper.moveToLR(d, d, 100); }
+void open_hand() { LbGripper.moveToLR(0, 0, 100); }
 void robot_delay(unsigned long d) { LbDelay(d); }
 
 void turn_two_wheels(int speed, float angle_deg) {
@@ -551,7 +551,10 @@ static void showReadyLED() { LbRGB.fillColor(CRGB::Black); LbRGB.fillColor(CRGB:
 void beep() { for (int i = 0; i < 3; i++) { Leanbot.tone(880, 50); delay(50); } }
 
 
+void push_block()
+{
 
+}
 void FullMission() {
   const byte b = (LbTouch.read(TB1A) == HIGH ? 1 : 0) | (LbTouch.read(TB1B) == HIGH ? 2 : 0) | (LbTouch.read(TB2A) == HIGH ? 4 : 0);
   const unsigned long n = millis();
@@ -567,6 +570,23 @@ void FullMission() {
    {
     LbRGB.fillColor(CRGB::Yellow, BITMAP(ledC,ledD)); LbRGB.show();
    //CODE duoi cho nay 
+   //vị a
+   ObjectColor arr[3] = {RED,RED,RED};
+    
+    switch(read_color())
+    {
+            case BLUE: arr[0] = BLUE; push_block(); break;
+            case GREEN : arr[0] = GREEN;push_block(); break;
+            case PURPLE : arr[0] = PURPLE; break;
+    }
+       
+ 
+   ....
+   //diem reset
+   switch(a[0])
+   {
+
+   }
 
 
 

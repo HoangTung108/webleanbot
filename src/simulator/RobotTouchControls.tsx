@@ -16,7 +16,4 @@ export function RobotTouchControls({ disabled, onPress }: {
   </div>;
 }
 
-export function BaseCodeHelp() {
-  return <p className="sim-toolbar-note">Với basecode FullMission: bấm Chạy / Start, rồi TB1A + TB1B · Bài để chạy nhiệm vụ.
-    {' '}Thêm lệnh vào nhánh TB1A + TB1B trong FullMission nếu bản base còn trống. TB2B · Reset dừng bài và chờ lượt mới.</p>;
-}
+
