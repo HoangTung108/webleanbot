@@ -1,10 +1,10 @@
 
 #define BASE_USE_COLOR 1
-
 #include <Leanbot.h>
 #include <stdint.h>
 #include <math.h>
 #include <Arduino_APDS9960.h>
+
 
 struct LbmbState { uint32_t timeMs; int32_t distanceMm; uint8_t lineState; int16_t ir2L, ir0L, ir1R, ir3R; };
 struct LbmbCommand { int16_t leftSpeed, rightSpeed; bool isDone; };
@@ -547,40 +547,10 @@ ObjectColor read_color() {
 ObjectColor read_color() { lastMeasuredColor = UNKNOWN; LbMotion.stopAndWait(); return UNKNOWN; }
 #endif
 
-void send_iot_color(ObjectColor c, uint8_t n) {}
-ObjectColor read_iot_color(unsigned long t, uint8_t n) { return UNKNOWN; }
-
 static void showReadyLED() { LbRGB.fillColor(CRGB::Black); LbRGB.fillColor(CRGB::Green, BITMAP(ledA,ledB)); LbRGB.show(); }
 void beep() { for (int i = 0; i < 3; i++) { Leanbot.tone(880, 50); delay(50); } }
 
-static void missionBluePickup(float aa, float ea) {
-  move_tank(2000,2000,15); move_tank(-2000,-2000,15);
-  turn_two_wheels(2000, aa); move_tank(-2000, -2000, 32.5);
-  turn_two_wheels(2000, -90); followLineCm(32.5,2000);
-  close_hand(90); move_tank(-2000, -2000, 32.5);
-  turn_two_wheels(2000, 90); followLineCm(32.5,2000);
-  turn_two_wheels(2000, ea); open_hand();
-}
 
-static void missionGreenRoute(float aa) {
-  move_tank(2000,2000,15); move_tank(-2000,-2000,15);
-  turn_two_wheels(2000, aa); followLineCm(65,2000);
-  close_hand(90); move_tank(-2000,-2000,65);
-  turn_two_wheels(2000, -aa); open_hand();
-  move_tank(2000,2000,15); move_tank(2000,2000,-15);
-  turn_two_wheels(2000,90); move_tank(2000,2000,11); read_color();
-}
-
-static void missionPurpleRoute(float aa) {
-  move_tank(2000,2000,15); move_tank(-2000,-2000,15);
-  turn_two_wheels(2000, aa); followLineCm(48.75,2000);
-  turn_two_wheels(2000, 21); move_tank(2000, 2000, 20);
-  move_tank(-2000, -2000, 20); turn_two_wheels(2000, -21);
-  move_tank(-2000, -2000, 48.75); turn_two_wheels(2000, 135);
-  open_hand(); move_tank(2000, 2000, 15);
-  move_tank(-2000, -2000, 15); turn_two_wheels(2000, 90);
-  move_tank(2000, 2000, 11); read_color();
-}
 
 void FullMission() {
   const byte b = (LbTouch.read(TB1A) == HIGH ? 1 : 0) | (LbTouch.read(TB1B) == HIGH ? 2 : 0) | (LbTouch.read(TB2A) == HIGH ? 4 : 0);
@@ -592,42 +562,17 @@ void FullMission() {
   missionArmed = false;
   if (b != 1 && b != 2 && b != 4) { robot_delay(5); return; }
   junctionPending = false; lineOperationCompleted = false; lastMeasuredColor = UNKNOWN; resetMotionState();
-  if (b == 1) calibrate_line();
-  else if (b == 2) {
+  if (b == 1) calibrate_line(); // ấn TB1A để dò line
+  else if (b == 2) // ấn TB1B để chạy bài 
+   {
     LbRGB.fillColor(CRGB::Yellow, BITMAP(ledC,ledD)); LbRGB.show();
-    move_tank(2000,2000,40.5); turn_two_wheels(2000, 90);
-    followLineUntilJunction(3,2000); followLineCm(16.25,2000);
-    turn_two_wheels(2000, -135); move_tank(2000,2000,11);
-    ObjectColor col = read_color();
-    if(col==RED || col==YELLOW) {
-      close_hand(90); move_tank(2000,2000,10); turn_two_wheels(2000,-135);
-      move_tank(2000,2000,60); open_hand(); move_tank(-2000,-2000,13);
-      turn_two_wheels(2000,-90); followLineUntilJunction(3,2000);
-      turn_two_wheels(2000,-90); followLineCm(32.5,2000); turn_two_wheels(2000,45);
-      move_tank(2000,2000,11); col=read_color();
-    } else if(col==BLUE) {
-      missionBluePickup(45,-45); move_tank(2000,2000,15); move_tank(-2000,-2000,15); turn_two_wheels(2000,90);
-      move_tank(2000,2000,11); col=read_color();
-    } else if(col==GREEN) {
-      missionGreenRoute(-135);
-    } else if(col==PURPLE) {
-      missionPurpleRoute(-135);
-    }
-    if(col==RED || col==YELLOW) {
-      close_hand(90); move_tank(-2000,-2000,11); turn_two_wheels(2000,-45); move_tank(-2000,-2000,40.5);
-      turn_two_wheels(2000,-90); open_hand(); move_tank(2000,2000,10); move_tank(2000,2000,-10);
-      turn_two_wheels(2000,90); followLineCm(40.5,2000); turn_two_wheels(2000,90); followLineCm(48.25,2000);
-      turn_two_wheels(2000,-90); move_tank(2000,2000,16.25); turn_two_wheels(2000,-45); move_tank(2000,2000,4);
-      read_color();
-    } else if(col==BLUE) {
-      missionBluePickup(-45,45); move_tank(2000,2000,15); move_tank(-2000,-2000,15); turn_two_wheels(2000,45);
-      followLineCm(48.25,2000); turn_two_wheels(2000,-90); move_tank(2000,2000,16.25);
-      turn_two_wheels(2000,-45); move_tank(2000,2000,4); read_color();
-    } else if(col==GREEN) {
-      missionGreenRoute(135);
-    } else if(col==PURPLE) {
-      missionPurpleRoute(135);
-    }
+   //CODE duoi cho nay 
+
+
+
+
+
+   ///////////////////////////////////// end 
   } else if(b == 4) {
     LbRGB.fillColor(CRGB::Red, BITMAP(ledC,ledD)); LbRGB.show();
   }
