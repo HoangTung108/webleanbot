@@ -1,7 +1,7 @@
 import {formatRouteLength} from './routeMeasurements';
 import {MOTION_CALIBRATION} from './motionCalibration';
 import { HeadingDial } from './HeadingDial';
-import { RobotTouchControls, BaseCodeHelp } from './RobotTouchControls';
+import { RobotTouchControls } from './RobotTouchControls';
 import { SimulatorDock } from './SimulatorDock';
 import { RoutePlannerPanel } from './RoutePlannerPanel';
 import type {OnlineCompetitionState,OnlineCommand} from './onlineCompetition';
@@ -465,7 +465,6 @@ export const SimulatorDemo: React.FC<{ cppCode?: string;visible?:boolean;onCodeL
           rendererRef.current?.render();
         }} />
         <span className="sim-toolbar-note">{competitionMode&&['ready','running','finished','complete'].includes(flowRef.current.phase)?`Còn ${Math.ceil(Math.max(0,ROUND_LIMIT_MS/1000-stats.time))} s / 120 s`:`Luyện tập · ${stats.time.toFixed(1)} s · Không giới hạn 120 s`}</span>
-        <BaseCodeHelp />
       </div>
 <SimulatorDock logEvent={logs.at(-1)} onPanelChange={id => { activeDockRef.current = id; setActiveDock(id); if (id === 'logs' && followLogs) requestAnimationFrame(() => { if (logViewRef.current) logViewRef.current.scrollTop = logViewRef.current.scrollHeight; }); }} panels={[
 { id: 'route', label: 'Lộ trình', icon: <MousePointer2 size={20} />, content: <><div ref={setRouteToolsHost} /><div ref={setRoutePreviewHost} /></> },
