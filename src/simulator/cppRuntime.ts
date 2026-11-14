@@ -1,3 +1,4 @@
+import {preprocessBaseFeatures} from './baseFeatures';
 import {MOTION_CALIBRATION} from './motionCalibration';
 import { LEANBOT_GEOMETRY } from './robotGeometry';
 export {readVirtualLine,readVirtualColor} from './virtualSensors';
@@ -33,7 +34,7 @@ const precedence: Record<string,number> = {'=':1,'+=':1,'-=':1,'*=':1,'/=':1,'%=
 class Parser {
   tokens: Token[]; i=0; types=new Set(TYPES); structs = new Map<string,Node[]>();
   constructor(source:string) {
-    this.tokens=tokenizeCpp(source).filter(t=>!['comment','preprocessor'].includes(t.kind));
+    this.tokens=tokenizeCpp(preprocessBaseFeatures(source)).filter(t=>!['comment','preprocessor'].includes(t.kind));
     this.tokens=this.tokens.filter((t,i,all)=>!(t.kind==='identifier' && /^(f|u|l|ul|ull)$/i.test(t.value) && all[i-1]?.kind==='number' && all[i-1].end===t.start));
     for(const t of this.tokens) if(t.kind==='number' && !/^0[xb]/i.test(t.value)) t.value=t.value.replace(/[fF]$/,'');
   }

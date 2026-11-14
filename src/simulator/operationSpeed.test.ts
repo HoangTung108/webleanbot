@@ -27,7 +27,6 @@ function run(source: string, command: string) {
 it.each([
   'move_tank(2000,2000,10);', 'move_tank(-2000,-2000,10);',
   'turn_two_wheels(2000,90);', 'turn_two_wheels(2000,-90);',
-  'turn_one_wheel(2000,45,"L");', 'turn_one_wheel(2000,45,"R");',
   'followLineCm(10);',
 ])('runs sooner with the same endpoint tolerance: %s', command => {
   const old = run(previous, command), next = run(helpers, command)

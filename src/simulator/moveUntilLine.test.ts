@@ -1,75 +1,37 @@
 import {expect,it} from 'vitest'
 import base from '../../docs/baseCode.cpp?raw'
+import {apiReference} from '../student/apiReference'
 import {CppRuntime} from './cppRuntime'
-function run(visibleAt:number, distance=100){
+
+it('removes blind line search and single-wheel helpers from the compact base and API catalog',()=>{
+ for(const name of ['moveUntilLine','moveTankCore','stopOnDetectedLine','turn_one_wheel','turn_angle','TurnMode']){
+  expect(base).not.toContain(name)
+  expect(apiReference.some(entry=>entry.api.startsWith(name+'('))).toBe(false)
+ }
+})
+it('keeps forward/reverse travel and signed two-wheel turns after pruning motion modes',()=>{
  const logs:string[]=[]
- const source=base.slice(0,base.indexOf('void loop()'))+`void loop(){moveUntilLine(600,${distance});Serial.println(missionError);LbMission.end();}`
- const runtime:CppRuntime=new CppRuntime(source,{motors(){},advance(){},rawLine:()=>runtime.time>=visibleAt?[0,4095,0,0]:[0,0,0,0],log:v=>logs.push(v)})
- runtime.start();for(let i=0;i<3000&&runtime.running;i++)runtime.tick(10)
- expect(runtime.running).toBe(false);expect([runtime.left,runtime.right]).toEqual([0,0]);return {logs,time:runtime.time}
-}
-it('stops immediately when already on black',()=>{expect(run(0).logs).toContain('0')})
-it('drives blind and stops when a sensor detects black',()=>{const result=run(500);expect(result.logs).toContain('0');expect(result.time).toBeGreaterThanOrEqual(500);expect(result.time).toBeLessThan(750)})
-it('reports failure and stops if no line is found within the distance limit',()=>{const result=run(Infinity,1);expect(result.logs).toContain('6');expect(result.logs.some(v=>v.startsWith('MISSION ERROR:'))).toBe(true)})
-
-it('uses fresh origins after moving and turning, and on repeated searches',()=>{
- const logs:string[]=[];let searchOrigin=0, searching=false, searches=0, peak=0
- const source=base.slice(0,base.indexOf('void setup()'))+`void loop(){
-   move_tank(1000,1000,5);turn_two_wheels(1000,90);
-   Serial.println("SEARCH");moveUntilLine(2000,10);Serial.println("FOUND");
-   move_tank(1000,1000,5);turn_two_wheels(1000,-90);
-   Serial.println("SEARCH");moveUntilLine(2000,10);Serial.println("FOUND");
-   Serial.println(missionError);LbMission.end();
- }`
- const runtime:CppRuntime=new CppRuntime(source,{
-   motors(l,r){if(searching)peak=Math.max(peak,Math.abs(l),Math.abs(r))},advance(){},
-   rawLine:()=>searching&&runtime.distance-searchOrigin>=20?[0,4095,0,0]:[0,0,0,0],
-   log(v){logs.push(v);if(v==='SEARCH'){searchOrigin=runtime.distance;searching=true;searches++}
-     if(v==='FOUND'){expect(runtime.distance-searchOrigin).toBeGreaterThanOrEqual(20);expect(runtime.distance-searchOrigin).toBeLessThan(22);searching=false}}
- })
+ const helpers=base.slice(0,base.indexOf('void setup()'))
+ const runtime=new CppRuntime(`${helpers}void loop(){
+ move_tank(1500,1500,5);Serial.println(LbMotion.getDistanceMm());
+ turn_two_wheels(1500,90);Serial.println(LbMotion.getRotationDeg());
+ turn_two_wheels(1500,-90);Serial.println(LbMotion.getRotationDeg());
+ move_tank(-1500,-1500,5);Serial.println(LbMotion.getDistanceMm());
+LbMission.end();}`,{motors(){},advance(){},log:v=>logs.push(v)})
  runtime.start();for(let i=0;i<4000&&runtime.running;i++)runtime.tick(10)
- expect(runtime.running).toBe(false);expect(searches).toBe(2);expect(logs.at(-1)).toBe('0');expect(peak).toBeLessThanOrEqual(350)
-})
-
-it('does not move away from a line already detected after the previous commands',()=>{
- let origin=0, searching=false;const logs:string[]=[]
- const source=base.slice(0,base.indexOf('void setup()'))+`void loop(){move_tank(1000,1000,5);turn_two_wheels(1000,90);junctionPending=true;Serial.println("SEARCH");moveUntilLine();Serial.println(junctionPending);LbMission.end();}`
- const runtime:CppRuntime=new CppRuntime(source,{motors(){},advance(){},rawLine:()=>[0,4095,0,0],log(v){logs.push(v);if(v==='SEARCH'){origin=runtime.distance;searching=true}}})
- runtime.start();for(let i=0;i<4000&&runtime.running;i++)runtime.tick(10)
- expect(runtime.running).toBe(false);expect(searching).toBe(true);expect(logs.at(-1)).toBe('false');expect(runtime.distance).toBe(origin);expect([runtime.left,runtime.right]).toEqual([0,0])
-})
-
-it('does not execute subsequent motion if the line was not found',()=>{
- const logs:string[]=[];let missedDistance=0,missedRotation=0
- const source=base.slice(0,base.indexOf('void setup()'))+`void loop(){moveUntilLine(1500,1);Serial.println("MISSED");turn_two_wheels(2000,45);move_tank(2000,2000,32.5);LbMission.end();}`
- const runtime:CppRuntime=new CppRuntime(source,{motors(){},advance(){},rawLine:()=>[0,0,0,0],log(v){logs.push(v);if(v==='MISSED'){missedDistance=runtime.distance;missedRotation=runtime.rotation}}})
- runtime.start();for(let i=0;i<4000&&runtime.running;i++)runtime.tick(10)
- expect(runtime.running).toBe(false);expect(logs).toContain('MISSION ERROR: 6');expect(runtime.distance).toBe(missedDistance);expect(runtime.rotation).toBe(missedRotation)
-})
-
-it('zeros wheel commands on detection even when SDK stopAndWait has a braking delay',()=>{
- let searchOrigin=0,searching=false
- // Model the distinction hidden by the runtime's instantaneous stopAndWait mock.
- const helpers=base.slice(0,base.indexOf('void setup()')).replaceAll('LbMotion.stopAndWait();','slow_stop();')
- const source=`void slow_stop(){LbDelay(200);LbMotion.runLR(0,0);}\n`+helpers+`void loop(){
-   move_tank(1000,1000,5);turn_two_wheels(1000,90);
-   Serial.println("SEARCH");moveUntilLine(1500,10);LbMission.end();
- }`
- const runtime:CppRuntime=new CppRuntime(source,{motors(){},advance(){},rawLine:()=>searching&&runtime.distance-searchOrigin>=20?[0,4095,0,0]:[0,0,0,0],log(v){if(v==='SEARCH'){searchOrigin=runtime.distance;searching=true}}})
- runtime.start();for(let i=0;i<4000&&runtime.running;i++)runtime.tick(10)
- expect(runtime.running).toBe(false);expect(searching).toBe(true)
- expect(runtime.distance-searchOrigin).toBeGreaterThanOrEqual(20)
- expect(runtime.distance-searchOrigin).toBeLessThan(20.3)
+ expect(runtime.running).toBe(false)
+ expect(Number(logs[0])).toBeCloseTo(50,0)
+ expect(Number(logs[1])).toBeGreaterThanOrEqual(89)
+ expect(Math.abs(Number(logs[2]))).toBeLessThan(1)
+ expect(Math.abs(Number(logs[3]))).toBeLessThan(1)
  expect([runtime.left,runtime.right]).toEqual([0,0])
 })
-
-it('waits for wheel feedback to settle before the next turn in the reported sequence',()=>{
- let searching=false,searchOrigin=0,returned=false
- const helpers=base.slice(0,base.indexOf('void setup()')).replaceAll('LbMotion.runLR(0, 0);','delayed_zero();')
- const source=`bool zeroStarted=false;unsigned long zeroAt=0;
- void delayed_zero(){if(!zeroStarted){zeroStarted=true;zeroAt=millis();}if(millis()-zeroAt>=250UL)LbMotion.runLR(0,0);}
-`+helpers+`void loop(){move_tank(-2000,-2000,3);turn_two_wheels(2000,30);Serial.println("SEARCH");moveUntilLine(1500);Serial.println("AFTER");turn_two_wheels(2000,45);LbMission.end();}`
- const runtime:CppRuntime=new CppRuntime(source,{motors(){},advance(){},rawLine:()=>searching&&runtime.distance-searchOrigin>=20?[0,4095,0,0]:[0,0,0,0],log(v){if(v==='SEARCH'){searching=true;searchOrigin=runtime.distance}if(v==='AFTER'){returned=true;expect([runtime.left,runtime.right]).toEqual([0,0]);expect(runtime.time).toBeGreaterThan(400)}}})
- runtime.start();for(let i=0;i<4000&&runtime.running;i++)runtime.tick(10)
- expect(runtime.running).toBe(false);expect(returned).toBe(true)
+it('stops an invalid move locally and allows the next move without a failure latch',()=>{
+ const logs:string[]=[];const commands:number[][]=[]
+ const helpers=base.slice(0,base.indexOf('void setup()'))
+ const runtime=new CppRuntime(`${helpers}void loop(){move_tank(0,0,5);move_tank(1000,1000,5);LbMission.end();}`,{motors:(l,r)=>commands.push([l,r]),advance(){},log:v=>logs.push(v)})
+ runtime.start();for(let i=0;i<2000&&runtime.running;i++)runtime.tick(10)
+ expect(runtime.running).toBe(false);expect(runtime.distance).toBeGreaterThan(49)
+ expect(commands[0]).toEqual([0,0]);expect([runtime.left,runtime.right]).toEqual([0,0]);expect(logs).toEqual([])
+ expect(base).not.toContain('failMission');expect(base).not.toContain('missionError')
 })

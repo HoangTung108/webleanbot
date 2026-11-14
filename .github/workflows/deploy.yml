@@ -32,6 +32,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Verify Nano flash boundary
+        run: npx vitest run src/leanbot/upload/intelHex.test.ts src/leanbot/upload/stk500.test.ts src/leanbot/profile/leanbotDeviceProfile.test.ts src/leanbot/compile/compilerClient.test.ts --maxWorkers=2
+
       - name: Build project
         run: |
           # An empty repository variable must not override .env.production.

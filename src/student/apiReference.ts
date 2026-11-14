@@ -3,32 +3,12 @@ export type ApiReference = { group: string; api: string; description: string; pa
 export const apiReference: ApiReference[] = [
   {
     "group": "helpers",
-    "api": "moveUntilLine(speed = 600, maxDistanceCm = 100);",
-    "description": "Đi thẳng không dò line cho tới khi thấy line đen rồi dừng.",
-    "parameters": "speed: 165..2000 (tốc độ tìm thực tế tối đa 350); maxDistanceCm: giới hạn tìm theo cm, mặc định 100.",
-    "returns": "void. Hết quãng tìm hoặc lỗi sẽ cập nhật missionError.",
-    "notes": "Dùng PID giữ hướng của move_tank và API LbIRLine.read/value theo ngưỡng SDK. Nếu đã đứng trên đen thì dừng, không bỏ qua line cũ. Chờ ổn định 30 ms sau lệnh trước, giới hạn tốc độ tìm ở 350 kể cả khi yêu cầu cao hơn để giảm vượt vạch. Dùng chung lbmbReadState và nhịp 10 ms với PID dò line. Khi nhận đen, đặt LbMotion.runLR(0, 0) ngay thay vì dừng giảm tốc; chỉ trả về sau khi phản hồi quãng đường/góc ổn định 150 ms; quá 1,2 giây chưa ổn định thì báo ERR_MOVE_STALL và chặn chuyển động sau. Không in log tìm line. Có giới hạn thời gian và phát hiện kẹt. Tốc độ cao có thể vượt qua vạch hẹp giữa hai lần đọc; nên bắt đầu ở 600. Hết quãng tìm báo ERR_LINE_LOST.",
-    "code": "moveUntilLine(600, 100); // Tìm trong tối đa 100 cm\nif (missionError != ERR_NONE) return;\nfollowLineCm(32.5f); // Bắt đầu dò line sau khi tìm thấy",
-    "source": "baseCode.cpp"
-  },
-  {
-    "group": "helpers",
     "api": "measure_line_values();",
     "description": "In thông số cảm biến line bằng API Leanbot.",
     "parameters": "Không có.",
     "returns": "void.",
     "notes": "Đọc ADC qua LbIRArray.read và mask qua LbIRLine.read. Đây là số đo tức thời, không phải ngưỡng do SDK hiệu chuẩn và không tự lưu qua lần khởi động.",
     "code": "measure_line_values(); // Xem ADC 2L/0L/1R/3R và mask trên Serial",
-    "source": "baseCode.cpp"
-  },
-  {
-    "group": "helpers",
-    "api": "reset_mission();",
-    "description": "Dừng và đặt lại trạng thái bài chạy; TB2B gọi hàm này.",
-    "parameters": "Không có.",
-    "returns": "void.",
-    "notes": "Giữ cấu hình WiFi/Asset và hiệu chuẩn line. Hủy tác vụ tay, giữ góc tay hiện tại; xóa màu đã đo trong base, không xóa thuộc tính Color trên cloud. Nhả nút rồi bấm TB1B để chạy lại. Lệnh SDK chặn chỉ kiểm tra reset sau khi trả về.",
-    "code": "reset_mission(); // Hoặc chạm TB2B trong bài chạy dùng các hàm baseCode",
     "source": "baseCode.cpp"
   },
   {
@@ -77,7 +57,7 @@ export const apiReference: ApiReference[] = [
     "description": "Kết thúc nhiệm vụ.",
     "parameters": "Không có tham số.",
     "returns": "Ví dụ không sử dụng kết quả trả về; đối chiếu kiểu trả về với SDK đang cài.",
-    "notes": "Đợi tay async hoàn tất trước khi kết thúc.",
+    "notes": "Kết thúc sau các lệnh SDK tay gắp.",
     "code": "// Kết thúc nhiệm vụ.\nLbMission.end();",
     "source": "Bộ sinh Blockly trong project / các lời gọi SDK hiện có"
   },
@@ -167,7 +147,7 @@ export const apiReference: ApiReference[] = [
     "description": "Chờ chuyển động theo góc quay.",
     "parameters": "Góc: độ.",
     "returns": "Ví dụ không sử dụng kết quả trả về; đối chiếu kiểu trả về với SDK đang cài.",
-    "notes": "Khởi động bánh trước khi chờ; không thay thế điều khiển turn_angle.",
+    "notes": "Khởi động bánh trước khi chờ; không thay thế điều khiển turn_two_wheels.",
     "code": "// Chờ chuyển động theo góc quay.\nLbMotion.waitRotationDeg(90);",
     "source": "Bộ sinh Blockly trong project / các lời gọi SDK hiện có"
   },
@@ -177,7 +157,7 @@ export const apiReference: ApiReference[] = [
     "description": "Mở tay gắp bằng API gốc.",
     "parameters": "Không có tham số.",
     "returns": "Ví dụ không sử dụng kết quả trả về; đối chiếu kiểu trả về với SDK đang cài.",
-    "notes": "Không dùng xen với bộ điều khiển handAngle của tay async trong baseCode.",
+    "notes": "Dùng trực tiếp SDK Leanbot; baseCode không nội suy góc hay hiệu chỉnh thời gian.",
     "code": "// Mở tay gắp bằng API gốc.\nLbGripper.open();",
     "source": "Bộ sinh Blockly trong project / các lời gọi SDK hiện có"
   },
@@ -187,7 +167,7 @@ export const apiReference: ApiReference[] = [
     "description": "Đóng tay gắp bằng API gốc.",
     "parameters": "Không có tham số.",
     "returns": "Ví dụ không sử dụng kết quả trả về; đối chiếu kiểu trả về với SDK đang cài.",
-    "notes": "Không dùng xen với bộ điều khiển handAngle của tay async trong baseCode.",
+    "notes": "Dùng trực tiếp SDK Leanbot; baseCode không nội suy góc hay hiệu chỉnh thời gian.",
     "code": "// Đóng tay gắp bằng API gốc.\nLbGripper.close();",
     "source": "Bộ sinh Blockly trong project / các lời gọi SDK hiện có"
   },
@@ -197,7 +177,7 @@ export const apiReference: ApiReference[] = [
     "description": "Đặt cùng góc cho hai càng.",
     "parameters": "Góc, độ.",
     "returns": "Ví dụ không sử dụng kết quả trả về; đối chiếu kiểu trả về với SDK đang cài.",
-    "notes": "Không dùng xen với bộ điều khiển handAngle của tay async trong baseCode.",
+    "notes": "Dùng trực tiếp SDK Leanbot; baseCode không nội suy góc hay hiệu chỉnh thời gian.",
     "code": "// Đặt cùng góc cho hai càng.\nLbGripper.moveTo(50);",
     "source": "Bộ sinh Blockly trong project / các lời gọi SDK hiện có"
   },
@@ -207,7 +187,7 @@ export const apiReference: ApiReference[] = [
     "description": "Đặt riêng góc hai càng và thời gian chuyển động.",
     "parameters": "Góc trái, góc phải: độ; thời gian: ms.",
     "returns": "Ví dụ không sử dụng kết quả trả về; đối chiếu kiểu trả về với SDK đang cài.",
-    "notes": "Không dùng xen với bộ điều khiển handAngle của tay async trong baseCode.",
+    "notes": "Dùng trực tiếp SDK Leanbot; baseCode không nội suy góc hay hiệu chỉnh thời gian.",
     "code": "// Đặt riêng góc hai càng và thời gian chuyển động.\nLbGripper.moveToLR(50, 50, 750);",
     "source": "Bộ sinh Blockly trong project / các lời gọi SDK hiện có"
   },
@@ -397,7 +377,7 @@ export const apiReference: ApiReference[] = [
     "description": "Đợi theo thời gian Leanbot.",
     "parameters": "Thời gian ms.",
     "returns": "Ví dụ không sử dụng kết quả trả về; đối chiếu kiểu trả về với SDK đang cài.",
-    "notes": "Tay async của baseCode cần robot_delay để tiếp tục được cập nhật.",
+    "notes": "Gọi trực tiếp API chờ của SDK.",
     "code": "// Đợi theo thời gian Leanbot.\nLbDelay(100);",
     "source": "Bộ sinh Blockly trong project / các lời gọi SDK hiện có"
   },
@@ -419,7 +399,7 @@ export const apiReference: ApiReference[] = [
     "returns": "Base bỏ qua kết quả; cần header đúng phiên bản để xác nhận kiểu và ý nghĩa mã trả về.",
     "notes": "Dùng AssetID thật có quyền truy cập; hai robot trao đổi màu cần cùng AssetID và tên Color. Không thay F(...) bằng String.c_str() khi dùng chữ ký hiện tại của base. Giả lập dùng AssetID để phân vùng dữ liệu, không xác thực quyền trên cloud Pythaverse.",
     "code": "// Chọn Asset để truy cập dữ liệu.\nLbIoT.Asset.begin(F(\"AssetID\"));",
-    "source": "docs/baseCode.cpp: wifiAssetId và set_wifi; chưa đối chiếu header LeanbotIoT gốc."
+    "source": "docs/baseCode.cpp: set_wifi; chưa đối chiếu header LeanbotIoT gốc."
   },
   {
     "group": "iot",
@@ -627,7 +607,7 @@ export const apiReference: ApiReference[] = [
     "description": "Đợi theo thời gian Arduino.",
     "parameters": "ms.",
     "returns": "Không dùng kết quả.",
-    "notes": "Không phục vụ tay async của script.",
+    "notes": "Dùng thời gian chờ trực tiếp của Arduino.",
     "code": "// Đợi theo thời gian Arduino.\ndelay(100);",
     "source": "Arduino language reference"
   },
@@ -763,16 +743,6 @@ export const apiReference: ApiReference[] = [
   },
   {
     "group": "helpers",
-    "api": "failMission(ERR_MOVE_STALL);",
-    "description": "Ghi lỗi đầu tiên và dừng bánh.",
-    "parameters": "ErrorCode.",
-    "returns": "void.",
-    "notes": "Không khóa lệnh sau; cần return nếu muốn dừng nhiệm vụ.",
-    "code": "// Ghi lỗi đầu tiên và dừng bánh.\nfailMission(ERR_MOVE_STALL);",
-    "source": "baseCode.cpp"
-  },
-  {
-    "group": "helpers",
     "api": "resetMotionState();",
     "description": "Xóa trạng thái điều khiển line.",
     "parameters": "Không có.",
@@ -783,52 +753,12 @@ export const apiReference: ApiReference[] = [
   },
   {
     "group": "helpers",
-    "api": "update_hand();",
-    "description": "Cập nhật góc tay theo thời gian.",
-    "parameters": "Không có.",
-    "returns": "void.",
-    "notes": "Gọi thường xuyên nếu tự viết vòng lặp.",
-    "code": "// Cập nhật góc tay theo thời gian.\nupdate_hand();",
-    "source": "baseCode.cpp"
-  },
-  {
-    "group": "helpers",
     "api": "robot_delay(100);",
-    "description": "Đợi trong khi phục vụ tay async.",
+    "description": "Chờ bằng LbDelay của SDK.",
     "parameters": "ms.",
     "returns": "void.",
     "notes": "Không tự đọc mạng IoT.",
-    "code": "// Đợi trong khi phục vụ tay async.\nrobot_delay(100);",
-    "source": "baseCode.cpp"
-  },
-  {
-    "group": "helpers",
-    "api": "close_hand_async(50);",
-    "description": "Bắt đầu đóng tay không đợi.",
-    "parameters": "Góc kẹp, độ; giới hạn -30..120.",
-    "returns": "void.",
-    "notes": "Nếu đích không đổi thì không khởi động lại. Gọi các lệnh di chuyển hoặc robot_delay để tay tiếp tục cập nhật; dùng wait_hand khi cần chờ xong.",
-    "code": "// Bắt đầu đóng tay không đợi.\nclose_hand_async(50);",
-    "source": "baseCode.cpp"
-  },
-  {
-    "group": "helpers",
-    "api": "open_hand_async();",
-    "description": "Bắt đầu mở tay không đợi.",
-    "parameters": "Không có.",
-    "returns": "void.",
-    "notes": "Đích là 0 độ.",
-    "code": "// Bắt đầu mở tay không đợi.\nopen_hand_async();",
-    "source": "baseCode.cpp"
-  },
-  {
-    "group": "helpers",
-    "api": "wait_hand();",
-    "description": "Đợi tác vụ tay hoàn tất.",
-    "parameters": "Không có.",
-    "returns": "void.",
-    "notes": "Gọi trước khi kết thúc nhiệm vụ.",
-    "code": "// Đợi tác vụ tay hoàn tất.\nwait_hand();",
+    "code": "// Chờ bằng LbDelay của SDK.\nrobot_delay(100);",
     "source": "baseCode.cpp"
   },
   {
@@ -837,7 +767,7 @@ export const apiReference: ApiReference[] = [
     "description": "Đóng tay và đợi hoàn tất.",
     "parameters": "Góc kẹp, độ.",
     "returns": "void.",
-    "notes": "Dùng GRIP_CLOSE_ANGLE theo khối thật.",
+    "notes": "Gọi thẳng LbGripper.moveTo(degree), không tự giới hạn góc hay tính thời gian.",
     "code": "// Đóng tay và đợi hoàn tất.\nclose_hand(50);",
     "source": "baseCode.cpp"
   },
@@ -847,48 +777,8 @@ export const apiReference: ApiReference[] = [
     "description": "Mở tay và đợi hoàn tất.",
     "parameters": "Không có.",
     "returns": "void.",
-    "notes": "Chờ cả chuyển động và ổn định.",
+    "notes": "Gọi thẳng LbGripper.moveTo(0), dùng hành vi mặc định của SDK.",
     "code": "// Mở tay và đợi hoàn tất.\nopen_hand();",
-    "source": "baseCode.cpp"
-  },
-  {
-    "group": "helpers",
-    "api": "knock_left_hand(90);",
-    "description": "Đánh tay trái một lần để hất khối rồi tự trở về góc ban đầu.",
-    "parameters": "Góc đánh, độ; mặc định 90, giới hạn -30..120.",
-    "returns": "void.",
-    "notes": "Tay phải giữ nguyên. Có thể gọi không đối số để dùng góc mặc định.",
-    "code": "// Đánh tay trái một lần để hất khối.\nknock_left_hand();",
-    "source": "baseCode.cpp"
-  },
-  {
-    "group": "helpers",
-    "api": "knock_right_hand(90);",
-    "description": "Đánh tay phải một lần để hất khối rồi tự trở về góc ban đầu.",
-    "parameters": "Góc đánh, độ; mặc định 90, giới hạn -30..120.",
-    "returns": "void.",
-    "notes": "Tay trái giữ nguyên. Có thể gọi không đối số để dùng góc mặc định.",
-    "code": "// Đánh tay phải một lần để hất khối.\nknock_right_hand();",
-    "source": "baseCode.cpp"
-  },
-  {
-    "group": "helpers",
-    "api": "turn_angle(2000, 90, TWO_WHEELS);",
-    "description": "Quay có phản hồi, tăng/giảm tốc và kiểm tra kẹt.",
-    "parameters": "Tốc độ, góc độ, TurnMode.",
-    "returns": "void.",
-    "notes": "Dùng TURN_SCALE và ngưỡng phanh hiện tại. Trần quay MAX_MOTOR_SPEED hiện là 2000; giới hạn tốc độ theo góc còn lại giữ chậm các độ cuối để hạn chế vượt góc.",
-    "code": "// Quay có phản hồi, tăng/giảm tốc và kiểm tra kẹt.\nturn_angle(2000, 90, TWO_WHEELS);",
-    "source": "baseCode.cpp"
-  },
-  {
-    "group": "helpers",
-    "api": "turn_one_wheel(2000, 90, \"L\");",
-    "description": "Quay bằng một bánh.",
-    "parameters": "Tốc độ, góc độ, \"L\" hoặc \"R\".",
-    "returns": "void.",
-    "notes": "Giữ quy ước dấu riêng của hàm trong baseCode. Trần quay MAX_MOTOR_SPEED hiện là 2000; giới hạn tốc độ theo góc còn lại giữ chậm các độ cuối để hạn chế vượt góc.",
-    "code": "// Quay bằng một bánh.\nturn_one_wheel(2000, 90, \"L\");",
     "source": "baseCode.cpp"
   },
   {
@@ -907,28 +797,18 @@ export const apiReference: ApiReference[] = [
     "description": "Đi theo quãng đường với PID giữ hướng và ACC tăng/giảm tốc.",
     "parameters": "Tốc độ L/R cùng dấu, quãng đường cm không âm.",
     "returns": "void.",
-    "notes": "Hai tốc độ âm để lùi. PID giữ hướng bắt đầu, lọc D và hạn chế tích lũy I khi chạm giới hạn. ACC dùng thời gian thực và quãng đường còn lại để tăng/phanh; MOVE_ACCEL=18000, MOVE_DECEL=2600 bước/s². Quy đổi dựa trên phép đo 2000 bước/s = 65 mm/s, cần hiệu chỉnh trên robot thật. Lệnh bánh giới hạn ±2000; vẫn kiểm tra kẹt, quá hạn và cập nhật tay. Leanbot.DCMotor.setPower chỉ điều khiển cổng DC phụ trợ.",
+    "notes": "Hai tốc độ âm để lùi. PID giữ hướng bắt đầu, lọc D và hạn chế tích lũy I khi chạm giới hạn. ACC dùng thời gian thực và quãng đường còn lại để tăng/phanh; MOVE_ACCEL=18000, MOVE_DECEL=2600 bước/s². Quy đổi dựa trên phép đo 2000 bước/s = 65 mm/s, cần hiệu chỉnh trên robot thật. Lệnh bánh giới hạn ±2000; vẫn kiểm tra kẹt, quá hạn theo phản hồi. Leanbot.DCMotor.setPower chỉ điều khiển cổng DC phụ trợ.",
     "code": "// Đi thẳng 10 cm, PID tự sửa hướng và ACC điều chỉnh tốc độ.\nmove_tank(2000, 2000, 10);\n// Lùi 10 cm với cùng cơ chế phản hồi:\nmove_tank(-2000, -2000, 10);",
-    "source": "baseCode.cpp"
-  },
-  {
-    "group": "helpers",
-    "api": "declare_wifi(\"SSID\", \"password\", F(\"AssetID\"));",
-    "description": "Lưu cấu hình WiFi/Asset.",
-    "parameters": "SSID, mật khẩu String, Asset flash tùy chọn.",
-    "returns": "void.",
-    "notes": "Chưa kết nối mạng; không in mật khẩu.",
-    "code": "// Lưu cấu hình WiFi/Asset.\ndeclare_wifi(\"SSID\", \"password\", F(\"AssetID\"));",
     "source": "baseCode.cpp"
   },
   {
     "group": "helpers",
     "api": "set_wifi();",
     "description": "Kết nối theo cấu hình đã khai báo.",
-    "parameters": "Không có nếu đã gọi declare_wifi đủ SSID/AssetID; hoặc truyền SSID, mật khẩu và AssetID. AssetID bắt buộc để trao đổi màu.",
+    "parameters": "Không có. Điền SSID, mật khẩu và AssetID trực tiếp trong thân hàm set_wifi của baseCode.",
     "returns": "void.",
-    "notes": "Gọi LbIoT.Wifi.begin(SSID, password), rồi LbIoT.Asset.begin(assetId). SSID hoặc AssetID chưa khai báo báo ERR_WIFI_CONFIG. Không kết nối WebSocket. Cờ iotConfigured chỉ ghi nhận đã gọi cấu hình SDK, không xác nhận online.",
-    "code": "// Điền cấu hình trong setup sau Leanbot.begin():\ndeclare_wifi(\"TenWifi\", \"MatKhau\", F(\"AssetID_CHUNG\"));\n// TB2A trong FullMission gọi set_wifi();\n// Hoặc kết nối ngay: set_wifi(\"TenWifi\", \"MatKhau\", F(\"AssetID_CHUNG\"));",
+    "notes": "Bật BASE_USE_IOT = 1. Kết nối trực tiếp bằng LbIoT.Wifi.begin rồi LbIoT.Asset.begin, không lưu cấu hình qua String trung gian. iotConfigured chỉ ghi nhận đã gọi SDK, không xác nhận online.",
+    "code": "// Điền mạng trong thân hàm set_wifi, sau đó gọi:\nset_wifi();",
     "source": "baseCode.cpp"
   },
   {
@@ -968,7 +848,7 @@ export const apiReference: ApiReference[] = [
     "parameters": "bits tùy chọn: -1 (mặc định) tự đọc cảm biến, hoặc mặt nạ 0..15.",
     "returns": "void.",
     "notes": "PID analog, chu kỳ 10 ms. Bắt line ở tối đa 600, cần 5 mẫu giữa line mới tăng tốc. Cua gắt có trần 1000 và cho bánh trong lùi nhẹ; hysteresis tránh chuyển chế độ liên tục. Không thấy line từ đầu: quét hai phía tối đa 3,5 giây; mất line đã bám: tìm theo hướng cũ tối đa 2,5 giây. Quá hạn thì dừng/báo lỗi; không bảo đảm tìm được line nằm ngoài vùng quét cảm biến. Tâm analog chỉ dùng các cảm biến được mặt nạ hiệu chuẩn xác nhận đang thấy line. Quyền đánh lái tăng theo tốc độ khi lệch lớn, giữ gain vùng giữa để hạn chế lắc.",
-    "code": "// Đặt trong loop, khi robot đang theo line.\nrunFollowLine(); // Cập nhật điều khiển một lần\nrobot_delay(LINE_STEP_MS); // Giữ chu kỳ 10 ms và phục vụ tay async",
+    "code": "// Đặt trong loop, khi robot đang theo line.\nrunFollowLine(); // Cập nhật điều khiển một lần\nrobot_delay(LINE_STEP_MS); // Giữ chu kỳ 10 ms",
     "source": "baseCode.cpp"
   },
   {
@@ -1027,7 +907,7 @@ export const apiReference: ApiReference[] = [
     "description": "Gửi màu chỉ định hoặc màu khối vừa đo.",
     "parameters": "ObjectColor tùy chọn, mặc định là kết quả read_color gần nhất; numberObject tùy chọn trong khoảng 1-5, mặc định 1 để ghi thuộc tính Color1.",
     "returns": "void.",
-    "notes": "Ghi thuộc tính Color1-Color5 qua LeanbotIoT. Cần set_wifi với SSID và AssetID; thiếu cấu hình báo ERR_WIFI_CONFIG. Chỉ hỗ trợ numberObject 1-5; giá trị ngoài khoảng báo ERR_IOT_ATTRIBUTE. UNKNOWN không gửi. Không đọc cảm biến lần nữa.",
+    "notes": "Cần bật BASE_USE_IOT = 1. Ghi thuộc tính Color1-Color7 qua LeanbotIoT. Cần set_wifi với SSID và AssetID; chưa gọi set_wifi thì không gửi. Chỉ hỗ trợ numberObject 1-7; giá trị ngoài khoảng được bỏ qua. UNKNOWN không gửi. Không đọc cảm biến lần nữa.",
     "code": "read_color(); // Đọc khối một lần\nsend_iot_color(); // Gửi kết quả vừa đọc vào Color1\n// Hoặc ghi Color2:\nsend_iot_color(BLUE, 2);",
     "source": "baseCode.cpp"
   },
@@ -1036,8 +916,8 @@ export const apiReference: ApiReference[] = [
     "api": "read_iot_color(timeoutMs = 0, numberObject = 1);",
     "description": "Đọc tín hiệu màu từ robot đối tác.",
     "parameters": "timeoutMs: 0 đọc một lần; >0 đợi màu hợp lệ tối đa số mili giây. numberObject chọn thuộc tính Color1-Color5, mặc định 1.",
-    "returns": "ObjectColor, UNKNOWN khi chưa có màu, hết hạn hoặc TB2B reset.",
-    "notes": "Chỉ đọc thuộc tính Color1-Color5 qua LeanbotIoT sau set_wifi với AssetID; dùng cùng numberObject trên robot gửi và nhận. Thiếu cấu hình báo ERR_WIFI_CONFIG và trả UNKNOWN. Giá trị ngoài khoảng 1-5 báo ERR_IOT_ATTRIBUTE. Kênh lưu giá trị cuối, không phải hàng chờ; đọc lại có thể nhận cùng màu.",
+    "returns": "ObjectColor, UNKNOWN khi chưa có màu, hết hạn.",
+    "notes": "Cần bật BASE_USE_IOT = 1. Chỉ đọc thuộc tính Color1-Color7 qua LeanbotIoT sau set_wifi với AssetID; dùng cùng numberObject trên robot gửi và nhận. Chưa gọi set_wifi thì trả UNKNOWN. Giá trị ngoài khoảng 1-7 trả UNKNOWN. Kênh lưu giá trị cuối, không phải hàng chờ; đọc lại có thể nhận cùng màu.",
     "code": "if (read_iot_color(30000UL, 2) == BLUE) {\n  close_hand(90); // Chờ tối đa 30 giây rồi xử lý màu nhận từ Color2\n}",
     "source": "baseCode.cpp"
   },
@@ -1047,7 +927,7 @@ export const apiReference: ApiReference[] = [
     "description": "Dò line trong khoảng thời gian tính bằng giây rồi dừng.",
     "parameters": "seconds: 0..600 giây. speedPercent tùy chọn: tốc độ %, mặc định LINE_SPEED / 20.",
     "returns": "void.",
-    "notes": "Dùng chung bộ thực thi PID, có giảm tốc trước hết giờ. Tay async vẫn cập nhật; mất line sẽ tìm có giới hạn rồi báo lỗi/dừng. Thay lbmbFollowTime(50, 2.5f) bằng followLineSeconds(2.5f, 50).",
+    "notes": "Dùng chung bộ thực thi PID, có giảm tốc trước hết giờ. mất line sẽ tìm có giới hạn rồi báo lỗi/dừng. Thay lbmbFollowTime(50, 2.5f) bằng followLineSeconds(2.5f, 50).",
     "code": "// Dò tối đa 2,5 giây rồi dừng bánh.\nfollowLineSeconds(2.5f);\n// Giới hạn tốc độ 50%:\nfollowLineSeconds(2.5f, 50);",
     "source": "baseCode.cpp"
   },
@@ -1087,7 +967,7 @@ export const apiReference: ApiReference[] = [
     "description": "Đọc khối và trả trực tiếp màu nhận diện.",
     "parameters": "Không có.",
     "returns": "ObjectColor: RED, GREEN, BLUE, YELLOW, PURPLE hoặc UNKNOWN.",
-    "notes": "Tự khởi tạo APDS. Mỗi mẫu gồm LED đỏ/xanh lá/xanh dương/tắt, trừ nền rồi phân loại 5 màu. Cần 4 phiếu trong tối đa 5 mẫu; dừng sớm khi đủ phiếu hoặc không còn khả năng đạt 4. Khôi phục độ sáng LED sau đo; UNKNOWN/lỗi tắt LED đo, TB2B giữ LED sẵn sàng. Lỗi cảm biến báo missionError. COLOR_DEBUG bật log RGB đã trừ nền. Cần giữ khối đứng yên và hiệu chuẩn lại gain/mẫu tham chiếu trên robot thật.",
+    "notes": "Cần bật BASE_USE_COLOR = 1 ở đầu baseCode. Tự khởi tạo APDS. Mỗi mẫu gồm LED đỏ/xanh lá/xanh dương/tắt, trừ nền rồi phân loại 5 màu. Cần 4 phiếu trong tối đa 5 mẫu; dừng sớm khi đủ phiếu hoặc không còn khả năng đạt 4. Khôi phục độ sáng LED sau đo; UNKNOWN/lỗi tắt LED đo, Lỗi cảm biến trả UNKNOWN và dừng động cơ. Cần giữ khối đứng yên và hiệu chuẩn ngưỡng Hue/bão hòa trên robot thật.",
     "code": "if (read_color() == BLUE) {\n  close_hand(90); // Xử lý khối xanh dương\n}\n// Hoặc chỉ gọi read_color(); để thông báo Serial/LED.",
     "source": "baseCode.cpp"
   },

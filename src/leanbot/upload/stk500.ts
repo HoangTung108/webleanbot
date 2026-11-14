@@ -48,7 +48,7 @@ export class Stk500Uploader {
   }
   private validateAddresses(pages: FlashPage[]) {
     const invalid=pages.find(page=>page.address<0 || page.address+page.data.length>this.applicationLimit)
-    if(invalid)throw new UploadProtocolError('WRITE_ERROR',`Firmware vượt vùng ứng dụng tại ${addressText(invalid.address)} (giới hạn ${this.applicationLimit} byte). Không ghi đè bootloader.`)
+    if(invalid)throw new UploadProtocolError('WRITE_ERROR',`Firmware vượt vùng ứng dụng Nano tại ${addressText(invalid.address)} (giới hạn ${this.applicationLimit} byte; bootloader từ ${addressText(this.applicationLimit)}). Chọn đúng Arduino Nano/ATmega328P, giảm sketch và biên dịch lại. Không ghi đè bootloader.`)
   }
   private checkAbort() { if(this.signal?.aborted)throw abortError() }
   private async transact(request:number[], payloadLength:number, timeoutMs:number, code:UploadErrorCode) {

@@ -31,7 +31,6 @@ void setup() {
 }
 void loop() {
   LbMission.begin(TB1A + TB1B);
-  missionError = ERR_NONE;
   junctionPending = false;
   resetMotionState();
   open_hand();

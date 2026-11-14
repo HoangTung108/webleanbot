@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest'
-import sourceBase from '../../docs/baseCode.cpp?raw'
+import sourceBase from './baseFeatures.fixture'
 const base = sourceBase.replace('const bool LINE_DEBUG = false;', 'const bool LINE_DEBUG = true;')
 import { CppRuntime } from './cppRuntime'
 
@@ -61,7 +61,7 @@ it('does not queue presses occurring during a blocking mission', () => {
 
 it('dispatches calibration and WiFi exclusively and returns to idle', () => {
   const logs = run(t => t >= 100 && t < 400 ? 1 : (t >= 700 && t < 1100 ? 4 : 0))
-  expect(logs.filter(log => log.includes('Line calibration:'))).toHaveLength(1)
+  expect(logs.filter(log => log.includes('hiệu chuẩn nút chạm'))).toHaveLength(1)
   expect(logs.filter(log => log === 'WIFI')).toHaveLength(1)
   expect(logs).not.toContain('RUN')
 })
@@ -97,7 +97,7 @@ it('exchanges color signals in WiFi mode (no USB) through the Color attribute', 
     }
   `, {
     motors() {}, advance() {},
-    iotRead: (attribute) => attribute === 'Color' ? incomingColor : 'waiting',
+    iotRead: (attribute) => attribute === 'Color1' ? incomingColor : 'waiting',
     iotWrite: (attribute, value, assetId) => {
       iotWrites.push({ attribute, value, assetId })
       if (value === 'Blue') incomingColor = 'Green'
@@ -107,7 +107,7 @@ it('exchanges color signals in WiFi mode (no USB) through the Color attribute', 
   runtime.start()
   for (let i = 0; i < 200 && runtime.running; i++) runtime.tick(10)
   expect(runtime.running).toBe(false)
-  expect(iotWrites).toEqual([{ attribute: 'Color', value: 'Blue', assetId: 'ROOM99' }])
+  expect(iotWrites).toEqual([{ attribute: 'Color1', value: 'Blue', assetId: 'ROOM99' }])
   expect(logs).toContain('true')
 })
 
@@ -120,27 +120,27 @@ it('uses the configured Asset ID when TB2A starts WiFi',()=>{
   iotWrite:(attribute,value,assetId)=>writes.push({attribute,value,assetId}),
  });
  runtime.start();for(let i=0;i<100&&runtime.running;i++)runtime.tick(10);
- expect(runtime.running).toBe(false);expect(writes).toEqual([{attribute:'Color',value:'Blue',assetId:'TEAM42'}]);
+ expect(runtime.running).toBe(false);expect(writes).toEqual([{attribute:'Color1',value:'Blue',assetId:'TEAM42'}]);
 });
 
 it('rejects unconfigured IoT without falling back to Serial Bridge',()=>{
  let calls=0;const logs:string[]=[];
- const helpers=base.slice(0,base.indexOf('// Chỉ nhận lượt mới'));
+ const helpers=base.slice(0,base.indexOf('void FullMission()'));
  const runtime=new CppRuntime(`${helpers}void loop(){send_iot_color(BLUE);Serial.println(read_iot_color());LbMission.end();}`,{
   motors(){},advance(){},log:m=>logs.push(m),iotRead(){calls++;return 'Red';},iotWrite(){calls++;},
- });runtime.start();runtime.tick(1);expect(calls).toBe(0);expect(logs).toEqual(['MISSION ERROR: 11','MISSION ERROR: 11','0']);
+ });runtime.start();for(let i=0;i<100&&runtime.running;i++)runtime.tick(10);expect(calls).toBe(0);expect(logs).toEqual(['MISSION ERROR: 11','MISSION ERROR: 11','0']);
 });
 
 
-it('reports SDK ADC and mask after SDK calibration', () => {
-  const logs = run(t => t >= 100 && t < 400 ? 1 : 0)
+it('reports SDK ADC and mask when the measurement helper is requested', () => {
+  const logs = run(t => t >= 100 && t < 400 ? 2 : 0, 2500, 'measure_line_values();')
   expect(logs.some(log => log.startsWith('IR ADC 2L/0L/1R/3R: '))).toBe(true)
 })
 
-it('TB2B cancels blocking helpers and requires a fresh start', () => {
+it('ignores TB2B and accepts a new TB1B press after completion', () => {
   const logs = run(t => t >= 100 && t < 200 ? 2 : t >= 350 && t < 700 ? 8 : t >= 1100 && t < 1200 ? 2 : 0,
     2500, 'set_wifi("test","pass",F("ROOM")); robot_delay(600); send_iot_color(RED);')
   expect(logs.filter(log => log === 'RUN')).toHaveLength(2)
-  expect(logs.filter(log => log.startsWith('MISSION RESET:'))).toHaveLength(1)
+  expect(logs.filter(log => log.startsWith('MISSION RESET:'))).toHaveLength(0)
   expect(logs.slice(-5)).toEqual(['0', 'false', 'false', 'false', 'false'])
 })

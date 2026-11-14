@@ -16,7 +16,7 @@ describe('base helpers without a mission-wide success latch',()=>{
   expect(generateRouteCode({x:400,y:600,heading:0},[{kind:'move',x:450,y:600,follow:false}])).not.toMatch(/missionOK/i);
  });
  it('uses void action functions in the base source',()=>{
-  for(const name of ['turn_angle','turn_one_wheel','turn_two_wheels','move_tank','runFollowLine','followLineUntilJunction','centerDetectedJunction','followLineMultipleJunctions','goToJunction','followLineDistance']){
+  for(const name of ['turn_two_wheels','move_tank','runFollowLine','followLineUntilJunction','centerDetectedJunction','followLineMultipleJunctions','goToJunction','followLineDistance']){
    expect(baseCode).toMatch(new RegExp('void '+name+'\\('));expect(baseCode).not.toMatch(new RegExp('bool '+name+'\\('));
   }
  });

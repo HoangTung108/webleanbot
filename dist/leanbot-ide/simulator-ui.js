@@ -99,7 +99,7 @@ class LeanbotSimulator2D {
     document.getElementById('simPause').addEventListener('click', () => this.togglePause());
     document.getElementById('simStop').addEventListener('click', () => this.stop());
     document.getElementById('simReset').addEventListener('click', () => this.reset());
-    for(const [id,button] of [['simTouch1A',1],['simTouch1B',2],['simTouch2A',4],['simTouch2B',8]]){
+    for(const [id,button] of [['simTouch1A',1],['simTouch1B',3],['simTouch2A',4],['simTouch2B',8]]){
       document.getElementById(id).addEventListener('click',()=>{if(this.isRunning&&!this.isPaused)this.runtime?.pressTouch(button);});
     }
 

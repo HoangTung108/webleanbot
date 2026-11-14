@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process'
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import base from '../../docs/baseCode.cpp?raw'
+import base from './baseFeatures.fixture'
 import { SYNAPSE_CITY } from './boardConfigs'
 import defaults from '../../public/leanbot-ide/LB-blockly/blocklyduino/arduino/addon/myblocks.js?raw'
 const between = (source:string, start:string, end:string) => {
@@ -25,7 +25,7 @@ it('executes MyBlock analog steering, marker/time/distance modes, loss and stall
  const dir=mkdtempSync(join(tmpdir(),'leanbot-myblock-line-'))
  try {
   const types=between(base,'struct LbmbState {','enum ObjectColor')
-  const core=between(base,'const uint16_t LBMB_TICK_MS','enum ErrorCode')+between(base,'inline int32_t lbmbAbs32','LbmbFollowCtx defaultLineContext')
+  const core=between(base,'const uint16_t LBMB_TICK_MS','bool junctionPending')+between(base,'inline int32_t lbmbAbs32','LbmbFollowCtx defaultLineContext')
   const adapter=between(base,'LbmbFollowCtx defaultLineContext','static bool readAPDSColor')
   const outer=SYNAPSE_CITY.lines[0];
   const arc=outer.points.slice(0,17), origin=arc[0], end=arc[16];
@@ -38,7 +38,6 @@ it('executes MyBlock analog steering, marker/time/distance modes, loss and stall
 using byte=uint8_t;
 using std::min;using std::max;using std::isfinite;using std::isnan;
 ${types}
-${base.match(/enum ErrorCode \{[\s\S]*?\};/)![0]}
 ${base.match(/const float DISTANCE_SCALE\s*=.*?;/)![0]}
 ${base.match(/const int LINE_SPEED\s*=.*?;/)![0]}
 ${base.match(/const int LINE_STEERING_SIGN\s*=.*?;/)![0]}
@@ -47,7 +46,6 @@ unsigned long clockMs=0,lastLineControlTime=0;
 unsigned long millis(){return clockMs;}
 float lastLineError=0,physicalDistance=0;
 int peak=0,services=0,error=0;
-#define missionError error
 bool lineControlReady=false,junctionPending=false,stalled=false;
 struct {int left=0,right=0;void runLR(int l,int r){assert(abs(l)<=2000&&abs(r)<=2000);left=l;right=r;peak=max(peak,max(abs(l),abs(r)));}void stopAndWait(){left=right=0;}float getDistanceMm(){return physicalDistance*DISTANCE_SCALE;}float getRotationDeg(){return 0;}} LbMotion;
 int bits=6;int raw[4]={10,100,100,10};
@@ -57,7 +55,6 @@ int measure_line(){return bits;}
 bool check_mission_reset(){return false;}
 void robot_delay(unsigned long ms){clockMs+=ms;++services;if(!stalled)physicalDistance+=(LbMotion.left+LbMotion.right)*0.5f*65/2000*ms/1000;}
 void resetMotionState(){lastLineError=0;lastLineControlTime=clockMs;lineControlReady=false;}
-void failMission(ErrorCode e){error=e;LbMotion.stopAndWait();}
 void move_tank(int,int,float cm){physicalDistance+=cm*10;}
 ${core}
 ${adapter}
@@ -67,7 +64,7 @@ void checkTrack(float initialDegrees, float radius) {
  float x=0,y=0,heading=initialDegrees*pi/180,distance=0;
  LbmbFollowCtx ctx={};bool done=false;
  for(int tick=0;tick<6000;++tick){
-  LbmbState state={};state.timeMs=tick*10;state.distanceMm=(int32_t)round(distance);state.rotationDeg=(int32_t)round(heading*180/pi);
+  LbmbState state={};state.timeMs=tick*10;state.distanceMm=(int32_t)round(distance);
   int16_t values[4];float offsets[4]={-24,-6,6,24};
   for(int i=0;i<4;++i){
    float sx=x+50*cosf(heading)-offsets[i]*sinf(heading);
@@ -77,7 +74,7 @@ void checkTrack(float initialDegrees, float radius) {
    if(fabsf(gap)<9)state.lineState|=1<<(3-i);
   }
   state.ir2L=values[0];state.ir0L=values[1];state.ir1R=values[2];state.ir3R=values[3];
-  if(!ctx.initialized)lbmbFollowCoreInit(&ctx,&state);
+  if(tick==0)lbmbFollowCoreInit(&ctx,&state);
   LbmbCommand cmd=lbmbFollowCoreStep(&ctx,&state,100,4,30);
   if(cmd.isDone){done=true;break;}
   float left=cmd.leftSpeed*65.0f/2000,right=cmd.rightSpeed*65.0f/2000;
@@ -106,7 +103,7 @@ void checkSynapseCorner(int side) {
    if(values[i])state.lineState|=1<<(3-i);
   }
   state.ir2L=values[0];state.ir0L=values[1];state.ir1R=values[2];state.ir3R=values[3];
-  if(!ctx.initialized)lbmbFollowCoreInit(&ctx,&state);
+  if(tick==0)lbmbFollowCoreInit(&ctx,&state);
   LbmbCommand cmd=lbmbFollowCoreStep(&ctx,&state,100,4,50);
   if(cmd.isDone){done=true;break;}
   peak=std::max(peak,std::max(abs(cmd.leftSpeed),abs(cmd.rightSpeed)));
@@ -130,13 +127,14 @@ reset();followLineCm(10,50);assert(error==0&&fabsf(physicalDistance-100)<1.1f);a
 reset();followLineSeconds(.255f);assert(error==0&&clockMs>=255&&clockMs<=265);assert(LbMotion.left==0&&LbMotion.right==0);
 reset();bits=8;raw[0]=150;raw[1]=80;raw[2]=raw[3]=10;for(int i=0;i<30;++i){runFollowLine();robot_delay(10);}assert(LbMotion.left<LbMotion.right);assert(lastLineError<0);
 reset();bits=1;raw[3]=150;raw[2]=80;raw[0]=raw[1]=10;for(int i=0;i<30;++i){runFollowLine();robot_delay(10);}assert(LbMotion.left>LbMotion.right);assert(lastLineError>0);
-bits=0;for(int i=0;i<20;++i){runFollowLine();robot_delay(10);}assert(LbMotion.left>0&&LbMotion.right<0);while(clockMs<3500){runFollowLine();robot_delay(10);}assert(error==ERR_LINE_LOST);assert(LbMotion.left==0&&LbMotion.right==0);
-reset();stalled=true;followLineCm(20);assert(error==ERR_MOVE_STALL&&!lineOperationCompleted);assert(LbMotion.left==0&&LbMotion.right==0);
-reset();bits=0;followLineCm(20);assert(error==ERR_LINE_LOST&&!lineOperationCompleted);
+bits=0;for(int i=0;i<20;++i){runFollowLine();robot_delay(10);}assert(LbMotion.left>0&&LbMotion.right<0);while(clockMs<3500){runFollowLine();robot_delay(10);}assert(LbMotion.left==0&&LbMotion.right==0);assert(LbMotion.left==0&&LbMotion.right==0);
+reset();stalled=true;followLineCm(20);assert(LbMotion.left==0&&LbMotion.right==0&&!lineOperationCompleted);assert(LbMotion.left==0&&LbMotion.right==0);
+reset();bits=0;followLineCm(20);assert(LbMotion.left==0&&LbMotion.right==0&&!lineOperationCompleted);
+reset();followLineUntilJunction(3,100);assert(clockMs>=60000&&!lineOperationCompleted&&!junctionPending);assert(LbMotion.left==0&&LbMotion.right==0);
 reset();bits=15;followLineUntilJunction(3,100);assert(error==0&&junctionPending&&lineOperationCompleted);assert(clockMs==20);
 reset();bits=12;followLineUntilJunction(1,100);assert(error==0&&junctionPending);
 reset();bits=3;followLineUntilJunction(2,100);assert(error==0&&junctionPending);
-reset();followLineCm(-1);assert(error==ERR_INVALID_MOVE);reset();followLineSeconds(NAN);assert(error==ERR_INVALID_MOVE);reset();followLineCm(0);assert(error==0&&clockMs==0);
+reset();followLineCm(-1);assert(LbMotion.left==0&&LbMotion.right==0);reset();followLineSeconds(NAN);assert(LbMotion.left==0&&LbMotion.right==0);reset();followLineCm(0);assert(error==0&&clockMs==0);
 }
 `
   writeFileSync(join(dir,'test.cpp'),source)

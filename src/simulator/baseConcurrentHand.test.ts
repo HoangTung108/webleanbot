@@ -1,29 +1,27 @@
 import {expect,it} from 'vitest';
 import {generateRouteCode} from './routePlanner';
 import {CppRuntime} from './cppRuntime';
-function run(body:string){
- let moving=false,overlap=false,angle=0;
- const code=generateRouteCode({x:400,y:600,heading:0},[]).replace('void plannedRoute() {','void plannedRoute() {\n'+body);
- const logs:string[]=[];
- const runtime=new CppRuntime(code,{advance(){},motors(l,r){moving=!!(l||r);},gripper(l){angle=l;if(moving&&l>0)overlap=true;},lineMask(){return 6;},log(v){logs.push(v);}});
- runtime.start();
- for(let i=0;i<20000&&runtime.running;i++)runtime.tick(1);
- expect(runtime.running).toBe(false);
- return {angle,overlap,logs};
-}
-it('finishes blocking closure after one movement plus settling interval',()=>{
- const result=run('unsigned long start=millis();close_hand(50);Serial.println(millis()-start);');
- expect(result.angle).toBe(50);expect(result.logs).toContain('870');
+import base from '../../docs/baseCode.cpp?raw';
+import {apiReference} from '../student/apiReference';
+it('passes closing and opening angles directly to the Leanbot SDK',()=>{
+ const sdk=base.slice(base.indexOf('void close_hand('),base.indexOf('// Đi và quay'));
+ expect(sdk).toContain('void close_hand(int degree) { LbGripper.moveTo(degree); }');
+ expect(sdk).toContain('void open_hand() { LbGripper.moveTo(0); }');
+ const angles:number[][]=[];
+ const helpers=base.slice(0,base.indexOf('void setup()'));
+ const runtime=new CppRuntime(`${helpers}void loop(){close_hand(90);open_hand();close_hand(50);LbMission.end();}`,{motors(){},advance(){},gripper:(l,r)=>angles.push([l,r])});
+ runtime.start();for(let i=0;i<100&&runtime.running;i++)runtime.tick(10);
+ expect(runtime.running).toBe(false);expect(angles).toEqual([[90,90],[0,0],[50,50]]);
 });
-it('services the hand concurrently during straight motion and waits for completion',()=>{
- const result=run('close_hand_async(50);move_tank(2000,2000,4);wait_hand();');
- expect(result.overlap).toBe(true);expect(result.angle).toBe(50);
+it('removes custom hand state, asynchronous actions and individual knock actions',()=>{
+ for(const name of ['handAngle','handBusy','update_hand','close_hand_async','open_hand_async','wait_hand','knock_left_hand','knock_right_hand','GRIP_MOVE_MS','GRIP_SETTLE_MS']){
+  expect(base).not.toContain(name);expect(apiReference.some(entry=>entry.api.startsWith(name+'('))).toBe(false);
+ }
 });
-it('services the hand while turning and can reverse an unfinished movement',()=>{
- const result=run('close_hand_async(50);turn_two_wheels(2000,20);open_hand_async();wait_hand();');
- expect(result.overlap).toBe(true);expect(result.angle).toBe(0);
-});
-it('exposes line measurement and threshold setup to generated programs',()=>{
- const result=run('set_line(69,78,106,70);print_line();');
- expect(result.logs).toContain('6');
+it('still executes gripper and motion actions in generated routes',()=>{
+ const angles:number[]=[];
+ const code=generateRouteCode({x:400,y:600,heading:0},[]).replace('void plannedRoute() {','void plannedRoute() {close_hand(90);move_tank(1000,1000,5);open_hand();');
+ const runtime=new CppRuntime(code,{motors(){},advance(){},gripper:l=>angles.push(l)});
+ runtime.start();for(let i=0;i<3000&&runtime.running;i++)runtime.tick(10);
+ expect(runtime.running).toBe(false);expect(angles).toEqual([0,90,0]);expect(runtime.distance).toBeGreaterThan(49);
 });

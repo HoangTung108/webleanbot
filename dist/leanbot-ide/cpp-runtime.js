@@ -30,6 +30,42 @@ var LeanbotCpp = (() => {
     readVirtualLine: () => readVirtualLine
   });
 
+  // src/simulator/baseFeatures.ts
+  function preprocessBaseFeatures(source) {
+    const flags = /* @__PURE__ */ new Map();
+    const frames = [];
+    let active = true;
+    const result = source.split("\n").map((line) => {
+      const define = /^\s*#define\s+(BASE_USE_\w+)\s+([01])\s*(?:\/\/.*)?$/.exec(line);
+      if (!define && /^\s*#define\s+BASE_USE_/.test(line)) throw new Error("Base feature ph\u1EA3i c\xF3 gi\xE1 tr\u1ECB 0 ho\u1EB7c 1.");
+      if (define) {
+        if (active) flags.set(define[1], define[2] === "1");
+        return "";
+      }
+      const start = /^\s*#if\s+(BASE_USE_\w+)\s*(?:\/\/.*)?$/.exec(line);
+      if (start) {
+        const condition = flags.get(start[1]) ?? false;
+        frames.push({ parent: active, condition, seenElse: false });
+        active = active && condition;
+        return "";
+      }
+      if (frames.length && /^\s*#else\b/.test(line)) {
+        const frame = frames.at(-1);
+        if (frame.seenElse) throw new Error("Duplicate base feature #else");
+        frame.seenElse = true;
+        active = frame.parent && !frame.condition;
+        return "";
+      }
+      if (frames.length && /^\s*#endif\b/.test(line)) {
+        active = frames.pop().parent;
+        return "";
+      }
+      return active ? line : "";
+    }).join("\n");
+    if (frames.length) throw new Error("Unclosed base feature #if");
+    return result;
+  }
+
   // src/simulator/motionCalibration.ts
   var MOTION_CALIBRATION = Object.freeze({
     physicalMmPerEncoderMm: 320 / 322
@@ -1306,7 +1342,7 @@ var LeanbotCpp = (() => {
     types = new Set(TYPES);
     structs = /* @__PURE__ */ new Map();
     constructor(source) {
-      this.tokens = tokenizeCpp(source).filter((t) => !["comment", "preprocessor"].includes(t.kind));
+      this.tokens = tokenizeCpp(preprocessBaseFeatures(source)).filter((t) => !["comment", "preprocessor"].includes(t.kind));
       this.tokens = this.tokens.filter((t, i, all) => !(t.kind === "identifier" && /^(f|u|l|ul|ull)$/i.test(t.value) && all[i - 1]?.kind === "number" && all[i - 1].end === t.start));
       for (const t of this.tokens) if (t.kind === "number" && !/^0[xb]/i.test(t.value)) t.value = t.value.replace(/[fF]$/, "");
     }
@@ -1563,6 +1599,8 @@ var LeanbotCpp = (() => {
     thresholds = [69, 78, 106, 70];
     brightness = 255;
     rgb = [0, 0, 0];
+    shownRgb = [0, 0, 0];
+    shownBrightness = 255;
     assetId = "";
     serial = "";
     touchMask = 0;
@@ -1570,7 +1608,7 @@ var LeanbotCpp = (() => {
     touchUntil = 0;
     /** A physical-button pulse in simulation time, including startup/release debounce. */
     pressTouch(button) {
-      if (!this.running || ![1, 2, 4, 8].includes(button) || this.time < this.touchUntil) return false;
+      if (!this.running || ![1, 2, 3, 4, 8].includes(button) || this.time < this.touchUntil) return false;
       this.touchMask = button;
       this.touchFrom = Math.max(this.time, this.touchUntil + 40, 50);
       this.touchUntil = this.touchFrom + 100;
@@ -1832,8 +1870,10 @@ var LeanbotCpp = (() => {
         case "APDS.readColor": {
           const sample = this.host.color?.();
           if (!sample) return false;
+          const ambient = this.host.colorAmbient?.() ?? [0, 0, 0];
+          const measured = sample.map((value, i) => value < 0 ? value : Math.round(ambient[i] + value * (this.shownRgb[i] ?? 0) / 255 * this.shownBrightness / 255));
           args.forEach((v, i) => {
-            if (isRef(v)) v.write(sample[i]);
+            if (isRef(v)) v.write(measured[i]);
           });
           return true;
         }
@@ -1858,6 +1898,8 @@ var LeanbotCpp = (() => {
           this.rgb = [...args[0]];
           return null;
         case "LbRGB.show":
+          this.shownRgb = [...this.rgb];
+          this.shownBrightness = this.brightness;
           this.host.led?.(this.rgb, this.brightness);
           return null;
         case "LbIRLine.value":
@@ -2080,8 +2122,9 @@ var LeanbotCpp = (() => {
       this.thresholds = [69, 78, 106, 70];
       this.serial = "";
       this.iot.clear();
-      this.brightness = 255;
+      this.brightness = this.shownBrightness = 255;
       this.rgb = [0, 0, 0];
+      this.shownRgb = [0, 0, 0];
       this.assetId = "";
       this.host.led?.(this.rgb, this.brightness);
       this.scopes = [/* @__PURE__ */ new Map()];

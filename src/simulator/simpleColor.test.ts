@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process'
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import base from '../../docs/baseCode.cpp?raw'
+import base from './baseFeatures.fixture'
 it('reads color with no caller variables, reuses the result and clears stale colors on uncertain/failed reads', () => {
  const dir=mkdtempSync(join(tmpdir(),'leanbot-simple-color-'))
  try {
@@ -16,13 +16,12 @@ it('reads color with no caller variables, reuses the result and clears stale col
 using std::min;using std::max;
 #define F(x) x
 ${base.match(/enum ObjectColor \{[^}]*\};/)![0]}
-${base.match(/enum ErrorCode \{[\s\S]*?\};/)![0]}
 ObjectColor lastMeasuredColor=UNKNOWN;
 bool colorSensorReady=true;
 unsigned long clockMs=0;unsigned long millis(){return clockMs;}
 bool check_mission_reset(){return false;}
 void robot_delay(unsigned long ms){clockMs+=ms;}
-int error=0;void failMission(ErrorCode e){error=e;}
+struct {int stops=0;void stopAndWait(){++stops;}} LbMotion;
 struct {template<class T>void print(T){}template<class T>void println(T){}} Serial;
 struct CRGB{int r,g,b;CRGB(int r,int g,int b):r(r),g(g),b(b){}};
 struct {int changes=0,brightness=37;CRGB rgb{0,0,0};int getBrightness(){return brightness;}void setBrightness(int v){brightness=v;}void fillColor(CRGB c){rgb=c;++changes;}void show(){}} LbRGB;
@@ -34,7 +33,7 @@ assert(lastMeasuredColor==UNKNOWN&&!(lastMeasuredColor == UNKNOWN && UNKNOWN != 
 frame(10,15,100);read_color();assert(APDS.reads==16);assert(lastMeasuredColor==BLUE);assert(LbRGB.rgb.b==255);assert(LbRGB.brightness==37);
 frame(100,100,100);read_color();assert(lastMeasuredColor==UNKNOWN);assert(APDS.reads==8);assert(LbRGB.rgb.r==0&&LbRGB.rgb.g==0&&LbRGB.rgb.b==0);assert(LbRGB.brightness==37);
 frame(100,15,10);read_color();assert(lastMeasuredColor==RED);assert(LbRGB.rgb.r==255);
-frame(10,15,100);APDS.failAt=2;assert(!read_color());assert(lastMeasuredColor==UNKNOWN);assert(error==ERR_COLOR_SENSOR);assert(LbRGB.rgb.r==0&&LbRGB.rgb.g==0&&LbRGB.rgb.b==0);assert(LbRGB.brightness==37);
+frame(10,15,100);APDS.failAt=2;assert(!read_color());assert(lastMeasuredColor==UNKNOWN);assert(LbMotion.stops==1);assert(LbRGB.rgb.r==0&&LbRGB.rgb.g==0&&LbRGB.rgb.b==0);assert(LbRGB.brightness==37);
 frame(10,15,100);colorSensorReady=false;APDS.beginOk=false;assert(!read_color());assert(lastMeasuredColor==UNKNOWN&&APDS.reads==0);
 colorSensorReady=true;frame(10,15,100);assert(read_color());assert(lastMeasuredColor==BLUE);
 frame(100,100,100);assert(read_color()==UNKNOWN);assert(lastMeasuredColor==UNKNOWN);assert(!(lastMeasuredColor == BLUE && BLUE != UNKNOWN));

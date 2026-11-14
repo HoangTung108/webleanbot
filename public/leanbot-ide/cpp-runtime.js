@@ -30,6 +30,42 @@ var LeanbotCpp = (() => {
     readVirtualLine: () => readVirtualLine
   });
 
+  // src/simulator/baseFeatures.ts
+  function preprocessBaseFeatures(source) {
+    const flags = /* @__PURE__ */ new Map();
+    const frames = [];
+    let active = true;
+    const result = source.split("\n").map((line) => {
+      const define = /^\s*#define\s+(BASE_USE_\w+)\s+([01])\s*(?:\/\/.*)?$/.exec(line);
+      if (!define && /^\s*#define\s+BASE_USE_/.test(line)) throw new Error("Base feature ph\u1EA3i c\xF3 gi\xE1 tr\u1ECB 0 ho\u1EB7c 1.");
+      if (define) {
+        if (active) flags.set(define[1], define[2] === "1");
+        return "";
+      }
+      const start = /^\s*#if\s+(BASE_USE_\w+)\s*(?:\/\/.*)?$/.exec(line);
+      if (start) {
+        const condition = flags.get(start[1]) ?? false;
+        frames.push({ parent: active, condition, seenElse: false });
+        active = active && condition;
+        return "";
+      }
+      if (frames.length && /^\s*#else\b/.test(line)) {
+        const frame = frames.at(-1);
+        if (frame.seenElse) throw new Error("Duplicate base feature #else");
+        frame.seenElse = true;
+        active = frame.parent && !frame.condition;
+        return "";
+      }
+      if (frames.length && /^\s*#endif\b/.test(line)) {
+        active = frames.pop().parent;
+        return "";
+      }
+      return active ? line : "";
+    }).join("\n");
+    if (frames.length) throw new Error("Unclosed base feature #if");
+    return result;
+  }
+
   // src/simulator/motionCalibration.ts
   var MOTION_CALIBRATION = Object.freeze({
     physicalMmPerEncoderMm: 320 / 322
@@ -1306,7 +1342,7 @@ var LeanbotCpp = (() => {
     types = new Set(TYPES);
     structs = /* @__PURE__ */ new Map();
     constructor(source) {
-      this.tokens = tokenizeCpp(source).filter((t) => !["comment", "preprocessor"].includes(t.kind));
+      this.tokens = tokenizeCpp(preprocessBaseFeatures(source)).filter((t) => !["comment", "preprocessor"].includes(t.kind));
       this.tokens = this.tokens.filter((t, i, all) => !(t.kind === "identifier" && /^(f|u|l|ul|ull)$/i.test(t.value) && all[i - 1]?.kind === "number" && all[i - 1].end === t.start));
       for (const t of this.tokens) if (t.kind === "number" && !/^0[xb]/i.test(t.value)) t.value = t.value.replace(/[fF]$/, "");
     }

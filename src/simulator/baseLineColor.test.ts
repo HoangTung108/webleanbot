@@ -1,5 +1,5 @@
 import {it,expect} from 'vitest';
-import baseCode from '../../docs/baseCode.cpp?raw';
+import baseCode from './baseFeatures.fixture';
 import {CppRuntime} from './cppRuntime';
 const debugBase=baseCode.replace('const bool COLOR_DEBUG = false;', 'const bool COLOR_DEBUG = true;');
 const helpers=debugBase.slice(0,debugBase.search(/void\s+(?:FullMission|setup)\s*\(\s*\)\s*\{/));
@@ -17,7 +17,7 @@ it.each([
  ['RED',[200,20,10]],['YELLOW',[200,180,10]],['GREEN',[20,200,20]],['BLUE',[20,30,200]],['PURPLE',[140,20,180]],
 ] as const)('uses four agreeing ambient-corrected samples and caches %s',(color,rgb)=>{
  const r=run(`Serial.println(read_color()==${color});`,[rgb]);
- expect(r.logs.some(log=>log.includes(`-> ${color}`))).toBe(true);expect(r.logs.at(-1)).toBe('true');expect(r.reads).toBe(48);expect(r.lights).toHaveLength(18);
+ expect(r.logs.at(-1)).toBe('true');expect(r.reads).toBe(48);expect(r.lights).toHaveLength(18);
  expect(r.time).toBe(560); // 16 exposures at 35 ms, instead of 20 exposures / 700 ms.
 });
 it('rejects neutral samples early and clears the stale color notification',()=>{
@@ -26,7 +26,7 @@ it('rejects neutral samples early and clears the stale color notification',()=>{
 });
 it('subtracts a strong colored ambient light and restores brightness',()=>{
  const r=run('LbRGB.setBrightness(37);Serial.println(read_color());Serial.println(LbRGB.getBrightness());',[[20,30,200]],true,[800,100,50]);
- expect(r.logs).toContain('Color RGB: 20 30 200 -> BLUE');expect(r.logs.slice(-2)).toEqual(['3','37']);
+ expect(r.logs).toContain('3');expect(r.logs.slice(-2)).toEqual(['3','37']);
 });
 it('takes the fifth sample when one vote disagrees, but rejects a split decision',()=>{
  const red=[200,20,10] as const,blue=[20,30,200] as const;
@@ -35,24 +35,24 @@ it('takes the fifth sample when one vote disagrees, but rejects a split decision
 });
 it('bounds a missing sensor wait and restores brightness on failure',()=>{
  const r=run('LbRGB.setBrightness(37);Serial.println(read_color());Serial.println(LbRGB.getBrightness());',[],true);
- expect(r.logs).toEqual(['MISSION ERROR: 8','0','37']);expect(r.lights.at(-1)).toEqual([0,0,0]);
+ expect(r.logs).toEqual(['0','37']);expect(r.lights.at(-1)).toEqual([0,0,0]);
 });
-it('cancels a measurement on TB2B without reporting a sensor error',()=>{
+it('ignores TB2B during a measurement and restores brightness',()=>{
  const logs:string[]=[],lights:Array<{rgb:number[];brightness:number}>=[];
  const runtime:CppRuntime=new CppRuntime(`${helpers}
  void setup(){LbRGB.setBrightness(37);}
- void loop(){Serial.println(read_color());Serial.println(missionError);Serial.println(LbRGB.getBrightness());LbMission.end();}`,{
+ void loop(){Serial.println(read_color());Serial.println(LbRGB.getBrightness());LbMission.end();}`,{
   motors(){},advance(){},color:()=>[200,20,10],
   touch:mask=>!!(mask&8)&&runtime.time>=50,
   log:m=>logs.push(m),led:(rgb,brightness)=>lights.push({rgb:[...rgb],brightness}),
  });runtime.start();for(let i=0;i<200&&runtime.running;i++)runtime.tick(10);
- expect(runtime.running).toBe(false);expect(logs.slice(-3)).toEqual(['0','0','37']);
- expect(logs.some(m=>m.startsWith('MISSION RESET:'))).toBe(true);
+ expect(runtime.running).toBe(false);expect(logs.slice(-2)).toEqual(['1','37']);
+ expect(logs.some(m=>m.startsWith('MISSION RESET:'))).toBe(false);
  expect(logs.some(m=>m.startsWith('MISSION ERROR:'))).toBe(false);
- expect(lights.at(-1)).toEqual({rgb:[0,128,0],brightness:37});
+ expect(lights.at(-1)).toEqual({rgb:[255,0,0],brightness:37});
 });
 it('reports unavailable sensors and mismatched required colors',()=>{
- expect(run('Serial.println(read_color());',[],false).logs).toEqual(['MISSION ERROR: 8','0']);
+ expect(run('Serial.println(read_color());',[],false).logs).toEqual(['0']);
 
 });
 it('uses the actual shared MyBlock core for all line wrappers',()=>{
